@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="MtaaFix KE helps neighbours report, confirm and solve local problems together.">
+    <title>MtaaFix KE | See it. Report it. Fix it.</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="mtaa-fix.css">
+</head>
+<body>
+    <div class="app-shell">
+        <header class="topbar">
+            <a class="brand" href="#top" aria-label="MtaaFix KE home">
+                <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span><strong>MtaaFix</strong><small>KENYA</small></span>
+            </a>
+            <nav class="main-nav" aria-label="Main navigation">
+                <a class="is-current" href="#reports">Community board</a>
+                <a href="#how-it-works">How it works</a>
+                <a href="#fixers">Find a fixer</a>
+            </nav>
+            <div class="topbar-actions">
+                <button class="location-pill" type="button" title="Current neighbourhood"><span class="pulse"></span> Nairobi <span aria-hidden="true">⌄</span></button>
+                <a class="profile-chip" href="#heroes" aria-label="View community profile"><span>AK</span><strong>Alice</strong></a>
+            </div>
+        </header>
+
+        <main id="top">
+            <section class="hero-band">
+                <div class="hero-copy">
+                    <p class="eyebrow"><span class="eyebrow-line"></span> Neighbourhood action, made visible</p>
+                    <h1>See it.<br><em>Report it.</em><br>Fix it.</h1>
+                    <p class="hero-lede">Small problems become big when nobody knows. MtaaFix helps your community spot what needs attention, rally around it, and find the people who can help.</p>
+                    <div class="hero-actions">
+                        <a class="button button--primary" href="#report"><span class="button-icon">+</span> Report a problem</a>
+                        <a class="text-link" href="#how-it-works">See how it works <span aria-hidden="true">↗</span></a>
+                    </div>
+                </div>
+                <div class="hero-signal" aria-label="Community snapshot">
+                    <div class="signal-ring signal-ring--outer"></div>
+                    <div class="signal-ring signal-ring--inner"></div>
+                    <div class="signal-center"><span>LIVE</span><strong>47</strong><small>reports nearby</small></div>
+                    <span class="signal-pin signal-pin--one">💡</span><span class="signal-pin signal-pin--two">💧</span><span class="signal-pin signal-pin--three">🚧</span>
+                    <p class="signal-caption"><strong>Community signal</strong><br>Updates from your mtaa, in real time.</p>
+                </div>
+            </section>
+
+            <section class="stats-strip" aria-label="Community impact statistics">
+                <div class="stat"><strong>47</strong><span>Reports nearby</span></div>
+                <div class="stat"><strong class="stat--orange">20</strong><span>High priority</span></div>
+                <div class="stat"><strong class="stat--blue">08</strong><span>Fixers active</span></div>
+                <div class="stat stat--impact"><span class="stat-label">Community impact this month</span><strong>+2,840 <small>pts</small></strong><span class="trend">↗ 18% from last month</span></div>
+            </section>
+
+            <section class="board-section content-width" id="reports">
+                <div class="section-heading">
+                    <div><p class="eyebrow">01 / Community board</p><h2>Problems near <em>you.</em></h2><p class="section-intro">Your neighbours are keeping an eye out. Add your voice to the issues that matter.</p></div>
+                    <a class="button button--outline" href="#report">+ Add report</a>
+                </div>
+                <div class="board-toolbar">
+                    <div class="filter-tabs" role="tablist" aria-label="Filter community reports">
+                        <button class="is-active" type="button" data-filter="All reports">All reports</button>
+                        <button type="button" data-filter="High priority">High priority <span>20</span></button>
+                        <button type="button" data-filter="Streetlight">Streetlights</button>
+                        <button type="button" data-filter="Roads">Roads</button>
+                        <button type="button" data-filter="Drainage">Drainage</button>
+                    </div>
+                    <span id="reportCount" class="report-count">3 active reports</span>
+                </div>
+                <div class="report-layout">
+                    <div class="report-grid" id="reportList"></div>
+                    <p class="empty-state" id="emptyState" hidden>No reports match this filter yet.</p>
+                    <aside class="map-panel" aria-label="Community map preview">
+                        <div class="map-topline"><span><i class="live-dot"></i> Live map</span><button type="button" title="Expand map">⤢</button></div>
+                        <div class="map-canvas">
+                            <div class="map-road map-road--one"></div><div class="map-road map-road--two"></div><div class="map-road map-road--three"></div><div class="map-block map-block--one"></div><div class="map-block map-block--two"></div><div class="map-block map-block--three"></div>
+                            <span class="map-label map-label--one">NGARA</span><span class="map-label map-label--two">KILIMANI</span><span class="map-label map-label--three">CBD</span>
+                            <button class="map-pin map-pin--red" type="button" title="High priority pothole">●</button><button class="map-pin map-pin--yellow" type="button" title="Streetlight report">●</button><button class="map-pin map-pin--blue" type="button" title="Drainage report">●</button><span class="you-are-here">YOU ARE HERE</span>
+                        </div>
+                        <div class="map-legend"><span><i class="legend-dot legend-dot--red"></i> High priority</span><span><i class="legend-dot legend-dot--yellow"></i> Open report</span><span><i class="legend-dot legend-dot--blue"></i> In progress</span></div>
+                    </aside>
+                </div>
+            </section>
+
+            <section class="report-section" id="report">
+                <div class="content-width report-section__inner">
+                    <div class="report-prompt"><p class="eyebrow">02 / Start here</p><h2>Spotted something?<br><em>Make it count.</em></h2><p>It takes less than a minute to give your neighbours the full picture.</p><div class="report-steps"><span><b>01</b> Snap a photo</span><span><b>02</b> Tell us what’s wrong</span><span><b>03</b> Pin the location</span></div></div>
+                    <form class="report-form" id="reportForm">
+                        <div class="form-heading"><span class="form-number">03</span><div><h3>Report a problem</h3><p>Your report will be visible to neighbours nearby.</p></div></div>
+                        <label class="photo-upload" for="photo"><span class="upload-icon">↑</span><span><strong>Add a photo <small>(recommended)</small></strong><small>JPG or PNG, up to 10MB</small></span><input id="photo" name="photo" type="file" accept="image/png,image/jpeg"></label>
+                        <label for="category">What is the problem?</label><select id="category" name="category"><option>Streetlight</option><option>Roads</option><option>Waste</option><option>Water</option><option>Drainage</option><option>Safety</option></select>
+                        <label for="description">Describe it in a few words</label><input id="description" name="description" type="text" placeholder="e.g. Streetlight has been off for 3 days" required>
+                        <label for="location">Where is it?</label><div class="location-input"><span>⌖</span><input id="location" name="location" type="text" placeholder="e.g. Ngara, near the market" required><button type="button" title="Use current location">◎</button></div>
+                        <button class="button button--primary button--full" type="submit">Submit report <span aria-hidden="true">↗</span></button>
+                        <p class="form-note">By submitting, you agree that this report can be seen by your local community.</p>
+                    </form>
+                </div>
+            </section>
+
+            <section class="process-section content-width" id="how-it-works">
+                <div class="section-heading"><div><p class="eyebrow">03 / The MtaaFix loop</p><h2>One report.<br><em>A whole community.</em></h2></div><p class="section-intro">From first sighting to final fix, every step adds momentum.</p></div>
+                <div class="process-grid"><article><span class="process-number">01</span><span class="process-icon">⌾</span><h3>Spot & report</h3><p>Upload a photo and tell us what you see. A clear report gives the community a place to start.</p></article><article><span class="process-number">02</span><span class="process-icon">◎</span><h3>Confirm together</h3><p>Neighbours nearby can confirm the problem. More confirmations mean a stronger community signal.</p></article><article><span class="process-number">03</span><span class="process-icon">⚒</span><h3>Find a fixer</h3><p>We connect the issue to local fundis, organisations and authorities who can move it forward.</p></article><article><span class="process-number">04</span><span class="process-icon">✦</span><h3>Earn impact</h3><p>Report, confirm or help solve a problem. Every useful action builds your Community Impact Score.</p></article></div>
+            </section>
+
+            <section class="fixers-section content-width" id="fixers">
+                <div class="section-heading"><div><p class="eyebrow">04 / Community fix</p><h2>Who can help <em>fix it?</em></h2></div><a class="text-link" href="#fixers">View all fixers <span aria-hidden="true">↗</span></a></div>
+                <div class="fixer-grid"><article class="fixer-card"><span class="fixer-avatar fixer-avatar--green">MK</span><div><h3>Mike's Plumbing</h3><p>Water & drainage · 1.2 km away</p><span class="verified">✓ Verified fixer</span></div><button type="button" title="Contact Mike's Plumbing">↗</button></article><article class="fixer-card"><span class="fixer-avatar fixer-avatar--orange">EW</span><div><h3>Eastlands Waste Co.</h3><p>Waste collection · 2.4 km away</p><span class="verified">✓ Community partner</span></div><button type="button" title="Contact Eastlands Waste">↗</button></article><article class="fixer-card"><span class="fixer-avatar fixer-avatar--blue">JM</span><div><h3>Jirani Electric</h3><p>Streetlights & power · 3.1 km away</p><span class="verified">✓ Verified fixer</span></div><button type="button" title="Contact Jirani Electric">↗</button></article></div>
+            </section>
+
+            <section class="heroes-section content-width" id="heroes"><div class="section-heading"><div><p class="eyebrow">05 / Community heroes</p><h2>People who <em>show up.</em></h2></div><a class="text-link" href="#heroes">See leaderboard <span aria-hidden="true">↗</span></a></div><div class="leaderboard"><div class="leader rank-two"><span class="rank">02</span><span class="hero-avatar hero-avatar--blue">JM</span><div><strong>James Mwangi</strong><small>14 reports · 32 confirmations</small></div><b>720 <small>pts</small></b></div><div class="leader rank-one"><span class="rank">01</span><span class="hero-avatar hero-avatar--orange">AK</span><div><strong>Alice Karanja <span>✦</span></strong><small>12 reports · 27 confirmations</small></div><b>850 <small>pts</small></b></div><div class="leader rank-three"><span class="rank">03</span><span class="hero-avatar hero-avatar--green">NW</span><div><strong>Naomi Wambui</strong><small>8 reports · 19 confirmations</small></div><b>610 <small>pts</small></b></div></div></section>
+        </main>
+
+        <footer class="footer"><a class="brand" href="#top"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>MtaaFix</strong><small>KENYA</small></span></a><p>Built for the people who care about where they live.</p><span>© 2026 MtaaFix KE</span></footer>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="mtaa-fix.js"></script>
+</body>
+</html>
