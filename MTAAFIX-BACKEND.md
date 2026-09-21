@@ -1,6 +1,6 @@
-# MtaaFix KE Backend
+# Jenga Nasi Kenya Backend
 
-The MtaaFix backend is implemented in `server.js` with Express and SQLite.
+The Jenga Nasi Kenya backend is implemented in `server.js` with Express and SQLite.
 
 ## Start the backend
 
@@ -79,7 +79,7 @@ Each confirmation increases the report count. A report becomes high priority whe
 
 ## Frontend connection
 
-The MtaaFix page at `mtaa-fix.html` uses:
+The Jenga Nasi Kenya page at `mtaa-fix.html` uses:
 
 - `GET /api/reports` when the page loads
 - `POST /api/reports` when a user submits a report

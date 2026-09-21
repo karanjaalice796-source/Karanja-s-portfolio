@@ -7,11 +7,80 @@ const toast = document.querySelector("#toast");
 
 let reports = [];
 let activeFilter = "All reports";
+let reportMap;
+let reportMarkers;
+
+const knownLocations = {
+	ngara: [-1.2777, 36.8284],
+	kawangware: [-1.2825, 36.7523],
+	kilimani: [-1.2921, 36.7831],
+	cbd: [-1.2864, 36.8172],
+	eastlands: [-1.2824, 36.8736]
+};
+
+function coordinatesFor(report) {
+	const location = report.location.toLowerCase();
+	const match = Object.entries(knownLocations).find(([name]) => location.includes(name));
+	if (match) return match[1];
+	const offset = ((Number(report.id) || 0) % 7) * 0.002;
+	return [-1.2864 + offset, 36.8172 - offset];
+}
+
+function markerClass(report) {
+	if (report.confirmations >= 20) return "priority";
+	return report.status === "In progress" ? "progress" : "open";
+}
+
+function initializeMap() {
+	if (!window.L || !document.querySelector("#reportMap") || reportMap) return;
+
+	reportMap = L.map("reportMap", { scrollWheelZoom: false }).setView([-1.2864, 36.8172], 12);
+	L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+		maxZoom: 19,
+		attribution: "&copy; OpenStreetMap contributors"
+	}).addTo(reportMap);
+	reportMarkers = L.layerGroup().addTo(reportMap);
+	document.querySelector(".map-topline button").addEventListener("click", fitReportMarkers);
+}
+
+function renderMapMarkers() {
+	if (!reportMap || !reportMarkers) return;
+	reportMarkers.clearLayers();
+
+	reports.forEach(report => {
+		const marker = L.marker(coordinatesFor(report), {
+			icon: L.divIcon({
+				className: "",
+				html: `<span class="report-marker report-marker--${markerClass(report)}"></span>`,
+				iconSize: [24, 24],
+				iconAnchor: [12, 12]
+			})
+		});
+		marker.bindPopup(`<strong>${report.title}</strong>${report.location}<br>${report.status} · ${report.confirmations} confirmations`);
+		reportMarkers.addLayer(marker);
+	});
+}
+
+function fitReportMarkers() {
+	if (!reportMap || !reportMarkers || reportMarkers.getLayers().length === 0) return;
+	reportMap.fitBounds(reportMarkers.getBounds(), { padding: [24, 24], maxZoom: 14 });
+}
 
 function showToast(message) {
 	toast.textContent = message;
 	toast.classList.add("is-visible");
 	window.setTimeout(() => toast.classList.remove("is-visible"), 2600);
+}
+
+async function readApiResponse(response) {
+	const contentType = response.headers.get("content-type") || "";
+	if (contentType.includes("application/json")) return response.json();
+
+	if (!response.ok) {
+		throw new Error("The backend did not return JSON. Start the project with npm start, then open http://localhost:3000/mtaa-fix.html.");
+	}
+
+	return null;
 }
 
 function getPriority(report) {
@@ -47,6 +116,7 @@ function renderReports() {
 
 	emptyState.hidden = visibleReports.length > 0;
 	reportCount.textContent = `${reports.length} active reports`;
+	renderMapMarkers();
 }
 
 filterButtons.forEach(button => {
@@ -106,7 +176,7 @@ reportForm.addEventListener("submit", async event => {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ category, description, location, photo: file?.name || "" })
 		});
-		const result = await response.json();
+		const result = await readApiResponse(response);
 		if (!response.ok) throw new Error(result.error || "Unable to submit the report.");
 
 		reports.unshift(result);
@@ -123,8 +193,10 @@ async function loadReports() {
 	try {
 		const response = await fetch("/api/reports");
 		if (!response.ok) throw new Error("Unable to load community reports.");
-		reports = await response.json();
+		reports = await readApiResponse(response);
+		initializeMap();
 		renderReports();
+		fitReportMarkers();
 	} catch (error) {
 		showToast(error.message);
 	}

@@ -1,0 +1,6 @@
+body {
+  min-height: 100vh;
+  background:
+    linear-gradient(rgb(246 245 240 / 78%), rgb(246 245 240 / 78%)),
+    url('https://t3.ftcdn.net/jpg/07/78/20/50/360_F_778205031_TK4K1wHvpVKjWFkLhbj60Di1WJdhSOxu.jpg') center / cover fixed;
+}

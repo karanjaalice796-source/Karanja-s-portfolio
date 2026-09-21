@@ -2,6 +2,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { DatabaseSync } = require('node:sqlite');
 const express = require('express');
+const { createManagerRouter } = require('./manager');
 
 const app = express();
 const port = Number(process.env.PORT) || 3000;
@@ -62,6 +63,8 @@ database.exec(`
     points INTEGER NOT NULL DEFAULT 0
   );
 `);
+
+app.use('/api/manager', createManagerRouter(database));
 
 const reportCount = database.prepare('SELECT COUNT(*) AS count FROM reports').get().count;
 if (reportCount === 0) {

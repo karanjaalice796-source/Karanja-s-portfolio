@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Jenga Nasi Kenya management dashboard">
+  <title>Dashboard | Jenga Nasi Kenya</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="dashboard.css">
+  <link rel="stylesheet" href="dashboard-background.css">
+</head>
+<body>
+  <div class="dashboard-shell">
+    <aside class="sidebar">
+      <a class="brand" href="mtaa-fix.html" aria-label="Jenga Nasi Kenya home"><span class="brand-mark">JN</span><span><strong>Jenga Nasi</strong><small>KENYA</small></span></a>
+      <nav aria-label="Dashboard navigation">
+        <a class="is-active" href="#overview">Overview</a>
+        <a href="#reports">Reports</a>
+        <a href="#messages">Messages</a>
+        <a href="mtaa-fix.html">View public site ↗</a>
+      </nav>
+      <p class="sidebar-note">Community operations<br><strong>Kenya</strong></p>
+    </aside>
+
+    <main>
+      <header class="dashboard-header">
+        <div><p class="eyebrow">Community operations</p><h1>Good morning, Alice.</h1><p class="header-copy">Here is what your community needs attention for today.</p></div>
+        <button id="refreshButton" class="refresh-button" type="button">Refresh data</button>
+      </header>
+
+      <section id="overview" class="metrics" aria-label="Report statistics">
+        <article><span>Active reports</span><strong id="totalReports">—</strong><small>Community issues recorded</small></article>
+        <article><span>Needs attention</span><strong id="pendingReports">—</strong><small>Reports still unresolved</small></article>
+        <article><span>High priority</span><strong id="priorityReports">—</strong><small>20 or more confirmations</small></article>
+        <article><span>Resolved</span><strong id="fixedReports">—</strong><small>Issues marked fixed</small></article>
+      </section>
+
+      <section id="reports" class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">Report queue</p><h2>Community reports</h2></div><label class="search"><span>⌕</span><input id="reportSearch" type="search" placeholder="Search reports"></label></div>
+        <div class="table-wrap"><table><thead><tr><th>Report</th><th>Location</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody id="reportTable"><tr><td colspan="5" class="loading">Loading reports…</td></tr></tbody></table></div>
+      </section>
+
+      <section id="messages" class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">Inbox</p><h2>Recent messages</h2></div><span id="messageCount" class="count-badge">0 messages</span></div>
+        <div id="messageList" class="message-list"><p class="loading">Loading messages…</p></div>
+      </section>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="dashboard.js"></script>
+</body>
+</html>
