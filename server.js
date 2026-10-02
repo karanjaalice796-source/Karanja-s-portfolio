@@ -62,9 +62,38 @@ database.exec(`
     solved INTEGER NOT NULL DEFAULT 0,
     points INTEGER NOT NULL DEFAULT 0
   );
+  CREATE TABLE IF NOT EXISTS school_resources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    grade TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    description TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    downloads INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 app.use('/api/manager', createManagerRouter(database));
+
+const schoolResourceCount = database.prepare('SELECT COUNT(*) AS count FROM school_resources').get().count;
+if (schoolResourceCount === 0) {
+  const insertSchoolResource = database.prepare(`
+    INSERT INTO school_resources (title, subject, grade, kind, description, content, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  [
+    ['Fractions made visual', 'Mathematics', 'Grade 7', 'Revision notes', 'A clear guide to equivalent fractions, simplifying, and comparing values.', 'Equivalent fractions have the same value even when their numerators and denominators differ. To simplify a fraction, divide both numbers by their highest common factor.\n\nExample: 12/18 = 2/3 because both numbers divide by 6.\n\nTry it: simplify 15/25, then compare 3/4 and 5/8 by finding a common denominator.', 'Ms. Wanjiku'],
+    ['The cell: structure and function', 'Biology', 'Grade 8', 'Study guide', 'Explore the parts of plant and animal cells and what each one does.', 'Cells are the basic units of life. The cell membrane controls what enters and leaves. The cytoplasm is where many reactions happen, and the nucleus contains genetic information.\n\nPlant cells also have a rigid cell wall, chloroplasts for photosynthesis, and a large permanent vacuole.\n\nQuick check: Which cell structure absorbs light energy?', 'Mr. Otieno'],
+    ['Kenya: independence and nationhood', 'History', 'Grade 9', 'Past paper', 'Practice source questions on the road to independence in Kenya.', 'SECTION A\n1. State two roles played by political associations in Kenya before 1945.\n2. Name one outcome of the Lancaster House conferences.\n\nSECTION B\nUsing examples, explain three ways the struggle for independence shaped modern Kenya.\n\nAnswer guide: Support each point with a named event, person, or organization.', 'History department'],
+    ['Reading for meaning', 'English', 'Grade 6', 'Worksheet', 'Build comprehension skills with a short passage and guided questions.', 'Read a short article from a newspaper or book. As you read, underline unfamiliar words and use the surrounding sentence to infer their meaning.\n\n1. What is the main idea of the passage?\n2. Which detail best supports that idea?\n3. What can you infer about the writer’s point of view?\n4. Summarize the passage in two sentences.', 'Mrs. Achieng'],
+    ['Forces and motion', 'Physics', 'Grade 9', 'Revision notes', 'A quick introduction to balanced forces, friction, and acceleration.', 'A force is a push or pull measured in newtons (N). Balanced forces do not change an object’s motion. Unbalanced forces cause acceleration.\n\nFriction acts against movement between surfaces. It can be reduced with lubrication or increased with a rough surface.\n\nRemember: acceleration describes how quickly velocity changes over time.', 'Mr. Kamau'],
+    ['Healthy soil, stronger harvests', 'Agriculture', 'Grade 7', 'Study guide', 'Learn how soil structure, water, and organic matter support healthy crops.', 'Healthy soil provides plants with water, nutrients, air, and support. Compost adds organic matter and improves the soil’s ability to hold water.\n\nTo reduce erosion: keep soil covered, plant along contours on slopes, and use grass strips where water flows.\n\nActivity: Compare how quickly water drains through sandy soil and soil mixed with compost.', 'Agriculture club']
+  ].forEach((resource) => insertSchoolResource.run(...resource));
+}
 
 const reportCount = database.prepare('SELECT COUNT(*) AS count FROM reports').get().count;
 if (reportCount === 0) {
@@ -124,6 +153,64 @@ if (projectCount === 0) {
 
 app.get('/api/health', (_request, response) => {
   response.json({ status: 'ok' });
+});
+
+app.get('/api/schoolportal/resources', (_request, response) => {
+  const resources = database.prepare(`
+    SELECT id, title, subject, grade, kind, description, created_by AS createdBy,
+      downloads, created_at AS createdAt
+    FROM school_resources
+    ORDER BY created_at DESC, id DESC
+  `).all();
+  response.json(resources);
+});
+
+app.post('/api/schoolportal/resources', (request, response) => {
+  const fields = ['title', 'subject', 'grade', 'kind', 'description', 'content', 'createdBy'];
+  const resource = Object.fromEntries(fields.map((field) => [
+    field,
+    typeof request.body?.[field] === 'string' ? request.body[field].trim() : ''
+  ]));
+
+  if (fields.some((field) => !resource[field])) {
+    return response.status(400).json({ error: 'Please complete every field before sharing a resource.' });
+  }
+  if (resource.content.length > 20000) {
+    return response.status(400).json({ error: 'Resource content must be 20,000 characters or fewer.' });
+  }
+
+  const result = database.prepare(`
+    INSERT INTO school_resources (title, subject, grade, kind, description, content, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(resource.title, resource.subject, resource.grade, resource.kind, resource.description, resource.content, resource.createdBy);
+
+  const created = database.prepare(`
+    SELECT id, title, subject, grade, kind, description, created_by AS createdBy,
+      downloads, created_at AS createdAt
+    FROM school_resources WHERE id = ?
+  `).get(Number(result.lastInsertRowid));
+  return response.status(201).json(created);
+});
+
+app.get('/api/schoolportal/resources/:id/download', (request, response) => {
+  const id = Number(request.params.id);
+  if (!Number.isInteger(id) || id < 1) return response.status(400).json({ error: 'Invalid resource ID.' });
+
+  const resource = database.prepare('SELECT * FROM school_resources WHERE id = ?').get(id);
+  if (!resource) return response.status(404).json({ error: 'Resource not found.' });
+
+  database.prepare('UPDATE school_resources SET downloads = downloads + 1 WHERE id = ?').run(id);
+  const safeTitle = resource.title.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+  response.setHeader('Content-Disposition', `attachment; filename="${safeTitle || 'study-resource'}.txt"`);
+  return response.type('text/plain').send(`${resource.title}\n${resource.subject} · ${resource.grade} · ${resource.kind}\nShared by ${resource.created_by}\n\n${resource.description}\n\n${resource.content}\n`);
+});
+
+app.get('/api/schoolportal/stats', (_request, response) => {
+  const stats = database.prepare(`
+    SELECT COUNT(*) AS resources, COUNT(DISTINCT subject) AS subjects, COALESCE(SUM(downloads), 0) AS downloads
+    FROM school_resources
+  `).get();
+  response.json(stats);
 });
 
 app.get('/api/projects', (_request, response) => {
