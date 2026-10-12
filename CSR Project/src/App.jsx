@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { curriculumResources } from './curriculumResources.js';
+import AuthPage from './AuthPage.jsx';
+import { supabase, supabaseConfigured } from './supabaseClient.js';
 
 const starterResources = [
   { id: 'math-fractions', title: 'Fractions made simple', subject: 'Mathematics', grade: 'Grade 6', kind: 'Study guide', description: 'A visual guide to comparing, adding, and simplifying fractions.', createdBy: 'A. Wanjiku', content: 'FRACTIONS MADE SIMPLE\n\nA fraction shows equal parts of a whole. The top number is the numerator; the bottom number is the denominator.\n\nTo compare fractions with the same denominator, compare the numerators. To add fractions with the same denominator, add the numerators and keep the denominator.\n\nExample: 2/8 + 3/8 = 5/8.\n\nPractice: Draw a shape divided into 4 equal parts. Shade 3 parts and write the fraction.' },
@@ -100,6 +102,10 @@ function loadResources() {
 }
 
 function App() {
+  const [showPortal, setShowPortal] = useState(false);
+  const [session, setSession] = useState(null);
+  const [authReady, setAuthReady] = useState(!supabaseConfigured);
+  const [accountError, setAccountError] = useState('');
   const [resources, setResources] = useState(loadResources);
   const [savedIds, setSavedIds] = useState(() => new Set(readStored('empower-saved', [])));
   const [completedModules, setCompletedModules] = useState(() => new Set(readStored('empower-completed', [])));
@@ -117,6 +123,55 @@ function App() {
   const [textSize, setTextSize] = useState('normal');
   const [openGuide, setOpenGuide] = useState(null);
   const t = translations[language];
+
+  useEffect(() => {
+    if (!supabase) return undefined;
+    let active = true;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!active) return;
+      setSession(nextSession);
+      if (nextSession) setShowPortal(true);
+      setAuthReady(true);
+    });
+
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!active) return;
+      if (error) setAccountError(`Could not restore your sign-in: ${error.message}`);
+      setSession(data.session);
+      if (data.session) setShowPortal(true);
+      setAuthReady(true);
+    }).catch((error) => {
+      if (!active) return;
+      setAccountError(`Could not restore your sign-in: ${error instanceof Error ? error.message : 'Please try again.'}`);
+      setAuthReady(true);
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  async function signOut() {
+    if (!supabase || !session) {
+      setShowPortal(false);
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        setAccountError(`Could not sign out: ${error.message}`);
+        return;
+      }
+      setAccountError('');
+      setSession(null);
+      setShowPortal(false);
+    } catch (error) {
+      setAccountError(`Could not sign out: ${error instanceof Error ? error.message : 'Please try again.'}`);
+    }
+  }
 
   useEffect(() => {
     function focusSearch(event) {
@@ -190,6 +245,14 @@ function App() {
   const activeLabel = navItems.find((item) => item.id === currentView)?.label || 'Resource library';
   const pageTitle = currentView === 'saved' ? t.saved : currentView === 'past papers' ? t.past : isLibrary ? t.resources : activeLabel;
 
+  if (!authReady) {
+    return <main className="auth-loading" role="status">Checking your sign-in…</main>;
+  }
+
+  if (!showPortal) {
+    return <AuthPage onContinueAsGuest={() => setShowPortal(true)} onAuthenticated={(nextSession) => { setSession(nextSession); setShowPortal(true); }} />;
+  }
+
   return (
     <div className={`app-shell ${liteMode ? 'lite-mode' : ''} ${highContrast ? 'high-contrast' : ''} text-${textSize}`}>
       <aside className="sidebar" aria-label="Main navigation">
@@ -218,10 +281,12 @@ function App() {
             <button className={`utility-button ${liteMode ? 'utility-active' : ''}`} type="button" onClick={() => setLiteMode(!liteMode)} aria-pressed={liteMode}>Lite mode</button>
             <button className={`utility-button ${highContrast ? 'utility-active' : ''}`} type="button" onClick={() => setHighContrast(!highContrast)} aria-pressed={highContrast} aria-label="Toggle high contrast">◐</button>
             <label className="compact-select size-select"><span className="sr-only">Text size</span><select aria-label="Choose text size" value={textSize} onChange={(event) => setTextSize(event.target.value)}><option value="normal">A</option><option value="large">A+</option><option value="larger">A++</option></select></label>
+            <button className="utility-button" type="button" onClick={signOut}>{session ? 'Log out' : 'Account'}</button>
           </div>
         </header>
 
         <div className="page-wrap">
+          {accountError && <p className="auth-error account-error" role="alert">{accountError}</p>}
           <section className="library-hero" aria-labelledby="hero-title">
             <div className="hero-copy">
               <p className="hero-kicker">EMPOWER HOPE · LEARN WITHOUT LIMITS</p>

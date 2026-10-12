@@ -1,4 +1,4 @@
-const CACHE_NAME = 'empower-hope-v1';
+const CACHE_NAME = 'empower-hope-v3';
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
