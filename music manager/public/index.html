@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#111212">
+  <meta name="description" content="A smarter, mood-aware home for your music and playlists.">
+  <title>Riff — Smart Music Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#" aria-label="Riff home">
+        <span class="brand-mark"><i></i><i></i><i></i><i></i></span>
+        <span>riff<span class="brand-period">.</span></span>
+      </a>
+
+      <div class="side-label">YOUR SPACE</div>
+      <nav class="main-nav" aria-label="Main navigation">
+        <a class="nav-link active" href="#home"><span class="nav-icon">⌂</span>Home</a>
+        <a class="nav-link" href="#discover"><span class="nav-icon">◉</span>Discover<span class="nav-dot"></span></a>
+        <a class="nav-link" href="#music-library" data-library-tab="songs"><span class="nav-icon">▤</span>Your library</a>
+        <a class="nav-link" href="#music-library" data-library-tab="playlists"><span class="nav-icon">▥</span>Playlists</a>
+        <a class="nav-link" href="#music-library" data-library-tab="artists"><span class="nav-icon">◉</span>Artists</a>
+        <a class="nav-link" href="#music-library" data-library-tab="downloads"><span class="nav-icon">⇩</span>Downloaded songs</a>
+        <a class="nav-link" href="/learn"><span class="nav-icon">✳</span>Learn</a>
+      </nav>
+
+      <div class="side-heading">
+        <span class="side-label">YOUR PLAYLISTS</span>
+        <button class="icon-button add-playlist" id="new-playlist" aria-label="Create playlist">＋</button>
+      </div>
+      <nav class="playlist-nav" id="sidebar-playlists" aria-label="Your playlists"></nav>
+
+      <div class="sidebar-bottom">
+        <div class="connect-title">YOUR SOUND, CONNECTED</div>
+        <button class="service-row" data-platform="Spotify"><span class="service-logo spotify">◉</span><span>Spotify</span><span class="connect-state">Ready</span></button>
+        <button class="service-row" data-platform="Apple Music"><span class="service-logo apple">♪</span><span>Apple Music</span><span class="connect-state">Ready</span></button>
+        <div class="profile-card">
+          <div class="avatar" id="profile-avatar">A</div>
+          <div><strong id="profile-name">Your music space</strong><span id="profile-caption">Sign in to save progress</span></div>
+          <button class="icon-button profile-more" id="profile-action" aria-label="Log in">↗</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-panel" id="home">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>Your space</span><span class="crumb-slash">/</span><strong>Home</strong></div>
+        <div class="top-actions">
+          <label class="search-box"><span>⌕</span><input id="search" type="search" placeholder="Search tracks, artists..." aria-label="Search tracks and artists"><kbd>⌘ K</kbd></label>
+          <a class="learn-top-link" href="/learn">Learn</a>
+          <a class="login-link" id="account-link" href="/login">Log in</a>
+          <a class="signup-link" id="signup-link" href="/signup">Sign up <span>↗</span></a>
+        </div>
+      </header>
+
+      <section class="welcome-row">
+        <div><div class="eyebrow"><span class="live-dot"></span>MONDAY, OCTOBER 12</div><h1>Good morning, Alex <span class="wave">✳</span></h1><p>Ready to find your frequency?</p></div>
+        <button class="outline-button" id="refresh-button"><span>↻</span> Refresh picks</button>
+      </section>
+
+      <section class="generator-card" id="discover">
+        <div class="generator-art" aria-hidden="true">
+          <div class="sun-orb"></div><div class="art-ring ring-one"></div><div class="art-ring ring-two"></div>
+          <div class="art-wave wave-one"></div><div class="art-wave wave-two"></div>
+          <span class="spark spark-one"></span><span class="spark spark-two">✦</span>
+        </div>
+        <div class="generator-content">
+          <div class="generator-kicker"><span>✦</span> YOUR PERSONAL SOUNDTRACK</div>
+          <h2>What's your vibe<br>right now?</h2>
+          <p>Tell us how you're feeling. We'll find the sound.</p>
+          <form id="prompt-form" class="prompt-form">
+            <span class="prompt-spark">✧</span>
+            <input id="prompt-input" type="text" maxlength="100" placeholder="e.g. mellow beats for a rainy afternoon">
+            <button type="submit" id="generate-button">Make me a mix <span>↗</span></button>
+          </form>
+          <div class="preset-row" aria-label="Quick playlist presets">
+            <button class="preset-pill" data-prompt="Deep focus for getting things done" data-mood="Focus">◌ <span>Deep focus</span></button>
+            <button class="preset-pill" data-prompt="Rainy day, slow and cozy" data-mood="Chill">☂ <span>Rainy chill</span></button>
+            <button class="preset-pill" data-prompt="High energy workout mix" data-mood="Energy">↗ <span>Full energy</span></button>
+            <button class="preset-pill" data-prompt="Late night commute" data-mood="Chill">☾ <span>After hours</span></button>
+          </div>
+        </div>
+        <div class="hero-caption"><span>✦</span> CURATED FOR YOU</div>
+      </section>
+
+      <section class="mood-section">
+        <div class="section-heading mood-heading">
+          <div><div class="eyebrow">TUNE YOUR SOUND</div><h2>Set the mood <span class="heading-note">Make it yours.</span></h2></div>
+          <div class="weather-pill"><span>☂</span> 18° <span class="weather-divider">·</span> Rainy in Brooklyn</div>
+        </div>
+        <div class="mood-controls">
+          <label class="slider-control"><span class="slider-title"><span class="slider-icon energy-icon">↗</span>Energy</span><input type="range" min="0" max="100" value="64" data-setting="energy"><span class="slider-labels"><span>Laid-back</span><span>High energy</span></span></label>
+          <label class="slider-control"><span class="slider-title"><span class="slider-icon tempo-icon">◷</span>Tempo <span class="slider-value" id="bpm-value">110 BPM</span></span><input type="range" min="60" max="180" value="110" data-setting="bpm"><span class="slider-labels"><span>Slow</span><span>Fast</span></span></label>
+          <label class="slider-control"><span class="slider-title"><span class="slider-icon mood-icon">☼</span>Mood</span><input type="range" min="0" max="100" value="58" data-setting="valence"><span class="slider-labels"><span>Melancholy</span><span>Feel good</span></span></label>
+          <label class="slider-control"><span class="slider-title"><span class="slider-icon acoustic-icon">〰</span>Acousticness</span><input type="range" min="0" max="100" value="42" data-setting="acousticness"><span class="slider-labels"><span>Electronic</span><span>Acoustic</span></span></label>
+        </div>
+      </section>
+
+      <section class="playlists-section" id="library">
+        <div class="section-heading playlist-heading">
+          <div><div class="eyebrow">YOUR LISTENING SPACE</div><h2>Playlists <span class="heading-note">Every mood, one place.</span></h2></div>
+          <button class="text-link create-inline-button" id="new-playlist-inline" type="button">＋ New playlist</button>
+        </div>
+        <div class="playlist-grid" id="playlist-grid"></div>
+      </section>
+
+      <section class="library-section" id="music-library">
+        <div class="section-heading library-section-heading">
+          <div><div class="eyebrow">YOUR MUSIC, ALL TOGETHER</div><h2>Music library <span class="heading-note" id="library-count"></span></h2></div>
+          <button class="upload-action" id="upload-songs" type="button"><span>⇧</span> Add downloaded songs</button>
+        </div>
+        <div class="library-toolbar">
+          <div class="library-tabs" role="tablist" aria-label="Music library">
+            <button class="library-tab active" data-library-view="songs" type="button">Songs</button>
+            <button class="library-tab" data-library-view="playlists" type="button">Playlists</button>
+            <button class="library-tab" data-library-view="artists" type="button">Artists</button>
+            <button class="library-tab" data-library-view="downloads" type="button">Downloaded</button>
+          </div>
+          <label class="sort-control">Sort by
+            <select id="library-sort" aria-label="Sort music library">
+              <option value="added">Recently added</option>
+              <option value="played">Recently played</option>
+              <option value="popular">Most played</option>
+              <option value="title">Song title</option>
+              <option value="artist">Artist</option>
+            </select>
+          </label>
+        </div>
+        <div class="library-content" id="library-content" aria-live="polite"></div>
+        <p class="library-note" id="library-note"><span>⇧</span> Add songs from your device, then pair any download with a local video. MP3, M4A, AAC, WAV, OGG, and FLAC audio are supported.</p>
+        <form class="upload-panel" id="song-upload-form" hidden>
+          <label>Artist<input name="artist" maxlength="100" placeholder="Artist name (optional)"></label>
+          <label>Album<input name="album" maxlength="100" placeholder="Album or collection (optional)"></label>
+          <label class="file-picker-label">Choose audio files<input name="songs" id="audio-upload-input" type="file" accept=".mp3,.m4a,.aac,.wav,.ogg,.flac,audio/*" multiple required><span>MP3, M4A, AAC, WAV, OGG or FLAC · up to 10 songs, 50 MB each</span></label>
+          <p class="offline-video-note">Pair a song with an optional offline video after adding it to your library.</p>
+          <button class="upload-submit" type="submit">Add to my library <span>↗</span></button>
+        </form>
+        <input id="video-upload-input" type="file" accept=".mp4,.m4v,.webm,.mov,video/*" hidden>
+      </section>
+
+      <section class="tracks-section">
+        <div class="section-heading tracks-heading">
+          <div><div class="eyebrow">YOUR RECENT ROTATION</div><h2>On repeat</h2></div>
+          <div class="view-toggle" role="group" aria-label="Track view">
+            <button class="view-button active" data-view="list" aria-label="List view">☷</button><button class="view-button" data-view="grid" aria-label="Grid view">▦</button>
+          </div>
+        </div>
+        <div class="track-table" id="track-list"></div>
+      </section>
+      <footer class="main-footer"><span>Made for the way you feel.</span><span>♫ &nbsp;Sound better, together.</span></footer>
+    </main>
+
+    <aside class="player-panel">
+      <div class="player-topline"><span>NOW PLAYING</span><button class="icon-button" aria-label="More player options">···</button></div>
+      <div class="now-art" id="now-art"><div class="vinyl"><div></div></div><span class="now-art-label">RIFF<br>SESSIONS</span><span class="now-spark">✳</span></div>
+      <video class="now-video" id="now-video" aria-label="Paired offline music video" loop playsinline preload="metadata" hidden></video>
+      <div class="now-meta"><div><span class="eyebrow">YOUR DAILY MIX · 01</span><h2 id="now-title">Weightless</h2><p id="now-artist">Marconi Union</p></div><button class="icon-button heart-button" id="now-favorite" aria-label="Add to favorites">♡</button></div>
+      <div class="player-progress"><div class="progress-track"><span id="progress-fill"></span></div><div class="time-row"><span id="current-time">0:00</span><span id="duration-time">8:09</span></div></div>
+      <div class="player-controls"><button class="shuffle-control" aria-label="Shuffle">⤨</button><button class="skip-control" aria-label="Previous track">◂</button><button class="play-button" id="play-button" aria-label="Play preview">▶</button><button class="skip-control" aria-label="Next track">▸</button><button class="queue-control" aria-label="Queue">☷</button></div>
+      <div class="player-volume"><span>◖</span><div class="volume-track"><span></span></div><span>⌗</span></div>
+
+      <div class="analyzer-card">
+        <div class="analyzer-title"><div><div class="eyebrow">THE SOUND OF THIS MIX</div><h3>Audio profile</h3></div><button class="icon-button" aria-label="Audio profile details">···</button></div>
+        <div class="radar-wrap">
+          <div class="radar-chart"><div class="radar-grid grid-outer"></div><div class="radar-grid grid-middle"></div><div class="radar-grid grid-inner"></div><div class="radar-shape"></div><span class="radar-point point-one"></span><span class="radar-point point-two"></span><span class="radar-point point-three"></span><span class="radar-point point-four"></span></div>
+          <span class="radar-label radar-energy">ENERGY</span><span class="radar-label radar-dance">DANCE</span><span class="radar-label radar-valence">MOOD</span><span class="radar-label radar-acoustic">ACOUSTIC</span>
+        </div>
+        <div class="analyzer-caption"><span class="sound-dot"></span> A calm, spacious kind of energy.</div>
+      </div>
+
+      <div class="sync-card"><div class="sync-icon">↗</div><div><strong>Take your mix with you</strong><span>Save it to your music app.</span></div></div>
+      <div class="sync-buttons"><button id="spotify-sync"><span class="spotify-dot">◉</span> Spotify</button><button id="apple-sync"><span>♪</span> Apple Music</button></div>
+      <div class="sync-footnote"><span>◉</span> Demo mode · no account connected</div>
+    </aside>
+  </div>
+  <nav class="mobile-music-nav" aria-label="Music navigation">
+    <a href="#home"><span>⌂</span>Home</a>
+    <a href="#music-library" data-library-tab="songs"><span>♫</span>Library</a>
+    <a href="#music-library" data-library-tab="playlists"><span>▥</span>Playlists</a>
+    <a href="#music-library" data-library-tab="artists"><span>◉</span>Artists</a>
+  </nav>
+  <dialog class="music-dialog" id="playlist-dialog">
+    <form id="playlist-form">
+      <button class="dialog-close" id="close-playlist-dialog" type="button" aria-label="Close">×</button>
+      <div class="eyebrow">START A NEW COLLECTION</div><h2>Create a playlist</h2>
+      <label class="dialog-field">Playlist name<input id="playlist-name" maxlength="48" required placeholder="e.g. Sunday slow-down"></label>
+      <label class="dialog-field">A little note<input id="playlist-description" maxlength="250" placeholder="What is this playlist for?"></label>
+      <label class="dialog-field">Set the mood<select id="playlist-mood"><option>Focus</option><option>Chill</option><option>Energy</option></select></label>
+      <button class="dialog-submit" type="submit">Create playlist <span>↗</span></button>
+    </form>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

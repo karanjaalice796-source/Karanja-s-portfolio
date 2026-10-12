@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#111212">
+  <meta name="description" content="Learn how to make better playlists and get more from your music.">
+  <title>Learn — Riff</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/learn.js" defer></script>
+</head>
+<body class="learn-page">
+  <header class="learn-header">
+    <a class="brand" href="/" aria-label="Riff home"><span class="brand-mark"><i></i><i></i><i></i><i></i></span><span>riff<span class="brand-period">.</span></span></a>
+    <nav class="learn-nav" aria-label="Main navigation">
+      <a href="/">Home</a><a class="selected" href="/learn">Learn</a>
+    </nav>
+    <div class="learn-account" id="learn-account"><a class="login-link" href="/login">Log in</a><a class="signup-link" href="/signup">Sign up <span>↗</span></a></div>
+  </header>
+  <main class="learn-main">
+    <section class="learn-hero">
+      <div class="learn-hero-copy">
+        <div class="eyebrow"><span class="live-dot"></span> THE RIFF LEARNING ROOM</div>
+        <h1>Make every mix<br>feel like <span>you.</span></h1>
+        <p>Little lessons to help you find your sound, shape your playlists, and make more of every listening moment.</p>
+        <a class="learn-hero-cta" href="#lessons">Explore the lessons <span>↓</span></a>
+      </div>
+      <div class="learn-hero-art" aria-hidden="true">
+        <div class="learn-disc"><div class="learn-disc-label">RIFF<br>RECORDS</div></div>
+        <span class="learn-note note-a">♪</span><span class="learn-note note-b">♫</span><span class="learn-star">✳</span>
+        <span class="learn-art-caption">YOUR TASTE, IN GOOD COMPANY</span>
+      </div>
+      <div class="learn-hero-foot"><span>01 — FIND YOUR FREQUENCY</span><span>LEARN AT YOUR OWN PACE&nbsp; ↗</span></div>
+    </section>
+
+    <section class="learning-progress">
+      <div class="progress-copy"><div class="eyebrow">YOUR LEARNING JOURNEY</div><h2 id="progress-heading">A few good ideas, one lesson at a time.</h2><p id="progress-caption">Sign in to keep your progress wherever you go.</p></div>
+      <div class="progress-meter"><div class="progress-meter-label"><span id="progress-count">0 of 6 lessons</span><span id="progress-percent">0%</span></div><div class="progress-meter-track"><span id="progress-fill"></span></div></div>
+    </section>
+
+    <section class="course-area" id="lessons">
+      <div class="course-heading">
+        <div><div class="eyebrow">THE RIFF FIELD GUIDE</div><h2>Good sound starts here.</h2></div>
+        <div class="course-filters" role="group" aria-label="Filter lessons">
+          <button class="course-filter active" data-filter="All">All lessons <span>06</span></button>
+          <button class="course-filter" data-filter="THE BASICS">The basics</button>
+          <button class="course-filter" data-filter="MAKE IT YOURS">Make it yours</button>
+          <button class="course-filter" data-filter="SMART MIXES">Smart mixes</button>
+        </div>
+      </div>
+      <div class="learning-layout">
+        <div class="lesson-list" id="lesson-list" aria-label="Lessons"></div>
+        <article class="lesson-reader" id="lesson-reader" aria-live="polite">
+          <div class="lesson-reader-empty"><span>✳</span><h3>Pick a lesson, find a new angle.</h3><p>Choose any lesson to get started. Everything here is designed to take just a few minutes.</p></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="learn-bottom-cta">
+      <div><span class="eyebrow">A GOOD MIX IS A GREAT PLACE TO START</span><h2>Ready to put it into practice?</h2><p>Head back to your music space and make a mix for right now.</p></div>
+      <a href="/#discover">Make a mix <span>↗</span></a>
+    </section>
+    <footer class="learn-footer"><a class="brand" href="/"><span class="brand-mark"><i></i><i></i><i></i><i></i></span><span>riff<span class="brand-period">.</span></span></a><span>Made for the way you feel.</span><a href="/">Back to your music space ↗</a></footer>
+  </main>
+  <div id="learn-toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
