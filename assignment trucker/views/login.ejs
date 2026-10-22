@@ -1,0 +1,14 @@
+<%- include('partials/header', { title: 'Sign in' }) %>
+<section class="auth-layout">
+  <div class="auth-intro"><p class="eyebrow">Welcome back</p><h1>Pick up<br>where you left off.</h1><p>Sign in with the account provided by your training centre.</p></div>
+  <form class="form-panel" method="post" action="/login">
+    <h2>Sign in</h2>
+    <% if (error) { %><p class="form-error" role="alert"><%= error %></p><% } %>
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <label>Email address<input type="email" name="email" value="<%= email %>" required maxlength="150" autocomplete="username"></label>
+    <label>Password<input type="password" name="password" required autocomplete="current-password"></label>
+    <button class="button primary full" type="submit">Sign in</button>
+    <% if (allowRegistration) { %><p class="form-foot">New student? <a href="/register">Create an account</a></p><% } %>
+  </form>
+</section>
+<%- include('partials/footer') %>

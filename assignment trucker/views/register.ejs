@@ -1,0 +1,17 @@
+<%- include('partials/header', { title: 'Create student account' }) %>
+<section class="auth-layout">
+  <div class="auth-intro"><p class="eyebrow">Student account</p><h1>Start with<br>your next task.</h1><p>Create your student account and you’ll be signed in automatically. Trainers and admins can sign in with accounts provided by the centre.</p></div>
+  <form class="form-panel" method="post" action="/register">
+    <h2>Create account</h2>
+    <% if (error) { %><p class="form-error" role="alert"><%= error %></p><% } %>
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <label>Full name<input name="full_name" value="<%= form.full_name || '' %>" required maxlength="100" autocomplete="name"></label>
+    <label>Student number<input name="student_no" value="<%= form.student_no || '' %>" required maxlength="30"></label>
+    <label>Email address<input type="email" name="email" value="<%= form.email || '' %>" required maxlength="150" autocomplete="email"></label>
+    <label>Password<input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
+    <label>Confirm password<input type="password" name="confirm" required minlength="8" autocomplete="new-password"></label>
+    <button class="button primary full" type="submit">Create account and continue</button>
+    <p class="form-foot">Already registered? <a href="/login">Sign in</a></p>
+  </form>
+</section>
+<%- include('partials/footer') %>

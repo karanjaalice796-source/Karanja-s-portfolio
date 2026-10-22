@@ -1,0 +1,20 @@
+<%- include('partials/header', { title: title }) %>
+<section class="learn-intro">
+  <div><p class="eyebrow">Learning hub / Study skills</p><h1>Turn an assignment into a plan.</h1><p class="lede">A short routine for understanding the brief, making steady progress, and handing in work with less last-minute pressure.</p></div>
+  <div class="learn-index"><span>THE ROUTINE</span><strong>01 — 04</strong><small>Read · Plan · Work · Submit</small></div>
+</section>
+
+<section class="learn-steps" aria-label="Four steps for managing an assignment">
+  <article><span class="step-no">01</span><h2>Read the brief</h2><p>Underline the action words, required format, marking criteria, and anything you need to ask your trainer.</p><div class="prompt"><b>Write down</b><span>What must I hand in?</span><span>How will it be assessed?</span></div></article>
+  <article><span class="step-no">02</span><h2>Make small steps</h2><p>Work backwards from the due date. Split the assignment into pieces you can finish in one study session.</p><div class="prompt"><b>Try this order</b><span>Research → Outline</span><span>Draft → Review → Final</span></div></article>
+  <article><span class="step-no">03</span><h2>Check your progress</h2><p>Choose a status that reflects the work today. If you are stuck, write down the next question or action.</p><div class="prompt"><b>Status guide</b><span>Not Started · plan the first step</span><span>In Progress · keep a next action</span></div></article>
+  <article><span class="step-no">04</span><h2>Submit with care</h2><p>Compare your work with the brief, check the file or link, and leave time to confirm the hand-in.</p><div class="prompt"><b>Before you submit</b><span>Right task · right format</span><span>Link opens · work is complete</span></div></article>
+</section>
+
+<section class="learn-workbench">
+  <div><p class="eyebrow">A weekly check-in</p><h2>Protect a little study time.</h2><p>At the start of the week, choose one next action for each open assignment. Put the action in your calendar, then review your list before the week ends.</p></div>
+  <ol><li><b>Monday</b><span>Check due dates and choose priorities.</span></li><li><b>Study session</b><span>Work on one small step without switching tasks.</span></li><li><b>Friday</b><span>Update progress and ask for help early.</span></li></ol>
+</section>
+
+<section class="learn-close"><div><p class="eyebrow">Ready to organize your work?</p><h2>Put your next deadline in view.</h2></div><div class="actions"><a class="button primary" href="/login">Log in</a><% if (allowRegistration) { %><a class="button secondary" href="/register">Create student account</a><% } %></div></section>
+<%- include('partials/footer') %>

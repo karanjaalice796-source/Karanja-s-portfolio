@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sparkle Freshfold Co.</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;800&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--plum:#4a1a5c;--plum2:#5b2470;--gold:#c9a45c;--gold2:#f0d99a;--cream:#fbf6ef;--card:#f4eef6;--lav:#e9dff0;--ink:#3a1448;--page:#e8e0ea;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--page);font-family:'Montserrat',Arial,sans-serif;color:var(--ink);display:flex;justify-content:center}
+.poster{width:100%;max-width:560px;background:linear-gradient(180deg,#fffaf3,#f7efe6);position:relative;overflow:hidden}
+.serif{font-family:'Playfair Display',Georgia,serif}
+/* header */
+.head{position:relative;padding:22px 18px 14px;min-height:300px;background:radial-gradient(circle at 80% 30%,#fff 0,#f6eee4 70%)}
+.logo{width:62%;position:relative;z-index:2}
+.logo svg{width:44%;display:block;margin-left:12%}
+.brand{font-family:'Playfair Display',serif;font-weight:800;color:var(--plum);font-size:clamp(46px,13vw,70px);line-height:.9;letter-spacing:-1px;margin-top:-6px}
+.brand i{color:var(--gold);font-style:normal;font-size:.5em;vertical-align:top}
+.sub{font-family:'Playfair Display',serif;font-weight:600;color:var(--plum);font-size:clamp(20px,5.4vw,29px);letter-spacing:2px;margin:2px 0 0 clamp(20px,8vw,44px)}
+.tag{font-family:'Playfair Display',serif;font-size:clamp(15px,4.4vw,21px);color:var(--plum);margin-top:6px;text-align:center;width:100%}
+.towels{position:absolute;right:4%;top:70px;width:40%;z-index:1}
+.towels div{height:34px;border-radius:8px;margin-top:-2px;box-shadow:0 6px 10px rgba(74,26,92,.25)}
+.t1{background:linear-gradient(#a98cc0,#8d6aa8);width:90%;margin-left:6%}
+.t2{background:linear-gradient(#fffaf0,#e9dec9);width:100%}
+.t3{background:linear-gradient(#a98cc0,#7d5a99);width:96%;margin-left:2%}
+.vase{position:absolute;right:30%;top:-4px;width:20%;z-index:1;text-align:center;font-size:60px}
+.vase b{display:block;width:70%;height:56px;margin:-14px auto 0;background:#f6efe8;border-radius:40% 40% 46% 46%;box-shadow:inset -6px 0 8px rgba(0,0,0,.06)}
+.badge{position:absolute;top:0;right:0;width:34%;min-width:130px;background:var(--plum);color:#fff;border-bottom-left-radius:100% 70%;padding:30px 12px 34px 26px;text-align:center;z-index:3;border-left:3px solid var(--gold)}
+.badge span{display:block;color:var(--gold2);font-size:20px}
+.badge p{font-weight:600;font-size:13px;letter-spacing:1.5px;line-height:1.35;margin-top:4px}
+/* photos */
+.photos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 12px;margin-top:6px}
+.ph{border-radius:6px;overflow:hidden;background:var(--plum)}
+.ph .img{height:clamp(110px,28vw,160px);display:flex;align-items:center;justify-content:center;font-size:clamp(34px,10vw,54px)}
+.p1{background:linear-gradient(135deg,#f6f1ea,#d9cfc3)}
+.p2{background:linear-gradient(135deg,#efe4d3,#c9b79c)}
+.p3{background:linear-gradient(135deg,#f2c98e,#9db35d)}
+.ph em{display:block;background:var(--plum);color:#fff;font-style:normal;font-weight:600;font-size:clamp(8px,2.2vw,11px);text-align:center;padding:9px 4px;letter-spacing:.3px;text-transform:uppercase}
+/* services */
+.svc{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:14px 12px 0}
+.s{background:var(--card);border-radius:8px;padding:12px 10px}
+.s .top{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.ic{flex:none;width:clamp(34px,10vw,48px);height:clamp(34px,10vw,48px);border-radius:50%;background:var(--plum);border:2px solid var(--gold);display:grid;place-items:center;color:#fff;font-size:clamp(15px,4.4vw,22px)}
+.s h3{font-weight:800;color:var(--plum);font-size:clamp(11px,3.3vw,17px);line-height:1.1}
+.s ul{list-style:none}
+.s li{font-size:clamp(10px,3vw,14px);font-weight:500;padding:3px 0;display:flex;gap:6px}
+.s li:before{content:"\2713";font-weight:800;color:var(--plum)}
+/* prices */
+.prices{margin:14px 12px 0;background:var(--card);border-radius:10px;padding:0 8px 10px;position:relative}
+.pt{display:inline-block;position:relative;left:50%;transform:translate(-50%,-14px);background:var(--plum);color:var(--gold);border:2px solid var(--gold);border-radius:30px;padding:6px 30px;font-family:'Playfair Display',serif;font-weight:700;font-size:clamp(18px,5.4vw,26px);letter-spacing:2px}
+.pg{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:6px;margin-top:-4px}
+.box{background:#fff;border-radius:8px;overflow:hidden;position:relative;padding-top:2px}
+.bh{background:var(--plum);color:#fff;font-weight:700;font-size:clamp(9px,2.7vw,12px);padding:7px 6px 7px 30px;letter-spacing:.3px;text-transform:uppercase;position:relative}
+.bh b{position:absolute;left:3px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;background:var(--plum2);border:1.5px solid var(--gold);display:grid;place-items:center;font-size:12px}
+.row{display:flex;justify-content:space-between;gap:4px;padding:7px 7px;border-bottom:1px solid #e6ddea;font-size:clamp(8.5px,2.5vw,12px)}
+.row:last-child{border:0}
+.row span{font-weight:600}
+.row strong{font-weight:600;white-space:nowrap}
+.clo{margin-top:6px;background:#fff;border-radius:8px;overflow:hidden}
+.clo .bh{padding-left:40px;font-size:clamp(10px,2.9vw,13px)}
+.clo .bh b{left:6px}
+.cg{display:grid;grid-template-columns:repeat(3,1fr);text-align:center}
+.cg div{padding:10px 4px;border-left:1px solid #e0d5e6;font-size:clamp(9px,2.6vw,12px)}
+.cg div:first-child{border:0}
+.cg h4{font-weight:700;font-size:inherit}
+.cg small{display:block;font-size:.9em;color:#6a5675}
+.cg p{font-weight:700;color:var(--plum);font-size:clamp(11px,3.4vw,15px);margin-top:6px}
+.note{text-align:center;font-size:clamp(8.5px,2.5vw,11px);margin-top:7px;color:#5a4666}
+/* footer */
+.foot{margin-top:16px;background:linear-gradient(180deg,#4a1a5c,#3a1048);border-top:3px solid var(--gold);padding:18px 14px 12px;color:#fff;text-align:center;position:relative}
+.book{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:10px;background:linear-gradient(180deg,#f6e3ab,#c9a45c);color:var(--plum);font-weight:800;font-size:clamp(17px,5vw,24px);padding:10px 22px 10px 12px;border-radius:40px;text-decoration:none;box-shadow:0 3px 10px rgba(0,0,0,.35);border:2px solid #f6e3ab;transition:transform .15s}
+.btn:active{transform:scale(.97)}
+.btn:focus-visible,.num:focus-visible{outline:3px solid #fff;outline-offset:3px}
+.btn i{width:38px;height:38px;border-radius:50%;background:var(--plum);color:var(--gold2);display:grid;place-items:center;font-style:normal;font-size:20px}
+.num{color:#fff;text-decoration:none;text-align:left;border-left:1px solid var(--gold);padding-left:14px}
+.num small{display:block;font-size:clamp(10px,3vw,13px);font-weight:500}
+.num b{font-size:clamp(20px,6.4vw,30px);font-weight:700;letter-spacing:.5px;color:var(--gold2)}
+.bar{margin-top:14px;font-size:clamp(9px,2.8vw,12px);letter-spacing:3px;color:#e9dff0;text-transform:uppercase;border-top:1px solid rgba(201,164,92,.5);padding-top:10px}
+.bar span{color:var(--gold);margin:0 8px}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--page:#1b0f22}}
+@media (prefers-reduced-motion:reduce){.btn{transition:none}}
+
+.poster{padding-bottom:70px}
+[hidden]{display:none!important}
+.bk{padding:22px 14px}
+.bk h2{font-family:'Playfair Display',serif;color:var(--plum);font-size:28px}
+.bk>p{font-size:13px;margin:4px 0 14px;color:#5a4666}
+.grp{font-weight:700;color:var(--plum);font-size:13px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.5px}
+.it{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#fff;border-radius:10px;padding:10px 12px;margin-bottom:6px;border:1px solid #e6ddea}
+.it b{display:block;font-size:14px}.it small{color:#6a5675;font-size:12px}
+.q{display:flex;align-items:center;gap:10px}
+.q button{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--gold);background:var(--plum);color:#fff;font-size:18px;cursor:pointer}
+.q button:focus-visible,.bk input:focus-visible,.nav button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.q span{min-width:18px;text-align:center;font-weight:700}
+.bk label{display:block;font-size:13px;font-weight:600;margin-top:10px}
+.bk input{width:100%;margin-top:4px;padding:11px;border:1px solid #cdbdd6;border-radius:8px;font:inherit;background:#fff;color:#222}
+.tot{margin-top:16px;background:var(--plum);color:#fff;border-radius:12px;padding:14px;text-align:center}
+.tot small{color:var(--gold2);display:block;font-size:12px}.tot b{font-size:22px;color:var(--gold2)}
+.send{width:100%;margin-top:12px;border:2px solid #f6e3ab;cursor:pointer;justify-content:center;font-family:inherit}
+.err{color:#b3261e;font-size:13px;margin-top:8px;min-height:16px}
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:560px;display:flex;background:var(--plum);border-top:2px solid var(--gold);padding-bottom:env(safe-area-inset-bottom,0px);z-index:20}
+.nav button{flex:1;background:none;border:0;color:#e9dff0;padding:12px 4px;font:600 13px Montserrat,sans-serif;cursor:pointer}
+.nav button.on{color:var(--gold2);box-shadow:inset 0 -3px var(--gold)}
+</style>
+</head>
+<body>
+<main class="poster"><div id="home">
+  <header class="head">
+    <div class="badge"><span>&#10022;</span><p>CLEAN<br>SPACES<br>HEALTHIER<br>LIVING</p><span style="font-size:14px;margin-top:6px">&#9829;</span></div>
+    <div class="vase">&#127802;<b></b></div>
+    <div class="towels" aria-hidden="true"><div class="t1"></div><div class="t2"></div><div class="t3"></div></div>
+    <div class="logo">
+      <svg viewBox="0 0 120 80" aria-hidden="true"><path d="M8 44 L60 8 L112 44" fill="none" stroke="#4a1a5c" stroke-width="5" stroke-linecap="round"/><path d="M14 56 Q60 78 108 40" fill="none" stroke="#c9a45c" stroke-width="4" stroke-linecap="round"/><rect x="28" y="40" width="64" height="16" rx="8" fill="#b79ccb"/><rect x="34" y="34" width="52" height="12" rx="6" fill="#cdb8dc"/><rect x="52" y="20" width="7" height="7" fill="#c9a45c"/><rect x="61" y="20" width="7" height="7" fill="#c9a45c"/><path d="M100 10 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3z" fill="#e7c981"/></svg>
+      <div class="brand">Sparkle<i>&#10022;</i></div>
+      <div class="sub">FRESHFOLD CO.</div>
+    </div>
+    <p class="tag">&#9829;<br>Where Clean Meets Comfort.</p>
+  </header>
+
+  <section class="photos" aria-label="Services">
+    <div class="ph"><div class="img p1" role="img" aria-label="Clean kitchen">&#127969;</div><em>General House Cleaning</em></div>
+    <div class="ph"><div class="img p2" role="img" aria-label="Organised closet">&#128087;</div><em>Laundry &amp; Closet Organisation</em></div>
+    <div class="ph"><div class="img p3" role="img" aria-label="Meal prep boxes">&#129367;</div><em>Meal Prep</em></div>
+  </section>
+
+  <section class="svc">
+    <div class="s"><div class="top"><div class="ic">&#8962;</div><h3>GENERAL HOUSE CLEANING</h3></div>
+      <ul><li>Kitchen</li><li>Bathroom</li><li>Living areas</li><li>Bedrooms</li><li>Dusting &amp; sanitising</li></ul></div>
+    <div class="s"><div class="top"><div class="ic">&#9678;</div><h3 style="font-size:clamp(13px,4vw,21px)">LAUNDRY</h3></div>
+      <ul><li>Washing</li><li>Ironing</li><li>Folding</li><li>Closet organisation</li><li>Shoe-rack organisation</li></ul></div>
+    <div class="s"><div class="top"><div class="ic">&#127860;</div><h3 style="font-size:clamp(13px,4vw,21px)">MEAL PREP</h3></div>
+      <ul><li>Weekly meal prep</li><li>Homemade meals</li><li>Good portions</li></ul></div>
+  </section>
+
+  <section class="prices" aria-label="Our prices">
+    <div class="pt">OUR PRICES</div>
+    <div class="pg">
+      <div class="box"><div class="bh"><b>&#8962;</b>House Cleaning</div>
+        <div class="row"><span>Bedsitter / Studio</span><strong>KSh 700 &ndash; 900</strong></div>
+        <div class="row"><span>One Bedroom</span><strong>KSh 1,200 &ndash; 1,500</strong></div>
+        <div class="row"><span>Two Bedrooms</span><strong>KSh 1,500 &ndash; 2,000</strong></div></div>
+      <div class="box"><div class="bh"><b>&#9678;</b>Laundry</div>
+        <div class="row"><span>One Basket</span><strong>KSh 400 &ndash; 600</strong></div>
+        <div class="row"><span>Ironing</span><strong>KSh 300 &ndash; 500</strong></div></div>
+      <div class="box"><div class="bh"><b>&#10022;</b>Extras</div>
+        <div class="row"><span>Duvet</span><strong>KSh 500 &ndash; 1,000</strong></div>
+        <div class="row"><span>Carpet</span><strong>KSh 500 &ndash; 1,000</strong></div></div>
+    </div>
+    <div class="clo"><div class="bh"><b>&#9906;</b>Closet Organisation</div>
+      <div class="cg">
+        <div><h4>Small wardrobe</h4><small>(up to 30 items)</small><p>KSh 500 &ndash; 800</p></div>
+        <div><h4>Medium wardrobe</h4><small>(31&ndash;70 items)</small><p>KSh 800 &ndash; 1,500</p></div>
+        <div><h4>Large / heavily packed wardrobe</h4><p>KSh 1,500 &ndash; 2,500</p></div>
+      </div></div>
+    <p class="note">Final quote depends on wardrobe size and sorting required.</p>
+  </section>
+
+  <footer class="foot">
+    <div class="book">
+      <a class="btn" href="#book" data-go="book"><i>&#9990;</i>BOOK NOW</a>
+      <a class="num" href="tel:0182957519"><small>WhatsApp or Call</small><b>&#9742; 0182957519</b></a>
+    </div>
+    <div class="bar">Cleaning<span>&#10022;</span>Laundry<span>&#10022;</span>Meal Prep</div>
+  </footer></div>
+<div id="bookv" class="bk" hidden>
+  <h2>Book a service</h2><p>Choose what you need. We'll send your request to our WhatsApp and confirm the final quote.</p>
+  <div id="list"></div>
+  <label>Your name<input id="name" autocomplete="name"></label>
+  <label>Phone<input id="phone" type="tel" autocomplete="tel"></label>
+  <label>Location / address<input id="addr" autocomplete="street-address"></label>
+  <label>Preferred date<input id="date" type="date"></label>
+  <div class="tot"><small>Estimated total</small><b id="tot">KSh 0</b></div>
+  <p class="err" id="err" role="alert"></p>
+  <button class="btn send" id="send" type="button"><i>&#9990;</i>Send on WhatsApp</button>
+</div>
+<nav class="nav" aria-label="Main"><button class="on" data-go="home">Home</button><button data-go="book">Book</button></nav>
+</main>
+<script>
+var WA="254182957519";
+var ITEMS=[
+["House cleaning",[["Bedsitter / Studio",700,900],["One Bedroom",1200,1500],["Two Bedrooms",1500,2000]]],
+["Laundry",[["Laundry - one basket",400,600],["Ironing",300,500]]],
+["Closet organisation",[["Small wardrobe (up to 30 items)",500,800],["Medium wardrobe (31-70 items)",800,1500],["Large / packed wardrobe",1500,2500]]],
+["Extras",[["Duvet",500,1000],["Carpet",500,1000]]],
+["Meal prep",[["Weekly meal prep (quoted on request)",0,0]]]];
+var qty={},flat=[],list=document.getElementById("list");
+function money(n){return "KSh "+n.toLocaleString("en-KE")}
+ITEMS.forEach(function(g){
+  var h=document.createElement("div");h.className="grp";h.textContent=g[0];list.appendChild(h);
+  g[1].forEach(function(it){
+    var i=flat.push(it)-1;qty[i]=0;
+    var d=document.createElement("div");d.className="it";
+    d.innerHTML='<div><b>'+it[0]+'</b><small>'+(it[2]?money(it[1])+' - '+money(it[2]):'Quote on request')+'</small></div><div class="q"><button type="button" aria-label="Remove one '+it[0]+'" data-i="'+i+'" data-d="-1">&minus;</button><span id="q'+i+'">0</span><button type="button" aria-label="Add one '+it[0]+'" data-i="'+i+'" data-d="1">+</button></div>';
+    list.appendChild(d);
+  });
+});
+list.addEventListener("click",function(e){
+  var b=e.target.closest("button");if(!b)return;
+  var i=b.dataset.i;qty[i]=Math.max(0,Math.min(9,qty[i]+Number(b.dataset.d)));
+  document.getElementById("q"+i).textContent=qty[i];total();
+});
+function total(){
+  var lo=0,hi=0;flat.forEach(function(it,i){lo+=it[1]*qty[i];hi+=it[2]*qty[i]});
+  document.getElementById("tot").textContent=hi?money(lo)+" - "+money(hi):"KSh 0";
+}
+function show(v){
+  document.getElementById("home").hidden=v!=="home";
+  document.getElementById("bookv").hidden=v!=="book";
+  document.querySelectorAll(".nav button").forEach(function(b){b.classList.toggle("on",b.dataset.go===v)});
+  window.scrollTo(0,0);
+}
+document.addEventListener("click",function(e){
+  var t=e.target.closest("[data-go]");if(t){e.preventDefault();show(t.dataset.go)}
+});
+document.getElementById("send").addEventListener("click",function(){
+  var n=document.getElementById("name").value.trim(),ph=document.getElementById("phone").value.trim(),
+  ad=document.getElementById("addr").value.trim(),dt=document.getElementById("date").value,err=document.getElementById("err");
+  var lines=[];flat.forEach(function(it,i){if(qty[i])lines.push("- "+it[0]+" x"+qty[i])});
+  if(!lines.length){err.textContent="Add at least one service.";return}
+  if(!n||!ph||!ad){err.textContent="Fill in your name, phone and location.";return}
+  err.textContent="";
+  var msg="Hello Sparkle Freshfold Co., I'd like to book:\n"+lines.join("\n")+"\n\nEstimate: "+document.getElementById("tot").textContent+
+  "\nName: "+n+"\nPhone: "+ph+"\nLocation: "+ad+(dt?"\nDate: "+dt:"");
+  window.open("https://wa.me/"+WA+"?text="+encodeURIComponent(msg),"_blank");
+});
+if(location.hash==="#book")show("book");
+</script>
+</body>
+</html>

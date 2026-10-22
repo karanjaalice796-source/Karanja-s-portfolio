@@ -1,0 +1,12 @@
+<%- include('../partials/header', { title: title }) %>
+<p class="breadcrumb"><a href="/teacher">Trainer overview</a> / Post assignment</p>
+<section class="narrow-page"><p class="eyebrow">New course work</p><h1>Post an assignment</h1><% if (error) { %><p class="form-error" role="alert"><%= error %></p><% } %>
+<form class="form-panel stack-form" method="post" action="/teacher/assignments"><input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <label>Course<select name="course_id" required><% courses.forEach(function(course) { %><option value="<%= course.id %>" <%= Number(courseId) === course.id ? 'selected' : '' %>><%= course.name %></option><% }) %></select></label>
+  <label>Assignment title<input name="title" value="<%= form.title || '' %>" maxlength="80" required></label>
+  <label>Instructions or notes<textarea name="description" rows="5" maxlength="500"><%= form.description || '' %></textarea></label>
+  <div class="form-columns"><label>Date given<input type="date" name="issued_on" value="<%= String(form.issued_on || '').slice(0,10) %>" required></label><label>Due date<input type="date" name="due_on" value="<%= String(form.due_on || '').slice(0,10) %>" required></label></div>
+  <label>Maximum marks <span class="muted">(optional)</span><input type="number" name="max_marks" min="1" max="10000" value="<%= form.max_marks || '' %>"></label>
+  <div class="actions"><button class="button primary" type="submit">Post to course</button><a class="button secondary" href="/teacher">Cancel</a></div>
+</form></section>
+<%- include('../partials/footer') %>

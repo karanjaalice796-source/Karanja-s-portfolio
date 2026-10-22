@@ -1,0 +1,12 @@
+<%- include('../partials/header', { title: title }) %>
+<p class="breadcrumb"><a href="/admin">Overview</a> / <a href="/admin/users">People</a> / Add person</p>
+<section class="narrow-page"><p class="eyebrow">Centre administration</p><h1>Add a person</h1><% if (error) { %><p class="form-error" role="alert"><%= error %></p><% } %>
+<form class="form-panel stack-form" method="post" action="/admin/users"><input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <label>Account type<select name="role"><% ['student','teacher','admin'].forEach(function(role) { %><option value="<%= role %>" <%= form.role === role ? 'selected' : '' %>><%= role === 'teacher' ? 'Trainer' : role === 'admin' ? 'Administrator' : 'Student' %></option><% }) %></select></label>
+  <label>Full name<input name="full_name" value="<%= form.full_name || '' %>" required maxlength="100"></label>
+  <label>Email address<input type="email" name="email" value="<%= form.email || '' %>" required maxlength="150"></label>
+  <label>Student number <span class="muted">(required for students)</span><input name="student_no" value="<%= form.student_no || '' %>" maxlength="30"></label>
+  <label>Starting password<input type="password" name="password" minlength="8" required autocomplete="new-password"></label>
+  <div class="actions"><button class="button primary" type="submit">Create account</button><a class="button secondary" href="/admin/users">Cancel</a></div>
+</form></section>
+<%- include('../partials/footer') %>

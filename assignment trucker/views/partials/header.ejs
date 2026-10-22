@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#153c3b">
+  <title><%= typeof title === 'string' ? title + ' | ' : '' %><%= centreName %> Assignment Tracker</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark">AT</span><span><%= centreName %><small>Assignment tracker</small></span></a>
+    <% if (user) { %>
+      <nav class="main-nav" aria-label="Main navigation">
+        <a href="/learn">Learning hub</a>
+        <a href="/student">Student side</a>
+        <% if (user.role === 'teacher' || user.role === 'admin') { %><a href="/teacher">Teacher side</a><% } %>
+        <% if (user.role === 'admin') { %><a href="/admin">Admin side</a><a href="/admin/users">People</a><a href="/admin/courses">Courses</a><% } %>
+      </nav>
+      <div class="account-menu"><span><%= user.name %></span>
+        <form method="post" action="/logout"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="text-button" type="submit">Sign out</button></form>
+      </div>
+    <% } else { %>
+      <nav class="main-nav" aria-label="Main navigation"><a href="/learn">Learning hub</a><a href="/login">Log in</a><% if (allowRegistration) { %><a href="/register">Sign up</a><% } %></nav>
+    <% } %>
+  </header>
+  <main class="page-shell">
+    <% if (flash) { %><div class="notice <%= flash.type %>" role="status"><%= flash.text %></div><% } %>

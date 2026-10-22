@@ -1,0 +1,16 @@
+<%- include('partials/header', { title: 'Welcome' }) %>
+<section class="welcome-layout">
+  <div class="welcome-copy">
+    <p class="eyebrow">Training centre coursework</p>
+    <h1>Know what’s due.<br><span>Keep moving.</span></h1>
+    <p class="lede">A shared workspace for student assignments, trainer feedback and course follow-up.</p>
+    <div class="actions"><a class="button primary" href="/login">Log in</a><% if (allowRegistration) { %><a class="button secondary" href="/register">Sign up as a student</a><% } %><a class="text-link" href="/learn">Explore the learning hub →</a></div>
+  </div>
+  <div class="welcome-aside">
+    <span class="aside-index">01 / WORKFLOW</span>
+    <h2>One place for the whole class.</h2>
+    <p>Students follow deadlines and hand-ins. Trainers post coursework and track submissions. Admins keep people and courses organized.</p>
+    <div class="role-list"><span>Students <b>01</b></span><span>Trainers <b>02</b></span><span>Centre admins <b>03</b></span></div>
+  </div>
+</section>
+<%- include('partials/footer') %>
