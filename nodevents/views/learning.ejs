@@ -1,0 +1,87 @@
+<%- include('partials/head', { title: 'How Nodevents works' }) %>
+<section class="learning-hero">
+  <p class="eyebrow">Nodevents learning center</p>
+  <h1>Get everyone on<br>the same timeline.</h1>
+  <p class="intro">A quick guide to planning an event, inviting vendors, sharing updates, and keeping invoices organized.</p>
+  <a class="button primary" href="<%= user ? '/dashboard' : '/auth' %>"><%= user ? 'Open your dashboard' : 'Start planning' %> <span aria-hidden="true">→</span></a>
+</section>
+
+<nav class="learning-nav" aria-label="Learning page sections">
+  <a href="#overview">The idea</a>
+  <a href="#planner">For planners</a>
+  <a href="#vendors">For vendors</a>
+  <a href="#live-updates">Live updates</a>
+  <a href="#invoices">Invoices</a>
+</nav>
+
+<section class="learning-section" id="overview">
+  <div class="learning-section-heading">
+    <span class="learning-number">01</span>
+    <div><p class="eyebrow">The idea</p><h2>One calm place for event coordination</h2></div>
+  </div>
+  <p class="learning-copy">Event details often end up split between chat threads, email, and spreadsheets. Nodevents brings the schedule, vendor responses, updates, and invoices together for the planner and gives each vendor a simple personal link.</p>
+  <div class="learning-points">
+    <article><span aria-hidden="true">◷</span><h3>A shared schedule</h3><p>Keep vendor arrival times and event tasks in one timeline.</p></article>
+    <article><span aria-hidden="true">↗</span><h3>Clear responses</h3><p>See who confirmed, declined, or needs a change.</p></article>
+    <article><span aria-hidden="true">▤</span><h3>Fewer loose ends</h3><p>Track submitted invoices and whether they are approved or paid.</p></article>
+  </div>
+</section>
+
+<section class="learning-section" id="planner">
+  <div class="learning-section-heading">
+    <span class="learning-number">02</span>
+    <div><p class="eyebrow">For planners</p><h2>Set up your event in a few steps</h2></div>
+  </div>
+  <ol class="learning-steps">
+    <li><span>1</span><div><h3>Create your planner account</h3><p>Register with your name, email, and password, then sign in to your dashboard.</p></div></li>
+    <li><span>2</span><div><h3>Create an event</h3><p>Add the event name, date, and venue. You can open an event later from the dashboard.</p></div></li>
+    <li><span>3</span><div><h3>Add vendors</h3><p>Enter each vendor’s name and optional category and email. Nodevents creates a unique link for each vendor.</p></div></li>
+    <li><span>4</span><div><h3>Build the timeline</h3><p>Add tasks with a date and time, then assign them to a vendor or mark them as event-wide. Save a new time whenever the schedule changes.</p></div></li>
+    <li><span>5</span><div><h3>Watch confirmations and invoices</h3><p>The event page shows outstanding confirmations, vendor notes, submitted invoices, and recent changes.</p></div></li>
+  </ol>
+</section>
+
+<section class="learning-section" id="vendors">
+  <div class="learning-section-heading">
+    <span class="learning-number">03</span>
+    <div><p class="eyebrow">For vendors</p><h2>A personal link, no account required</h2></div>
+  </div>
+  <div class="learning-two-column">
+    <div>
+      <p class="learning-copy">The planner shares your unique vendor link with you. Open it to view event details and relevant timeline tasks, respond to the planner, or submit an invoice.</p>
+      <ul class="learning-checklist">
+        <li>Choose <strong>Confirm</strong>, <strong>Need changes</strong>, or <strong>Decline</strong>.</li>
+        <li>Add a short note to explain a request or response.</li>
+        <li>Return to the same link to check for schedule updates.</li>
+      </ul>
+    </div>
+    <aside class="learning-callout"><strong>Keep your link private</strong><p>Anyone with a vendor link can see that vendor’s event details and respond on their behalf. Only share it directly with the intended vendor.</p></aside>
+  </div>
+</section>
+
+<section class="learning-section" id="live-updates">
+  <div class="learning-section-heading">
+    <span class="learning-number">04</span>
+    <div><p class="eyebrow">Live updates</p><h2>Changes reach the right people</h2></div>
+  </div>
+  <p class="learning-copy">When a planner adds a timeline task or changes its time, connected planner and vendor pages receive a live notification. When a vendor responds or sends an invoice, the planner is notified too. Select <strong>Refresh</strong> in the update banner to reload the latest page details.</p>
+</section>
+
+<section class="learning-section" id="invoices">
+  <div class="learning-section-heading">
+    <span class="learning-number">05</span>
+    <div><p class="eyebrow">Invoice tracking</p><h2>Follow an invoice from sent to paid</h2></div>
+  </div>
+  <div class="invoice-flow" aria-label="Invoice progress">
+    <span><strong>1</strong> Vendor sends an invoice</span><span aria-hidden="true">→</span>
+    <span><strong>2</strong> Planner approves it</span><span aria-hidden="true">→</span>
+    <span><strong>3</strong> Planner marks it paid</span>
+  </div>
+  <p class="learning-copy">Vendors can submit a PDF, JPG, or PNG invoice (up to 8 MB) with an amount. The planner can download the file and update its status from the event page.</p>
+</section>
+
+<section class="learning-finish">
+  <div><p class="eyebrow">Ready when you are</p><h2>Bring your event details together.</h2><p>Start with one event and invite one vendor to try the flow.</p></div>
+  <a class="button primary" href="<%= user ? '/dashboard' : '/auth' %>"><%= user ? 'Go to dashboard' : 'Create your account' %> <span aria-hidden="true">→</span></a>
+</section>
+<%- include('partials/foot') %>

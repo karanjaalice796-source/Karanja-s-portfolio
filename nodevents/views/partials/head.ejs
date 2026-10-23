@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#252921">
+  <title><%= title %> · Nodevents</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header class="bar">
+    <a class="brand" href="<%= vendorView ? '#vendor-content' : (user ? '/dashboard' : '/auth') %>">Nodevents<small>EVENT COORDINATION</small></a>
+    <% if (vendorView) { %>
+      <span class="portal-label">Private vendor link</span>
+    <% } else { %>
+      <nav class="bar-nav" aria-label="Main navigation">
+        <a href="/learn">How it works</a>
+        <% if (!user) { %><a href="/auth">Planner sign in</a><% } %>
+      </nav>
+    <% } %>
+    <% if (user && !vendorView) { %>
+      <div class="bar-actions">
+        <span class="muted">Hi, <%= user.name %></span>
+        <form method="post" action="/auth/logout">
+          <button class="account-action" type="submit">Log out</button>
+        </form>
+      </div>
+    <% } %>
+  </header>
+  <main>
+  <% if (notice) { %><p class="flash" role="status"><%= notice %></p><% } %>

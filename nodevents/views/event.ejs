@@ -1,0 +1,111 @@
+<%- include('partials/head', { title: event.title }) %>
+<div data-event-id="<%= event.id %>"></div>
+<div class="heading-row">
+  <div>
+    <a href="/dashboard">← All events</a>
+    <p class="eyebrow"><%= new Date(`${event.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'full' }) %></p>
+    <h1><%= event.title %></h1>
+    <p class="intro"><%= event.venue || 'Venue to be confirmed' %></p>
+  </div>
+</div>
+<div class="stats">
+  <div class="stat"><strong><%= vendors.length %></strong><span>Vendors</span></div>
+  <div class="stat"><strong><%= vendors.filter(vendor => vendor.status === 'pending').length %></strong><span>Awaiting response</span></div>
+  <div class="stat"><strong><%= invoices.filter(invoice => invoice.status !== 'paid').length %></strong><span>Invoices to review/pay</span></div>
+</div>
+<div class="grid">
+  <section class="panel">
+    <h2>Add vendor</h2>
+    <form class="stack" method="post" action="/events/<%= event.id %>/vendors">
+      <label>Vendor name<input name="name" maxlength="100" required></label>
+      <label>Category<input name="category" maxlength="80" placeholder="Catering, DJ, photography…"></label>
+      <label>Email <small>(optional)</small><input type="email" name="email" maxlength="160"></label>
+      <button class="primary" type="submit">Add vendor</button>
+    </form>
+  </section>
+  <section class="panel">
+    <h2>Add timeline task</h2>
+    <form class="stack" method="post" action="/events/<%= event.id %>/tasks">
+      <label>Task<input name="title" maxlength="160" placeholder="Vendor arrival, sound check…" required></label>
+      <label>Date and time<input type="datetime-local" name="start_time" required></label>
+      <label>Vendor<select name="vendor_id"><option value="">Event-wide</option><% vendors.forEach(vendor => { %><option value="<%= vendor.id %>"><%= vendor.name %></option><% }) %></select></label>
+      <label>Notes<textarea name="notes" maxlength="1000"></textarea></label>
+      <button type="submit">Add to timeline</button>
+    </form>
+  </section>
+</div>
+<section class="panel">
+  <h2>Vendor confirmations</h2>
+  <p class="muted email-settings">
+    <%= mailConfigured
+      ? `SMTP is configured. Pending vendors with email addresses are reminded every ${reminderHours} hours, up to ${maxReminders} times.`
+      : `Email demo mode is active: messages are printed in the server console. Pending-vendor reminder emails are logged every ${reminderHours} hours, up to ${maxReminders} times.` %>
+  </p>
+  <% if (vendors.length) { %>
+    <ul class="plain">
+      <% vendors.forEach((vendor) => { %>
+        <li class="vendor-row">
+          <div><strong><%= vendor.name %></strong><br><small><%= vendor.category || 'Vendor' %><%= vendor.email ? ` · ${vendor.email}` : '' %></small></div>
+          <span class="badge <%= vendor.status %>"><%= vendor.status.replace('_', ' ') %></span>
+          <div class="vendor-tools">
+            <input class="link-box" aria-label="Vendor link for <%= vendor.name %>" readonly value="<%= `/vendor/${vendor.token}` %>" onclick="this.select()">
+            <% if (vendor.email) { %>
+              <form class="vendor-email-form" method="post" action="/events/<%= event.id %>/vendors/<%= vendor.id %>/email">
+                <button type="submit"><%= vendor.status === 'pending' && vendor.last_notified_at ? 'Send reminder' : 'Email private link' %></button>
+              </form>
+              <% if (vendor.reminder_count) { %><small>Automatic reminders sent: <%= vendor.reminder_count %> / <%= maxReminders %></small><% } %>
+            <% } else { %><small>Add an email to send this private link.</small><% } %>
+          </div>
+        </li>
+        <% if (vendor.note) { %><li><small>Vendor note: <%= vendor.note %></small></li><% } %>
+      <% }) %>
+    </ul>
+  <% } else { %><p class="muted">No vendors yet. Add one to create a private vendor link.</p><% } %>
+</section>
+<section class="panel">
+  <h2>Event timeline</h2>
+  <% if (tasks.length) { %>
+    <ol class="timeline">
+      <% tasks.forEach((task) => { %>
+        <li>
+          <div class="when"><%= new Date(task.start_time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) %></div>
+          <div><strong><%= task.title %></strong><p class="muted"><%= task.vendor_name || 'Event-wide' %><%= task.notes ? ` · ${task.notes}` : '' %></p>
+            <form class="inline-form" method="post" action="/events/<%= event.id %>/tasks/<%= task.id %>/time">
+              <label>Change time<input type="datetime-local" name="start_time" value="<%= task.start_time %>" required></label>
+              <button type="submit">Save time</button>
+            </form>
+          </div>
+        </li>
+      <% }) %>
+    </ol>
+  <% } else { %><p class="muted">Add tasks to create your event-day schedule.</p><% } %>
+</section>
+<section class="panel">
+  <h2>Invoices</h2>
+  <% if (invoices.length) { %>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Vendor</th><th>Invoice</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody><% invoices.forEach((invoice) => { %>
+        <tr>
+          <td><%= invoice.vendor_name %></td>
+          <td><a href="/invoices/<%= invoice.id %>/download"><%= invoice.original_name %></a></td>
+          <td><%= Number(invoice.amount).toFixed(2) %></td>
+          <td><span class="badge <%= invoice.status %>"><%= invoice.status %></span></td>
+          <td><% if (invoice.status === 'sent') { %>
+            <div class="actions">
+              <form method="post" action="/events/<%= event.id %>/invoices/<%= invoice.id %>/status"><input type="hidden" name="status" value="approved"><button type="submit">Approve</button></form>
+              <form method="post" action="/events/<%= event.id %>/invoices/<%= invoice.id %>/status"><input type="hidden" name="status" value="paid"><button type="submit">Mark paid</button></form>
+            </div>
+          <% } else if (invoice.status === 'approved') { %>
+            <form method="post" action="/events/<%= event.id %>/invoices/<%= invoice.id %>/status"><input type="hidden" name="status" value="paid"><button type="submit">Mark paid</button></form>
+          <% } else { %>Complete<% } %></td>
+        </tr>
+      <% }) %></tbody>
+    </table></div>
+  <% } else { %><p class="muted">Vendor invoices will appear here when submitted.</p><% } %>
+</section>
+<section class="panel">
+  <h2>Recent changes</h2>
+  <% if (changes.length) { %><ul class="plain"><% changes.forEach(change => { %><li><strong><%= change.message %></strong><br><small><%= change.created_at %></small></li><% }) %></ul><% } else { %><p class="muted">Updates to vendors and the timeline will be listed here.</p><% } %>
+</section>
+<%- include('partials/foot') %>

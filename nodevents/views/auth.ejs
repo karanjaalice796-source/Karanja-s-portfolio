@@ -1,0 +1,81 @@
+<%- include('partials/head', { title: 'Planner sign in' }) %>
+<section class="auth-container">
+  <p class="eyebrow">Nodevents planner access</p>
+  <h1 class="auth-heading"><%= authMode === 'register' ? 'Create your account' : 'Log in' %></h1>
+  <p class="auth-intro">Stop chasing vendors. Keep every detail in one place.</p>
+  <% if (loggedOut) { %><p class="flash auth-logout-notice" role="status">You've been logged out.</p><% } %>
+  <% if (error) { %><p class="error" role="alert"><%= error %></p><% } %>
+  <div class="auth-tabs" role="tablist" aria-label="Planner account options">
+    <button class="auth-tab" id="login-tab" type="button" role="tab" aria-controls="login-panel" aria-selected="<%= authMode !== 'register' %>" data-auth-tab="login">Log in</button>
+    <button class="auth-tab" id="register-tab" type="button" role="tab" aria-controls="register-panel" aria-selected="<%= authMode === 'register' %>" data-auth-tab="register">Create account</button>
+  </div>
+  <div id="login-panel" role="tabpanel" aria-labelledby="login-tab" data-auth-panel="login" <%= authMode === 'register' ? 'hidden' : '' %>>
+    <form class="auth-form" method="post" action="/auth/login">
+      <label class="auth-field">Email
+        <input class="auth-input" type="email" name="email" autocomplete="email" maxlength="160" placeholder="E-mail" autofocus required>
+      </label>
+      <label class="auth-field">Password
+        <span class="password-field auth-password-field">
+          <input class="auth-input" type="password" name="password" autocomplete="current-password" maxlength="128" placeholder="Password" data-password-input required>
+          <button class="password-toggle" type="button" data-password-toggle aria-label="Show password" aria-pressed="false">Show</button>
+        </span>
+      </label>
+      <button class="login-button" type="submit" data-auth-submit data-loading-label="Logging in...">Log in</button>
+    </form>
+    <div class="social-account-container">
+      <span class="social-title">Or sign in with</span>
+      <div class="social-accounts" aria-label="Social sign-in options">
+        <% if (oauthProviders.google) { %>
+        <a class="social-button" href="/auth/google" aria-label="Sign in with Google">
+        <% } else { %>
+        <button class="social-button" type="button" disabled title="Configure Google OAuth to enable this option." aria-label="Google sign-in not configured">
+        <% } %>
+          <svg class="social-icon google-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" aria-hidden="true">
+            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.25 5.48-4.72 7.18l7.62 5.91c4.45-4.11 7.14-10.17 7.14-17.56z"/>
+            <path fill="#FBBC05" d="M10.53 28.59a14.4 14.4 0 0 1 0-9.18l-7.98-6.19a24 24 0 0 0 0 21.56l7.98-6.19z"/>
+            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.9-5.89l-7.62-5.91c-2.11 1.42-4.81 2.26-8.28 2.26-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+          </svg>
+          <span>Google</span>
+        <% if (oauthProviders.google) { %>
+        </a>
+        <% } else { %>
+        </button>
+        <% } %>
+        <% if (oauthProviders.apple) { %>
+        <a class="social-button" href="/auth/apple" aria-label="Sign in with Apple">
+        <% } else { %>
+        <button class="social-button" type="button" disabled title="Configure Apple OAuth to enable this option." aria-label="Apple sign-in not configured">
+        <% } %>
+          <svg class="social-icon apple-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" aria-hidden="true">
+            <path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/>
+          </svg>
+          <span>Apple</span>
+        <% if (oauthProviders.apple) { %>
+        </a>
+        <% } else { %>
+        </button>
+        <% } %>
+      </div>
+      <small class="social-note">Social sign-in is available after its provider credentials are configured. See <a href="/oauth-setup">OAuth setup instructions</a>.</small>
+    </div>
+  </div>
+  <div id="register-panel" role="tabpanel" aria-labelledby="register-tab" data-auth-panel="register" <%= authMode === 'register' ? '' : 'hidden' %>>
+    <form class="auth-form" method="post" action="/auth/register">
+      <label class="auth-field">Your name
+        <input class="auth-input" name="name" autocomplete="name" maxlength="80" placeholder="Your name" required>
+      </label>
+      <label class="auth-field">Email
+        <input class="auth-input" type="email" name="email" autocomplete="email" maxlength="160" placeholder="E-mail" required>
+      </label>
+      <label class="auth-field">Password <small>(8 characters or more)</small>
+        <span class="password-field auth-password-field">
+          <input class="auth-input" type="password" name="password" autocomplete="new-password" minlength="8" maxlength="128" placeholder="Password" data-password-input required>
+          <button class="password-toggle" type="button" data-password-toggle aria-label="Show password" aria-pressed="false">Show</button>
+        </span>
+      </label>
+      <button class="login-button secondary-login-button" type="submit" data-auth-submit data-loading-label="Creating account...">Create account</button>
+    </form>
+  </div>
+</section>
+<%- include('partials/foot') %>

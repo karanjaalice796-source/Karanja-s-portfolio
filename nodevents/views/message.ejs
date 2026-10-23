@@ -1,0 +1,10 @@
+<%- include('partials/head', { title, vendorView }) %>
+<section class="panel narrow" <% if (vendorView) { %>id="vendor-content"<% } %>>
+  <p class="eyebrow">Nodevents</p>
+  <h1><%= title %></h1>
+  <p class="intro"><%= message %></p>
+  <% if (!vendorView) { %>
+    <a class="button primary" href="<%= href === 'back' ? 'javascript:history.back()' : href %>"><%= linkText %></a>
+  <% } %>
+</section>
+<%- include('partials/foot') %>

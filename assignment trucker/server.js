@@ -21,6 +21,12 @@ const isProd = process.env.NODE_ENV === 'production';
 if (isProd) app.set('trust proxy', 1);
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
+app.locals.user = null;
+app.locals.centreName = centreName;
+app.locals.fmt = dates;
+app.locals.allowRegistration = process.env.ALLOW_REGISTRATION !== 'false';
+app.locals.csrfToken = '';
+app.locals.flash = null;
 
 app.use(function (req, res, next) {
   res.setHeader('X-Content-Type-Options', 'nosniff');

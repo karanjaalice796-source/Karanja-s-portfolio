@@ -1,0 +1,33 @@
+<%- include('partials/head', { title: 'Planner dashboard' }) %>
+<div class="heading-row">
+  <div>
+    <p class="eyebrow">Planner dashboard</p>
+    <h1>Your events</h1>
+    <p class="intro">See what is coming up and which vendors still need to confirm.</p>
+  </div>
+</div>
+<section class="panel">
+  <h2>Create an event</h2>
+  <form class="row" method="post" action="/events">
+    <label>Event name<input name="title" maxlength="120" placeholder="e.g. Maya & Jordan's wedding" required></label>
+    <label>Date<input type="date" name="event_date" required></label>
+    <label>Venue<input name="venue" maxlength="160" placeholder="Venue or location"></label>
+    <button class="primary" type="submit">Create event</button>
+  </form>
+</section>
+<% if (events.length) { %>
+  <div class="cards">
+    <% events.forEach((event) => { %>
+      <article class="panel event-card">
+        <p class="eyebrow"><%= new Date(`${event.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'medium' }) %></p>
+        <h2><a href="/events/<%= event.id %>"><%= event.title %></a></h2>
+        <p class="muted"><%= event.venue || 'Venue to be confirmed' %></p>
+        <p><strong><%= event.vendor_count %></strong> vendors · <strong><%= event.pending_count %></strong> awaiting confirmation</p>
+        <a class="button" href="/events/<%= event.id %>">Open event</a>
+      </article>
+    <% }) %>
+  </div>
+<% } else { %>
+  <section class="panel"><h2>Your first event starts here</h2><p class="muted">Create an event above, then add vendors and build its timeline.</p></section>
+<% } %>
+<%- include('partials/foot') %>

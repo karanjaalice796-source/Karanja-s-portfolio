@@ -1,0 +1,39 @@
+<%- include('partials/head', { title: `${vendor.name} · Vendor details`, vendorView: true }) %>
+<div data-vendor-token="<%= vendor.token %>"></div>
+<section class="panel" id="vendor-content">
+  <p class="eyebrow"><%= vendor.event_title %> · <%= new Date(`${vendor.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'full' }) %></p>
+  <h1>Hello, <%= vendor.name %></h1>
+  <p class="intro"><%= vendor.category || 'Event vendor' %><%= vendor.venue ? ` · ${vendor.venue}` : '' %></p>
+  <p>Current response: <span class="badge <%= vendor.status %>"><%= vendor.status.replace('_', ' ') %></span></p>
+  <% if (vendor.note) { %><p class="muted">Your note: <%= vendor.note %></p><% } %>
+</section>
+<section class="panel">
+  <h2>Respond to the planner</h2>
+  <form class="stack" method="post" action="/vendor/<%= vendor.token %>/status">
+    <label>Note or requested change <small>(optional)</small><textarea name="note" maxlength="500" placeholder="Add context or a change request"></textarea></label>
+    <div class="actions">
+      <button class="primary" name="status" value="confirmed" type="submit">Confirm</button>
+      <button name="status" value="changes_requested" type="submit">Need changes</button>
+      <button name="status" value="declined" type="submit">Decline</button>
+    </div>
+  </form>
+</section>
+<section class="panel">
+  <h2>Your timeline</h2>
+  <% if (tasks.length) { %><ol class="timeline"><% tasks.forEach(task => { %>
+    <li><div class="when"><%= new Date(task.start_time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) %></div><div><strong><%= task.title %></strong><% if (task.notes) { %><p class="muted"><%= task.notes %></p><% } %></div></li>
+  <% }) %></ol><% } else { %><p class="muted">The planner has not added any vendor tasks yet.</p><% } %>
+</section>
+<section class="panel">
+  <h2>Send an invoice</h2>
+  <p class="muted">PDF, JPG, or PNG · max 8 MB</p>
+  <form class="row" method="post" action="/vendor/<%= vendor.token %>/invoices" enctype="multipart/form-data">
+    <label>Amount<input type="number" name="amount" min="0" max="100000000" step="0.01" required></label>
+    <label>Invoice file<input type="file" name="invoice" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required></label>
+    <button class="primary" type="submit">Send invoice</button>
+  </form>
+  <% if (invoices.length) { %><h3>Invoice status</h3><ul class="plain"><% invoices.forEach(invoice => { %>
+    <li><strong><%= invoice.original_name %></strong> · <%= Number(invoice.amount).toFixed(2) %> · <span class="badge <%= invoice.status %>"><%= invoice.status %></span></li>
+  <% }) %></ul><% } %>
+</section>
+<%- include('partials/foot') %>
