@@ -1,0 +1,27 @@
+<%- include('partials/head', { title: 'My vendor events', vendorView: true }) %>
+<div class="heading-row">
+  <div>
+    <p class="eyebrow">Vendor account</p>
+    <h1>My event invitations</h1>
+    <p class="intro">Open an event to see its details, schedule, respond to your planner, or send an invoice.</p>
+  </div>
+</div>
+<% if (vendors.length) { %>
+  <div class="cards">
+    <% vendors.forEach((vendor) => { %>
+      <article class="panel event-card">
+        <p class="eyebrow"><%= new Date(`${vendor.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'medium' }) %></p>
+        <h2><%= vendor.event_title %></h2>
+        <p class="muted"><%= vendor.venue || 'Venue to be confirmed' %></p>
+        <p><%= vendor.category || 'Event vendor' %> · <span class="badge <%= vendor.status %>"><%= vendor.status.replace('_', ' ') %></span></p>
+        <a class="button primary" href="/vendor/<%= vendor.token %>">Open event details</a>
+      </article>
+    <% }) %>
+  </div>
+<% } else { %>
+  <section class="panel">
+    <h2>No invitations linked yet</h2>
+    <p class="muted">Open the personal invitation link from your planner while signed in, then choose “Add this event to my vendor account.”</p>
+  </section>
+<% } %>
+<%- include('partials/foot') %>

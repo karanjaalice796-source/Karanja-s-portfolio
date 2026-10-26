@@ -18,6 +18,13 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (provider, provider_subject)
   );
+  CREATE TABLE IF NOT EXISTS vendor_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
   CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -73,11 +80,15 @@ db.exec(`
 `);
 
 const vendorColumns = db.prepare('PRAGMA table_info(vendors)').all();
+if (!vendorColumns.some((column) => column.name === 'account_id')) {
+  db.exec('ALTER TABLE vendors ADD COLUMN account_id INTEGER REFERENCES vendor_accounts(id) ON DELETE SET NULL');
+}
 if (!vendorColumns.some((column) => column.name === 'last_notified_at')) {
   db.exec('ALTER TABLE vendors ADD COLUMN last_notified_at TEXT');
 }
 if (!vendorColumns.some((column) => column.name === 'reminder_count')) {
   db.exec('ALTER TABLE vendors ADD COLUMN reminder_count INTEGER NOT NULL DEFAULT 0');
 }
+db.exec('CREATE INDEX IF NOT EXISTS idx_vendors_account ON vendors(account_id)');
 
 module.exports = db;

@@ -48,7 +48,8 @@
           <div><strong><%= vendor.name %></strong><br><small><%= vendor.category || 'Vendor' %><%= vendor.email ? ` · ${vendor.email}` : '' %></small></div>
           <span class="badge <%= vendor.status %>"><%= vendor.status.replace('_', ' ') %></span>
           <div class="vendor-tools">
-            <input class="link-box" aria-label="Vendor link for <%= vendor.name %>" readonly value="<%= `/vendor/${vendor.token}` %>" onclick="this.select()">
+            <input class="link-box" aria-label="Private link for <%= vendor.name %>" readonly value="<%= vendor.privateUrl %>" onclick="this.select()">
+            <small>Personal link for <%= vendor.name %>. Share it only with this vendor.</small>
             <% if (vendor.email) { %>
               <form class="vendor-email-form" method="post" action="/events/<%= event.id %>/vendors/<%= vendor.id %>/email">
                 <button type="submit"><%= vendor.status === 'pending' && vendor.last_notified_at ? 'Send reminder' : 'Email private link' %></button>

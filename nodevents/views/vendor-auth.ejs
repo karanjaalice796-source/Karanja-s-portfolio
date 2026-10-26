@@ -1,0 +1,46 @@
+<%- include('partials/head', { title, vendorView: true }) %>
+<section class="auth-container">
+  <p class="eyebrow">Nodevents vendor portal</p>
+  <h1 class="auth-heading"><%= mode === 'register' ? 'Create vendor account' : 'Vendor sign in' %></h1>
+  <p class="auth-intro"><%= mode === 'register'
+    ? (vendor
+      ? `Create an account for the invitation to ${vendor.name}. Your invited email will be your sign-in email.`
+      : 'Create an account using the personal invitation link and invited email address from your planner.')
+    : 'Sign in to view all event invitations linked to your vendor account.' %></p>
+  <% if (error) { %><p class="error" role="alert"><%= error %></p><% } %>
+  <div class="auth-tabs" role="tablist" aria-label="Vendor account options">
+    <button class="auth-tab" id="vendor-login-tab" type="button" role="tab" aria-controls="vendor-login-panel" aria-selected="<%= mode === 'login' %>" tabindex="<%= mode === 'login' ? 0 : -1 %>" data-auth-tab="login">Sign in</button>
+    <button class="auth-tab" id="vendor-register-tab" type="button" role="tab" aria-controls="vendor-register-panel" aria-selected="<%= mode === 'register' %>" tabindex="<%= mode === 'register' ? 0 : -1 %>" data-auth-tab="register">Create account</button>
+  </div>
+  <div id="vendor-login-panel" role="tabpanel" aria-labelledby="vendor-login-tab" data-auth-panel="login" <%= mode === 'register' ? 'hidden' : '' %>>
+    <form class="auth-form" method="post" action="/vendor/login">
+      <label class="auth-field">Email
+        <input class="auth-input" type="email" name="email" autocomplete="email" maxlength="160" placeholder="E-mail" required>
+      </label>
+      <label class="auth-field">Password
+        <input class="auth-input" type="password" name="password" autocomplete="current-password" maxlength="128" placeholder="Password" required>
+      </label>
+      <button class="login-button" type="submit">Sign in</button>
+    </form>
+  </div>
+  <div id="vendor-register-panel" role="tabpanel" aria-labelledby="vendor-register-tab" data-auth-panel="register" <%= mode === 'login' ? 'hidden' : '' %>>
+    <form class="auth-form" method="post" action="<%= vendor ? `/vendor/${vendor.token}/register` : '/vendor/register' %>">
+      <% if (vendor) { %>
+        <label class="auth-field">Invited email
+          <input class="auth-input" type="email" name="email" autocomplete="email" maxlength="160" value="<%= vendor.email %>" required>
+        </label>
+      <% } else { %>
+        <label class="auth-field">Personal invitation link
+          <input class="auth-input" type="url" name="invitation_link" autocomplete="url" maxlength="2048" placeholder="Paste the link from your planner" required>
+        </label>
+      <% } %>
+      <label class="auth-field">Create password <small>(8 characters or more)</small>
+        <input class="auth-input" type="password" name="password" autocomplete="new-password" minlength="8" maxlength="128" required>
+      </label>
+      <button class="login-button" type="submit">Create account</button>
+    </form>
+    <p class="vendor-auth-footer">Use the personal invitation link and invited email address from your planner.</p>
+  </div>
+  <p class="vendor-auth-footer"><a href="/auth">Planner sign in</a></p>
+</section>
+<%- include('partials/foot') %>

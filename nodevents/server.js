@@ -64,6 +64,7 @@ app.use((request, response, next) => {
     }
   }
   response.locals.user = request.session.user || null;
+  response.locals.vendorUser = request.session.vendorUser || null;
   response.locals.vendorView = request.path.startsWith('/vendor');
   response.locals.notice = request.session.notice || null;
   delete request.session.notice;
@@ -72,6 +73,69 @@ app.use((request, response, next) => {
 
 function setNotice(request, message) {
   request.session.notice = message;
+}
+
+function renderVendorRegistration(response, vendor = null, error = null, status = 200) {
+  return response.status(status).render('vendor-auth', {
+    title: 'Create vendor account',
+    mode: 'register',
+    error,
+    vendor,
+  });
+}
+
+async function registerVendorAccount(request, response, next, vendor) {
+  if (request.session.vendorUser) return response.redirect(vendorPageUrl(vendor.token));
+  const email = String(request.body.email || vendor.email || '').trim().toLowerCase();
+  const password = String(request.body.password || '');
+  if (!vendor.email || email !== vendor.email.trim().toLowerCase()
+    || password.length < 8 || password.length > 128) {
+    return renderVendorRegistration(
+      response,
+      vendor,
+      !vendor.email
+        ? 'This invitation has no email address. Contact your planner to set one up.'
+        : 'Use the email address on your invitation and a password between 8 and 128 characters.',
+      400,
+    );
+  }
+  if (db.prepare('SELECT id FROM vendor_accounts WHERE email = ?').get(email)) {
+    return renderVendorRegistration(
+      response,
+      vendor,
+      'A vendor account already uses this email. Sign in, then open this invitation to add it to your account.',
+      409,
+    );
+  }
+  const passwordHash = await bcrypt.hash(password, 12);
+  db.exec('BEGIN');
+  try {
+    const result = db.prepare('INSERT INTO vendor_accounts (name, email, password_hash) VALUES (?, ?, ?)')
+      .run(vendor.name, email, passwordHash);
+    db.prepare('UPDATE vendors SET account_id = ? WHERE id = ? AND account_id IS NULL')
+      .run(Number(result.lastInsertRowid), vendor.id);
+    db.exec('COMMIT');
+    request.session.regenerate((error) => {
+      if (error) return next(error);
+      request.session.vendorUser = {
+        id: Number(result.lastInsertRowid),
+        name: vendor.name,
+        email,
+      };
+      response.redirect('/vendor/dashboard');
+    });
+  } catch (error) {
+    db.exec('ROLLBACK');
+    if (error.errcode === 2067 || error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return renderVendorRegistration(
+        response,
+        vendor,
+        'A vendor account already uses this email. Sign in, then open this invitation to add it to your account.',
+        409,
+      );
+    }
+    return next(error);
+  }
 }
 
 function oauthProviders() {
@@ -226,6 +290,11 @@ function requireAuth(request, response, next) {
   next();
 }
 
+function requireVendorAuth(request, response, next) {
+  if (!request.session.vendorUser) return response.redirect('/vendor/login');
+  next();
+}
+
 function eventForOwner(eventId, userId) {
   return db.prepare('SELECT * FROM events WHERE id = ? AND user_id = ?').get(eventId, userId);
 }
@@ -348,11 +417,119 @@ app.get('/oauth-setup', (_request, response) => {
 });
 
 app.get('/vendor', (_request, response) => {
-  response.render('message', {
-    title: 'Vendor access',
-    message: 'Vendors do not need a planner account or password. Open the private vendor link sent by your event planner, or contact them if you need the link again.',
-    vendorView: true,
+  response.redirect('/vendor/login');
+});
+
+app.get('/vendor/login', (request, response) => {
+  if (request.session.vendorUser) return response.redirect('/vendor/dashboard');
+  response.render('vendor-auth', {
+    title: 'Vendor sign in',
+    mode: 'login',
+    error: null,
+    vendor: null,
   });
+});
+
+app.post('/vendor/login', async (request, response, next) => {
+  const email = String(request.body.email || '').trim().toLowerCase();
+  const password = String(request.body.password || '');
+  const account = db.prepare('SELECT * FROM vendor_accounts WHERE email = ?').get(email);
+  if (!account || !(await bcrypt.compare(password, account.password_hash))) {
+    return response.status(401).render('vendor-auth', {
+      title: 'Vendor sign in',
+      mode: 'login',
+      error: 'Email or password is incorrect. To create an account, open the personal invite link from your planner.',
+      vendor: null,
+    });
+  }
+  request.session.regenerate((error) => {
+    if (error) return next(error);
+    request.session.vendorUser = { id: account.id, name: account.name, email: account.email };
+    response.redirect('/vendor/dashboard');
+  });
+});
+
+app.post('/vendor/logout', requireVendorAuth, (request, response, next) => {
+  request.session.destroy((error) => {
+    if (error) return next(error);
+    response.clearCookie('nodevents.sid');
+    response.redirect('/vendor/login');
+  });
+});
+
+app.get('/vendor/register', (request, response) => {
+  if (request.session.vendorUser) return response.redirect('/vendor/dashboard');
+  return renderVendorRegistration(response);
+});
+
+app.post('/vendor/register', (request, response, next) => {
+  const invitationLink = String(request.body.invitation_link || '').trim();
+  if (!invitationLink || invitationLink.length > 2048) {
+    return renderVendorRegistration(response, null, 'Paste the personal invitation link from your planner.', 400);
+  }
+  let vendor;
+  try {
+    const baseUrl = process.env.APP_BASE_URL || `http://localhost:${port}`;
+    const parsedLink = new URL(invitationLink, baseUrl);
+    const tokenMatch = parsedLink.pathname.match(/^\/vendor\/([a-f0-9]{64})\/?$/);
+    if (parsedLink.search || parsedLink.hash || !tokenMatch) {
+      return renderVendorRegistration(response, null, 'Enter the complete personal vendor invitation link.', 400);
+    }
+    vendor = vendorByToken(tokenMatch[1]);
+  } catch {
+    return renderVendorRegistration(response, null, 'Enter a valid personal vendor invitation link.', 400);
+  }
+  if (!vendor) {
+    return renderVendorRegistration(response, null, 'That invitation link was not found. Check the link from your planner and try again.', 404);
+  }
+  return registerVendorAccount(request, response, next, vendor);
+});
+
+app.get('/vendor/dashboard', requireVendorAuth, (request, response) => {
+  const vendors = db.prepare(`
+    SELECT vendors.id, vendors.name, vendors.category, vendors.token, vendors.status,
+      events.title AS event_title, events.event_date, events.venue
+    FROM vendors JOIN events ON events.id = vendors.event_id
+    WHERE vendors.account_id = ?
+    ORDER BY events.event_date, events.title, vendors.id
+  `).all(request.session.vendorUser.id);
+  response.render('vendor-dashboard', { vendors });
+});
+
+app.get('/vendor/:token/register', (request, response) => {
+  const vendor = vendorByToken(request.params.token);
+  if (!vendor) return response.sendStatus(404);
+  if (request.session.vendorUser) return response.redirect(vendorPageUrl(vendor.token));
+  return renderVendorRegistration(
+    response,
+    vendor,
+    vendor.email
+      ? null
+      : 'This invitation has no email address, so an account cannot be created yet. Contact your planner or use your private link.',
+  );
+});
+
+app.post('/vendor/:token/register', async (request, response, next) => {
+  const vendor = vendorByToken(request.params.token);
+  if (!vendor) return response.sendStatus(404);
+  return registerVendorAccount(request, response, next, vendor);
+});
+
+app.post('/vendor/:token/claim', requireVendorAuth, (request, response) => {
+  const vendor = vendorByToken(request.params.token);
+  if (!vendor) return response.sendStatus(404);
+  if (!vendor.email || vendor.email.trim().toLowerCase() !== request.session.vendorUser.email) {
+    setNotice(request, 'This invitation email does not match your vendor account. Contact your planner if it needs updating.');
+    return response.redirect(vendorPageUrl(vendor.token));
+  }
+  if (vendor.account_id && vendor.account_id !== request.session.vendorUser.id) {
+    setNotice(request, 'This invitation is already connected to another vendor account.');
+    return response.redirect(vendorPageUrl(vendor.token));
+  }
+  db.prepare('UPDATE vendors SET account_id = ? WHERE id = ?')
+    .run(request.session.vendorUser.id, vendor.id);
+  setNotice(request, 'This event has been added to your vendor account.');
+  response.redirect('/vendor/dashboard');
 });
 
 app.get('/auth', (request, response) => {
@@ -518,7 +695,10 @@ app.get('/events/:id', requireAuth, (request, response) => {
     SELECT vendors.*,
       (SELECT COUNT(*) FROM invoices WHERE invoices.vendor_id = vendors.id) AS invoice_count
     FROM vendors WHERE event_id = ? ORDER BY name
-  `).all(eventId);
+  `).all(eventId).map((vendor) => ({
+    ...vendor,
+    privateUrl: vendorPageUrl(vendor.token),
+  }));
   const tasks = db.prepare(`
     SELECT tasks.*, vendors.name AS vendor_name
     FROM tasks LEFT JOIN vendors ON vendors.id = tasks.vendor_id

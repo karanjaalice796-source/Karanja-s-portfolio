@@ -5,23 +5,49 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#252921">
   <title><%= title %> · Nodevents</title>
+  <script>
+    try {
+      const theme = localStorage.getItem('nodevents-theme');
+      if (theme === 'dark' || theme === 'light') document.documentElement.dataset.theme = theme;
+    } catch (error) {
+      console.error('Could not load the saved Nodevents theme:', error);
+    }
+  </script>
   <link rel="stylesheet" href="/app.css">
 </head>
 <body>
   <header class="bar">
     <a class="brand" href="<%= vendorView ? '#vendor-content' : (user ? '/dashboard' : '/auth') %>">Nodevents<small>EVENT COORDINATION</small></a>
     <% if (vendorView) { %>
-      <span class="portal-label">Private vendor link</span>
+      <span class="portal-label"><%= vendorUser ? `Vendor account · ${vendorUser.name}` : 'Vendor portal' %></span>
     <% } else { %>
       <nav class="bar-nav" aria-label="Main navigation">
         <a href="/learn">How it works</a>
+        <a href="/vendor/login">Vendor sign in</a>
         <% if (!user) { %><a href="/auth">Planner sign in</a><% } %>
       </nav>
     <% } %>
+    <button class="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false">
+      <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="12" r="4"></circle>
+        <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"></path>
+      </svg>
+      <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z"></path>
+      </svg>
+    </button>
     <% if (user && !vendorView) { %>
       <div class="bar-actions">
         <span class="muted">Hi, <%= user.name %></span>
         <form method="post" action="/auth/logout">
+          <button class="account-action" type="submit">Log out</button>
+        </form>
+      </div>
+    <% } %>
+    <% if (vendorUser && vendorView) { %>
+      <div class="bar-actions">
+        <a class="vendor-account-link" href="/vendor/dashboard">My events</a>
+        <form method="post" action="/vendor/logout">
           <button class="account-action" type="submit">Log out</button>
         </form>
       </div>
