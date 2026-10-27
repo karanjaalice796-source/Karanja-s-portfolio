@@ -1,17 +1,30 @@
-<%- include('partials/header', { title: 'Create student account' }) %>
-<section class="auth-layout">
-  <div class="auth-intro"><p class="eyebrow">Student account</p><h1>Start with<br>your next task.</h1><p>Create your student account and you’ll be signed in automatically. Trainers and admins can sign in with accounts provided by the centre.</p></div>
-  <form class="form-panel" method="post" action="/register">
-    <h2>Create account</h2>
-    <% if (error) { %><p class="form-error" role="alert"><%= error %></p><% } %>
-    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-    <label>Full name<input name="full_name" value="<%= form.full_name || '' %>" required maxlength="100" autocomplete="name"></label>
-    <label>Student number<input name="student_no" value="<%= form.student_no || '' %>" required maxlength="30"></label>
-    <label>Email address<input type="email" name="email" value="<%= form.email || '' %>" required maxlength="150" autocomplete="email"></label>
-    <label>Password<input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
-    <label>Confirm password<input type="password" name="confirm" required minlength="8" autocomplete="new-password"></label>
-    <button class="button primary full" type="submit">Create account and continue</button>
-    <p class="form-foot">Already registered? <a href="/login">Sign in</a></p>
-  </form>
+<%- include('partials/header', { title: accountType === 'teacher' ? 'Create trainer account' : 'Create student account', authPage: true }) %>
+<section class="auth-layout auth-layout-compact">
+  <section class="form-panel auth-card">
+    <% if (pending) { %>
+      <h1 class="title">Trainer account <span class="title-accent">pending</span></h1>
+      <p class="auth-status-message" role="status">Your account request was received. An administrator must approve it before you can sign in.</p>
+      <a class="button primary full sign auth-back-link" href="/login?role=teacher">Go to trainer sign in</a>
+    <% } else { %>
+      <nav class="auth-role-links auth-create-links" aria-label="Choose account type">
+        <a class="<%= accountType === 'student' ? 'is-active' : '' %>" href="/register?role=student">Student account</a>
+        <% if (allowRegistration) { %><a class="<%= accountType === 'teacher' ? 'is-active' : '' %>" href="/register?role=teacher">Trainer account</a><% } %>
+      </nav>
+      <h1 class="title">Create <span class="title-accent"><%= accountType === 'teacher' ? 'trainer account' : 'student account' %></span></h1>
+      <% if (accountType === 'teacher') { %><p class="auth-status-message">Trainer accounts need administrator approval before sign-in.</p><% } %>
+      <% if (error) { %><p class="form-error" role="alert"><%= error %></p><% } %>
+      <form method="post" action="/register?role=<%= accountType %>">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="input-group"><label for="register-name">Full name</label><input id="register-name" name="full_name" value="<%= form.full_name || '' %>" required maxlength="100" autocomplete="name"></div>
+        <% if (accountType === 'student') { %><div class="input-group"><label for="register-student-no">Student number</label><input id="register-student-no" name="student_no" value="<%= form.student_no || '' %>" required maxlength="30"></div><% } %>
+        <div class="input-group"><label for="register-email">Email</label><input id="register-email" type="email" name="email" value="<%= form.email || '' %>" required maxlength="150" autocomplete="email"></div>
+        <div class="field-group"><label for="register-password">Password <span class="field-hint">At least 8 characters</span></label><span class="password-field"><input id="register-password" type="password" name="password" required minlength="8" autocomplete="new-password"><button class="password-toggle" type="button" aria-controls="register-password" aria-label="Show password" aria-pressed="false">Show</button></span></div>
+        <div class="field-group"><label for="register-confirm">Confirm password</label><span class="password-field"><input id="register-confirm" type="password" name="confirm" required minlength="8" autocomplete="new-password"><button class="password-toggle" type="button" aria-controls="register-confirm" aria-label="Show password" aria-pressed="false">Show</button></span></div>
+        <button class="button primary full sign" type="submit">Create <%= accountType === 'teacher' ? 'trainer' : 'student' %> account</button>
+      </form>
+      <p class="form-foot signup">Have an account? <a href="/login?role=<%= accountType %>">Sign in</a></p>
+    <% } %>
+    <%- include('partials/account-access', { activeRole: accountType, showCreateLinks: false }) %>
+  </section>
 </section>
 <%- include('partials/footer') %>

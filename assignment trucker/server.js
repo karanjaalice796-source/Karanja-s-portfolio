@@ -6,6 +6,7 @@ const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const db = require('./config/db');
 const dates = require('./lib/dates');
+const { startDailyReminderSchedule } = require('./lib/email-reminders');
 const { csrf, flash } = require('./middleware/auth');
 
 if (!process.env.DATABASE_URL || !process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
@@ -55,10 +56,10 @@ app.use(function (req, res, next) {
 
 app.use(function (req, res, next) {
   if (!req.session.user) return next();
-  db.query('SELECT active, role FROM users WHERE id = $1', [req.session.user.id])
+  db.query('SELECT active, approved, role FROM users WHERE id = $1', [req.session.user.id])
     .then(function (result) {
       var account = result.rows[0];
-      if (!account || !account.active || account.role !== req.session.user.role) {
+      if (!account || !account.active || !account.approved || account.role !== req.session.user.role) {
         return req.session.destroy(function () { res.redirect('/login'); });
       }
       next();
@@ -82,4 +83,5 @@ app.use(function (err, req, res, next) {
 
 app.listen(port, function () {
   console.log('Assignment Tracker running at http://localhost:' + port);
+  startDailyReminderSchedule();
 });

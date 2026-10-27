@@ -1,14 +1,14 @@
-<%- include('partials/header', { title: 'Sign in' }) %>
-<section class="auth-layout">
-  <div class="auth-intro"><p class="eyebrow">Welcome back</p><h1>Pick up<br>where you left off.</h1><p>Sign in with the account provided by your training centre.</p></div>
-  <form class="form-panel" method="post" action="/login">
-    <h2>Sign in</h2>
+<%- include('partials/header', { title: 'Sign in', authPage: true }) %>
+<section class="auth-layout auth-layout-compact">
+  <form class="form-panel auth-card" method="post" action="/login<%= role ? '?role=' + encodeURIComponent(role) : '' %>">
+    <h1 class="title"><%= roleLabel.split(' ')[0] %> <span class="title-accent"><%= roleLabel.split(' ').slice(1).join(' ') %></span></h1>
     <% if (error) { %><p class="form-error" role="alert"><%= error %></p><% } %>
     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-    <label>Email address<input type="email" name="email" value="<%= email %>" required maxlength="150" autocomplete="username"></label>
-    <label>Password<input type="password" name="password" required autocomplete="current-password"></label>
-    <button class="button primary full" type="submit">Sign in</button>
-    <% if (allowRegistration) { %><p class="form-foot">New student? <a href="/register">Create an account</a></p><% } %>
+    <div class="input-group"><label for="login-email">Email</label><input id="login-email" type="email" name="email" value="<%= email %>" required maxlength="150" autocomplete="username"></div>
+    <div class="field-group"><label for="login-password">Password</label><span class="password-field"><input id="login-password" type="password" name="password" required autocomplete="current-password"><button class="password-toggle" type="button" aria-controls="login-password" aria-label="Show password" aria-pressed="false">Show</button></span></div>
+    <button class="button primary full sign" type="submit">Sign in</button>
+    <% if (allowRegistration && role !== 'teacher' && role !== 'admin') { %><p class="form-foot signup">New student? <a href="/register">Create account</a></p><% } %>
+    <%- include('partials/account-access', { activeRole: role, showCreateLinks: true }) %>
   </form>
 </section>
 <%- include('partials/footer') %>

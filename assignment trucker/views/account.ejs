@@ -1,0 +1,27 @@
+<%- include('partials/header', { title: title }) %>
+<section class="page-heading"><div><p class="eyebrow">Account</p><h1>Account settings</h1><p class="muted">Update your password and reminder preferences.</p></div></section>
+<div class="detail-grid account-grid">
+  <section class="detail-panel">
+    <p class="eyebrow">Security</p><h2>Change password</h2>
+    <% if (error) { %><p class="form-error" role="alert"><%= error %></p><% } %>
+    <form class="stack-form" method="post" action="/account/password">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <label for="current-password">Current password<input id="current-password" type="password" name="current_password" required autocomplete="current-password"></label>
+      <label for="new-password">New password<span class="field-hint">At least 8 characters</span><input id="new-password" type="password" name="new_password" required minlength="8" autocomplete="new-password"></label>
+      <label for="confirm-password">Confirm new password<input id="confirm-password" type="password" name="confirm_password" required minlength="8" autocomplete="new-password"></label>
+      <button class="button primary" type="submit">Update password</button>
+    </form>
+  </section>
+  <section class="detail-panel">
+    <p class="eyebrow">Notifications</p><h2>Reminder preferences</h2>
+    <p class="muted">Choose when your work is flagged as coming up. Daily email reminders are sent when your centre has email configured.</p>
+    <form class="stack-form" method="post" action="/account/preferences">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <label for="remind-days">Remind me<select id="remind-days" name="remind_days"><% [[0,'On the due date'],[1,'1 day before'],[2,'2 days before'],[3,'3 days before'],[7,'1 week before'],[14,'2 weeks before']].forEach(function(option) { %><option value="<%= option[0] %>" <%= account.remind_days === option[0] ? 'selected' : '' %>><%= option[1] %></option><% }) %></select></label>
+      <label class="checkbox-label"><input type="checkbox" name="email_reminders" <%= account.email_reminders ? 'checked' : '' %>> Email me a daily summary of upcoming and overdue assignments</label>
+      <button class="button secondary" type="submit">Save preferences</button>
+    </form>
+    <p class="form-foot">Account email: <strong><%= account.email %></strong></p>
+  </section>
+</div>
+<%- include('partials/footer') %>

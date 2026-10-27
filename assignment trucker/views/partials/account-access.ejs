@@ -1,0 +1,7 @@
+<nav class="auth-role-links" aria-label="Sign in by account type">
+  <a class="<%= activeRole === 'student' ? 'is-active' : '' %>" href="/login?role=student">Student sign in</a>
+  <a class="<%= activeRole === 'teacher' ? 'is-active' : '' %>" href="/login?role=teacher">Trainer sign in</a>
+  <a class="<%= activeRole === 'admin' ? 'is-active' : '' %>" href="/login?role=admin">Admin sign in</a>
+</nav>
+<% if (allowRegistration && showCreateLinks !== false) { %><nav class="auth-role-links auth-create-links" aria-label="Create an account"><a href="/register?role=student">Create student account</a><a href="/register?role=teacher">Create trainer account</a></nav><% } %>
+<p class="auth-staff-note">Trainer requests need admin approval. Admin accounts can only be created by an existing admin. <a href="/admin/users/new">Admin: manage staff accounts</a></p>

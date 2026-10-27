@@ -33,7 +33,7 @@ router.get('/users', wrap(async function (req, res) {
     where.push('(full_name ILIKE $' + params.length + ' OR email ILIKE $' + params.length + ' OR student_no ILIKE $' + params.length + ')');
   }
   var users = (await db.query(
-    'SELECT id, role, full_name, email, student_no, active FROM users' +
+    'SELECT id, role, full_name, email, student_no, active, approved FROM users' +
     (where.length ? ' WHERE ' + where.join(' AND ') : '') + ' ORDER BY role, full_name LIMIT 300', params
   )).rows;
   res.render('admin/users', { title: 'People', users: users, role: role, q: q });
@@ -76,8 +76,19 @@ router.post('/users/:id/toggle', wrap(async function (req, res) {
     setFlash(req, 'error', 'You cannot switch off your own account.');
     return res.redirect('/admin/users');
   }
-  var result = await db.query('UPDATE users SET active = NOT active WHERE id = $1', [id]);
+  var result = await db.query('UPDATE users SET active = NOT active WHERE id = $1 AND approved = TRUE', [id]);
   setFlash(req, result.rowCount ? 'success' : 'error', result.rowCount ? 'Account updated.' : 'Person not found.');
+  res.redirect('/admin/users');
+}));
+
+router.post('/users/:id/approve', wrap(async function (req, res) {
+  var id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id < 1) return notFound(res);
+  var result = await db.query(
+    "UPDATE users SET approved = TRUE, active = TRUE WHERE id = $1 AND role = 'teacher' AND approved = FALSE",
+    [id]
+  );
+  setFlash(req, result.rowCount ? 'success' : 'error', result.rowCount ? 'Trainer account approved.' : 'Pending trainer not found.');
   res.redirect('/admin/users');
 }));
 

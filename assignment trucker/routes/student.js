@@ -5,6 +5,7 @@ const csv = require('../lib/csv');
 const dates = require('../lib/dates');
 const { clean, isDate } = require('../lib/validate');
 const { studentAssignments } = require('../lib/queries');
+const { buildCalendar } = require('../lib/calendar');
 const { requireRole, notFound, setFlash, backTo } = require('../middleware/auth');
 
 const router = express.Router();
@@ -58,6 +59,25 @@ router.get('/', wrap(async function (req, res) {
   res.render('student/dashboard', {
     title: 'My assignments', rows: rows, courses: courses, summary: summary, alerts: alerts,
     notes: notes, filter: filter, sort: sort, q: q, course: course, totalCount: all.length
+  });
+}));
+
+router.get('/calendar', wrap(async function (req, res) {
+  var requestedMonth = /^(\d{4})-(\d{2})$/.exec(String(req.query.month || ''));
+  var today = dates.toISO(new Date());
+  var year = requestedMonth ? Number(requestedMonth[1]) : Number(today.slice(0, 4));
+  var month = requestedMonth ? Number(requestedMonth[2]) : Number(today.slice(5, 7));
+  if (!Number.isInteger(year) || year < 2000 || year > 2100 || month < 1 || month > 12) {
+    year = Number(today.slice(0, 4));
+    month = Number(today.slice(5, 7));
+  }
+  var assignments = (await studentAssignments(req.session.user.id))
+    .map(function (row) { return dates.annotate(row, req.session.user.remindDays); });
+  var calendar = buildCalendar(year, month, assignments, today);
+  var upcoming = assignments.filter(function (row) { return !row.submitted; })
+    .sort(function (a, b) { return String(a.due_on).localeCompare(String(b.due_on)); });
+  res.render('student/calendar', {
+    title: 'Assignment calendar', calendar: calendar, upcoming: upcoming
   });
 }));
 

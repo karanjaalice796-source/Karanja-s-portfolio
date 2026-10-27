@@ -6,7 +6,7 @@
   <label>Full name<input name="full_name" value="<%= form.full_name || '' %>" required maxlength="100"></label>
   <label>Email address<input type="email" name="email" value="<%= form.email || '' %>" required maxlength="150"></label>
   <label>Student number <span class="muted">(required for students)</span><input name="student_no" value="<%= form.student_no || '' %>" maxlength="30"></label>
-  <label>Starting password<input type="password" name="password" minlength="8" required autocomplete="new-password"></label>
+  <div class="field-group"><label for="staff-password">Starting password</label><span class="password-field"><input id="staff-password" type="password" name="password" minlength="8" required autocomplete="new-password"><button class="password-toggle" type="button" aria-controls="staff-password" aria-label="Show password" aria-pressed="false">Show</button></span></div>
   <div class="actions"><button class="button primary" type="submit">Create account</button><a class="button secondary" href="/admin/users">Cancel</a></div>
 </form></section>
 <%- include('../partials/footer') %>

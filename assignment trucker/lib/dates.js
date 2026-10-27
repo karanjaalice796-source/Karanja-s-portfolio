@@ -10,13 +10,17 @@ function today() {
 
 function dayNumber(value) {
   if (!value) return NaN;
-  var parts = String(value).slice(0, 10).split('-').map(Number);
+  var parts = value instanceof Date
+    ? [value.getUTCFullYear(), value.getUTCMonth() + 1, value.getUTCDate()]
+    : String(value).slice(0, 10).split('-').map(Number);
   return Date.UTC(parts[0], parts[1] - 1, parts[2]);
 }
 
 function pretty(value) {
   if (!value) return 'Not set';
-  var parts = String(value).slice(0, 10).split('-').map(Number);
+  var parts = value instanceof Date
+    ? [value.getUTCFullYear(), value.getUTCMonth() + 1, value.getUTCDate()]
+    : String(value).slice(0, 10).split('-').map(Number);
   return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
     .format(new Date(parts[0], parts[1] - 1, parts[2]));
 }

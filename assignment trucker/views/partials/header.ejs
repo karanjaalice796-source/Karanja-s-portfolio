@@ -5,24 +5,44 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#153c3b">
   <title><%= typeof title === 'string' ? title + ' | ' : '' %><%= centreName %> Assignment Tracker</title>
+  <script>
+    try {
+      var savedTheme = localStorage.getItem('assignment-tracker-theme');
+      var preferredTheme = savedTheme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.dataset.theme = preferredTheme;
+    } catch (error) {
+      console.warn('Could not read the saved color theme.', error);
+      document.documentElement.dataset.theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+  </script>
   <link rel="stylesheet" href="/css/app.css">
 </head>
-<body>
+<body class="<%= typeof authPage !== 'undefined' && authPage ? 'auth-page' : '' %>">
   <header class="topbar">
     <a class="brand" href="/"><span class="brand-mark">AT</span><span><%= centreName %><small>Assignment tracker</small></span></a>
-    <% if (user) { %>
-      <nav class="main-nav" aria-label="Main navigation">
-        <a href="/learn">Learning hub</a>
-        <a href="/student">Student side</a>
-        <% if (user.role === 'teacher' || user.role === 'admin') { %><a href="/teacher">Teacher side</a><% } %>
-        <% if (user.role === 'admin') { %><a href="/admin">Admin side</a><a href="/admin/users">People</a><a href="/admin/courses">Courses</a><% } %>
-      </nav>
-      <div class="account-menu"><span><%= user.name %></span>
-        <form method="post" action="/logout"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="text-button" type="submit">Sign out</button></form>
-      </div>
-    <% } else { %>
-      <nav class="main-nav" aria-label="Main navigation"><a href="/learn">Learning hub</a><a href="/login">Log in</a><% if (allowRegistration) { %><a href="/register">Sign up</a><% } %></nav>
-    <% } %>
+    <div class="topbar-actions">
+      <% if (user) { %>
+        <nav class="main-nav" aria-label="Main navigation">
+          <a href="/learn">Learning hub</a>
+          <a href="/student">Student workspace</a>
+          <% if (user.role === 'student') { %><a href="/student/calendar">Calendar</a><% } %>
+          <% if (user.role === 'teacher' || user.role === 'admin') { %><a href="/teacher">Trainer workspace</a><% } %>
+          <% if (user.role === 'admin') { %><a href="/admin">Administration</a><a href="/admin/users">People</a><a href="/admin/courses">Courses</a><% } %>
+        </nav>
+      <% } else { %>
+        <nav class="main-nav" aria-label="Main navigation"><a href="/learn">Learning hub</a><a href="/login">Sign in</a><% if (allowRegistration) { %><a href="/register">Create account</a><% } %></nav>
+      <% } %>
+      <button class="theme-toggle" type="button" aria-label="Switch to dark mode" title="Switch to dark mode" aria-pressed="false">
+        <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"></path></svg>
+        <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.1 15.2A8.5 8.5 0 0 1 8.8 3.9 8.5 8.5 0 1 0 20.1 15.2Z"></path></svg>
+      </button>
+      <% if (user) { %>
+        <div class="account-menu"><span><%= user.name %></span>
+          <a href="/account">Account</a>
+          <form method="post" action="/logout"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="text-button" type="submit">Sign out</button></form>
+        </div>
+      <% } %>
+    </div>
   </header>
   <main class="page-shell">
     <% if (flash) { %><div class="notice <%= flash.type %>" role="status"><%= flash.text %></div><% } %>
