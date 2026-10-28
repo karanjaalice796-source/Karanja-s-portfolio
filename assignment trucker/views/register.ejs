@@ -1,4 +1,5 @@
-<%- include('partials/header', { title: accountType === 'teacher' ? 'Create trainer account' : 'Create student account', authPage: true }) %>
+<% var accountLabel = accountType === 'teacher' ? 'trainer' : accountType === 'admin' ? 'admin' : 'student'; %>
+<%- include('partials/header', { title: 'Create ' + accountLabel + ' account', authPage: true }) %>
 <section class="auth-layout auth-layout-compact">
   <section class="form-panel auth-card">
     <% if (pending) { %>
@@ -7,11 +8,12 @@
       <a class="button primary full sign auth-back-link" href="/login?role=teacher">Go to trainer sign in</a>
     <% } else { %>
       <nav class="auth-role-links auth-create-links" aria-label="Choose account type">
-        <a class="<%= accountType === 'student' ? 'is-active' : '' %>" href="/register?role=student">Student account</a>
-        <% if (allowRegistration) { %><a class="<%= accountType === 'teacher' ? 'is-active' : '' %>" href="/register?role=teacher">Trainer account</a><% } %>
+        <% if (allowRegistration) { %><a class="<%= accountType === 'student' ? 'is-active' : '' %>" href="/register?role=student">Student account</a><a class="<%= accountType === 'teacher' ? 'is-active' : '' %>" href="/register?role=teacher">Trainer account</a><% } %>
+        <% if (adminSignupAvailable) { %><a class="<%= accountType === 'admin' ? 'is-active' : '' %>" href="/register?role=admin">Admin account</a><% } %>
       </nav>
-      <h1 class="title">Create <span class="title-accent"><%= accountType === 'teacher' ? 'trainer account' : 'student account' %></span></h1>
+      <h1 class="title">Create <span class="title-accent"><%= accountLabel %> account</span></h1>
       <% if (accountType === 'teacher') { %><p class="auth-status-message">Trainer accounts need administrator approval before sign-in.</p><% } %>
+      <% if (accountType === 'admin') { %><p class="auth-status-message">This signup is available only for the first admin account. After it is created, admins can add more accounts from People.</p><% } %>
       <% if (error) { %><p class="form-error" role="alert"><%= error %></p><% } %>
       <form method="post" action="/register?role=<%= accountType %>">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
@@ -20,9 +22,9 @@
         <div class="input-group"><label for="register-email">Email</label><input id="register-email" type="email" name="email" value="<%= form.email || '' %>" required maxlength="150" autocomplete="email"></div>
         <div class="field-group"><label for="register-password">Password <span class="field-hint">At least 8 characters</span></label><span class="password-field"><input id="register-password" type="password" name="password" required minlength="8" autocomplete="new-password"><button class="password-toggle" type="button" aria-controls="register-password" aria-label="Show password" aria-pressed="false">Show</button></span></div>
         <div class="field-group"><label for="register-confirm">Confirm password</label><span class="password-field"><input id="register-confirm" type="password" name="confirm" required minlength="8" autocomplete="new-password"><button class="password-toggle" type="button" aria-controls="register-confirm" aria-label="Show password" aria-pressed="false">Show</button></span></div>
-        <button class="button primary full sign" type="submit">Create <%= accountType === 'teacher' ? 'trainer' : 'student' %> account</button>
+        <button class="button primary full sign" type="submit">Create <%= accountLabel %> account</button>
       </form>
-      <p class="form-foot signup">Have an account? <a href="/login?role=<%= accountType %>">Sign in</a></p>
+      <p class="form-foot signup">Have an account? <a href="/login?role=<%= accountType === 'admin' ? 'admin' : accountType %>">Sign in</a></p>
     <% } %>
     <%- include('partials/account-access', { activeRole: accountType, showCreateLinks: false }) %>
   </section>

@@ -8,6 +8,7 @@
     <div class="field-group"><label for="login-password">Password</label><span class="password-field"><input id="login-password" type="password" name="password" required autocomplete="current-password"><button class="password-toggle" type="button" aria-controls="login-password" aria-label="Show password" aria-pressed="false">Show</button></span></div>
     <button class="button primary full sign" type="submit">Sign in</button>
     <% if (allowRegistration && role !== 'teacher' && role !== 'admin') { %><p class="form-foot signup">New student? <a href="/register">Create account</a></p><% } %>
+    <% if (adminSignupAvailable && role === 'admin') { %><p class="form-foot signup">No admin account yet? <a href="/register?role=admin">Create the first admin account</a></p><% } %>
     <%- include('partials/account-access', { activeRole: role, showCreateLinks: true }) %>
   </form>
 </section>

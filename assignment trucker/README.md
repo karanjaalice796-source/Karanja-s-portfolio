@@ -50,7 +50,7 @@ Set `SMTP_HOST` and `SMTP_FROM` in the private `.env` file to enable delivery. C
 
 Students, trainers, and administrators all sign in at `/login`. After signing in, each account is sent to its role's workspace. Students can create their own account at `/register`; trainers can request an account at `/register?role=teacher` when `ALLOW_REGISTRATION=true`. New trainer accounts remain inactive until an administrator approves them in **People**.
 
-Administrators cannot self-register. An existing centre administrator opens **People**, then **Add a person** to create trainer or administrator accounts directly. Pending public trainer requests appear in the People list with an **Approve trainer** action. The protected shortcut is `/admin/users/new`; if you are not signed in as an administrator, you will be asked to sign in first.
+When no administrator account exists, the **Admin sign in** page offers **Create the first admin account**. This one-time public signup creates an active administrator; after it is created, the link is hidden and further trainer or administrator accounts must be created by an existing administrator through **People** → **Add a person**. Pending public trainer requests appear in the People list with an **Approve trainer** action. The protected shortcut is `/admin/users/new`; if you are not signed in as an administrator, you will be asked to sign in first.
 
 For a new local database, run `npm run db:seed` during setup to create the initial demonstration administrator account. Use the local sample credentials in the section below to sign in, then create or update accounts for your centre. Replace demonstration credentials before sharing or deploying the app.
 
@@ -74,7 +74,7 @@ Brian, Cynthia, and Dennis are additional sample students and use the same stude
 
 **Administrators** can add people, enable or disable accounts, set a new password, create courses, assign trainers, and view centre-wide counts.
 
-The public **Learning hub** at `/learn` offers a short assignment planning routine and links to account access. Students can sign themselves up when `ALLOW_REGISTRATION=true`; successful registration signs them in and opens their student dashboard. Trainers can request accounts, but must wait for admin approval before signing in. Existing users sign in at `/login` and sign out from the account menu. Admin accounts are created only by an existing administrator.
+The public **Learning hub** at `/learn` offers a short assignment planning routine and links to account access. Students can sign themselves up when `ALLOW_REGISTRATION=true`; successful registration signs them in and opens their student dashboard. Trainers can request accounts, but must wait for admin approval before signing in. Existing users sign in at `/login` and sign out from the account menu. The first admin can self-register only while the database has no admin; an existing admin creates any additional admin accounts.
 
 The interface supports light and dark themes, remembers the selected theme in the browser, and provides show/hide password controls on account forms. Student, trainer, and administrator dashboards group their sections into category links.
 

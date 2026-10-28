@@ -23,12 +23,13 @@ function renderLogin(res, role, locals, status) {
     error: null,
     email: '',
     role: role,
-    roleLabel: LOGIN_ROLES[role] || 'Sign in'
+    roleLabel: LOGIN_ROLES[role] || 'Sign in',
+    adminSignupAvailable: false
   }, locals));
 }
 
 function registrationRole(value) {
-  return value === 'teacher' ? 'teacher' : 'student';
+  return value === 'teacher' || value === 'admin' ? value : 'student';
 }
 
 function renderRegistration(res, role, locals, status) {
@@ -36,8 +37,39 @@ function renderRegistration(res, role, locals, status) {
     error: null,
     form: {},
     accountType: role,
-    pending: false
+    pending: false,
+    adminSignupAvailable: false
   }, locals));
+}
+
+async function firstAdminSignupAvailable() {
+  var result = await db.query("SELECT NOT EXISTS (SELECT 1 FROM users WHERE role = 'admin') AS available");
+  return result.rows[0].available;
+}
+
+async function createFirstAdmin(userData) {
+  var client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(73019::bigint)');
+    var existing = await client.query("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1");
+    if (existing.rows.length) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    var result = await client.query(
+      'INSERT INTO users (role, full_name, email, password_hash, active, approved)' +
+      " VALUES ('admin', $1, $2, $3, TRUE, TRUE) RETURNING id, role, full_name, remind_days",
+      [userData.full_name, userData.email, userData.password_hash]
+    );
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 function isBlocked(ip) {
@@ -68,10 +100,11 @@ router.get('/learn', function (req, res) {
   res.render('learn', { title: 'Learning hub' });
 });
 
-router.get('/login', function (req, res) {
+router.get('/login', wrap(async function (req, res) {
   if (req.session.user) return res.redirect(homeFor(req.session.user.role));
-  renderLogin(res, loginRole(req.query.role));
-});
+  var role = loginRole(req.query.role);
+  renderLogin(res, role, { adminSignupAvailable: await firstAdminSignupAvailable() });
+}));
 
 router.post('/login', wrap(async function (req, res) {
   var role = loginRole(req.query.role);
@@ -80,7 +113,8 @@ router.post('/login', wrap(async function (req, res) {
   if (isBlocked(req.ip)) {
     return renderLogin(res, role, {
       error: 'Too many attempts. Wait 15 minutes and try again.',
-      email: email
+      email: email,
+      adminSignupAvailable: await firstAdminSignupAvailable()
     }, 429);
   }
   var user = (await db.query('SELECT * FROM users WHERE email = $1', [email])).rows[0];
@@ -92,7 +126,8 @@ router.post('/login', wrap(async function (req, res) {
       error: user && user.role === 'teacher' && !user.approved
         ? 'Your trainer account is waiting for administrator approval.'
         : user && !user.active ? 'This account has been switched off. Ask your centre admin.' : 'Email or password is not correct.',
-      email: email
+      email: email,
+      adminSignupAvailable: await firstAdminSignupAvailable()
     }, 401);
   }
 
@@ -109,19 +144,27 @@ router.post('/login', wrap(async function (req, res) {
   res.redirect(homeFor(user.role));
 }));
 
-router.get('/register', function (req, res) {
+router.get('/register', wrap(async function (req, res) {
   if (req.session.user) return res.redirect(homeFor(req.session.user.role));
-  if (req.query.role === 'admin') return res.redirect('/login?role=admin');
   var role = registrationRole(req.query.role);
+  if (role === 'admin') {
+    if (!await firstAdminSignupAvailable()) return res.redirect('/login?role=admin');
+    return renderRegistration(res, role, { adminSignupAvailable: true });
+  }
   if (process.env.ALLOW_REGISTRATION === 'false') return res.redirect('/login?role=' + role);
   renderRegistration(res, role, { pending: role === 'teacher' && req.query.pending === '1' });
-});
+}));
 
 router.post('/register', wrap(async function (req, res) {
   if (req.session.user) return res.redirect(homeFor(req.session.user.role));
-  if (req.query.role === 'admin') return res.redirect('/login?role=admin');
   var role = registrationRole(req.query.role);
-  if (process.env.ALLOW_REGISTRATION === 'false') return res.redirect('/login?role=' + role);
+  var adminSignupAvailable = false;
+  if (role === 'admin') {
+    adminSignupAvailable = await firstAdminSignupAvailable();
+    if (!adminSignupAvailable) return res.redirect('/login?role=admin');
+  } else if (process.env.ALLOW_REGISTRATION === 'false') {
+    return res.redirect('/login?role=' + role);
+  }
   var form = {
     full_name: clean(req.body.full_name, 100),
     email: clean(req.body.email, 150).toLowerCase(),
@@ -134,20 +177,32 @@ router.post('/register', wrap(async function (req, res) {
   else if (role === 'student' && !form.student_no) error = 'Enter your student number.';
   else if (password.length < 8) error = 'Use a password with at least 8 characters.';
   else if (password !== String(req.body.confirm || '')) error = 'The two passwords do not match.';
-  if (error) return renderRegistration(res, role, { error: error, form: form }, 400);
+  if (error) return renderRegistration(res, role, {
+    error: error, form: form, adminSignupAvailable: adminSignupAvailable
+  }, 400);
 
   var user;
   try {
     var hash = await bcrypt.hash(password, 10);
-    user = (await db.query(
-      'INSERT INTO users (role, full_name, email, student_no, password_hash, active, approved)' +
-      ' VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, role, full_name, remind_days',
-      [role, form.full_name, form.email, form.student_no || null, hash, role === 'student', role === 'student']
-    )).rows[0];
+    if (role === 'admin') {
+      user = await createFirstAdmin({
+        full_name: form.full_name,
+        email: form.email,
+        password_hash: hash
+      });
+      if (!user) return res.redirect('/login?role=admin');
+    } else {
+      user = (await db.query(
+        'INSERT INTO users (role, full_name, email, student_no, password_hash, active, approved)' +
+        ' VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, role, full_name, remind_days',
+        [role, form.full_name, form.email, form.student_no || null, hash, role === 'student', role === 'student']
+      )).rows[0];
+    }
   } catch (err) {
     if (err.code === '23505') return renderRegistration(res, role, {
       error: 'That email or student number is already registered.',
-      form: form
+      form: form,
+      adminSignupAvailable: role === 'admin' ? await firstAdminSignupAvailable() : false
     }, 400);
     throw err;
   }
@@ -158,7 +213,9 @@ router.post('/register', wrap(async function (req, res) {
     req.session.regenerate(function (err) { return err ? reject(err) : resolve(); });
   });
   req.session.user = { id: user.id, role: user.role, name: user.full_name, remindDays: user.remind_days };
-  setFlash(req, 'success', 'Your account is ready. Welcome to your assignment tracker.');
+  setFlash(req, 'success', role === 'admin'
+    ? 'Your admin account is ready. Welcome to the assignment tracker.'
+    : 'Your account is ready. Welcome to your assignment tracker.');
   await saveSession(req);
   res.redirect(homeFor(user.role));
 }));

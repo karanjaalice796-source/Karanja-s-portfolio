@@ -1,0 +1,43 @@
+<%- include('partials/head', { title: `${event.title} · Host view` }) %>
+<div class="heading-row">
+  <div>
+    <p class="eyebrow">Read-only host view</p>
+    <h1><%= event.title %></h1>
+    <p><span class="badge event-type-badge"><%= eventTypeLabel(event.event_type) %></span></p>
+    <p class="intro"><%= new Date(`${event.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'full' }) %></p>
+  </div>
+</div>
+<section class="panel">
+  <h2>Venue</h2>
+  <p><%= event.venue || 'To be confirmed' %></p>
+  <% if (mapsUrl) { %><p><a href="<%= mapsUrl %>" target="_blank" rel="noopener noreferrer">Open the venue in Maps</a></p><% } %>
+  <% if (event.venue_notes) { %><p class="vendor-note"><strong>Arrival notes:</strong> <%= event.venue_notes %></p><% } %>
+</section>
+<section class="panel">
+  <h2>Event schedule</h2>
+  <p class="muted">This page is read-only and does not update live. Refresh to see the latest details.</p>
+  <% if (tasks.length) { %>
+    <ol class="timeline">
+      <% tasks.forEach((task) => { %>
+        <li>
+          <div class="when"><%= new Date(task.start_time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) %></div>
+          <div>
+            <strong><%= task.title %></strong>
+            <p class="muted"><%= task.vendor_name || 'Event-wide' %><%= task.notes ? ` · ${task.notes}` : '' %></p>
+          </div>
+        </li>
+      <% }) %>
+    </ol>
+  <% } else { %><p class="muted">The planner has not added any schedule items yet.</p><% } %>
+</section>
+<section class="panel">
+  <h2>Vendor responses</h2>
+  <% if (vendors.length) { %>
+    <ul class="plain">
+      <% vendors.forEach((vendor) => { %>
+        <li><strong><%= vendor.name %></strong><%= vendor.category ? ` · ${vendor.category}` : '' %> <span class="badge <%= vendor.status %>"><%= vendor.status.replace('_', ' ') %></span></li>
+      <% }) %>
+    </ul>
+  <% } else { %><p class="muted">The planner has not added vendors yet.</p><% } %>
+</section>
+<%- include('partials/foot') %>

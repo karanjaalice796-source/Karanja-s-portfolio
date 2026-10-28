@@ -8,8 +8,10 @@ const express = require('express');
 const session = require('express-session');
 const multer = require('multer');
 const { Server } = require('socket.io');
+const PDFDocument = require('pdfkit');
 const db = require('./db');
 const { sendMail, configured: mailConfigured } = require('./mailer');
+const { templates, isEventType, eventTypeLabel, createTemplateEntries } = require('./templates');
 
 const app = express();
 const server = http.createServer(app);
@@ -18,12 +20,14 @@ const port = Number(process.env.PORT) || 3100;
 const reminderHours = Number(process.env.REMINDER_HOURS || 48);
 const maxReminders = Number(process.env.MAX_REMINDERS || 3);
 const reminderCheckMinutes = Number(process.env.REMINDER_CHECK_MINUTES || 60);
+const linkGraceDays = Number(process.env.LINK_GRACE_DAYS || 30);
 if (![reminderHours, maxReminders, reminderCheckMinutes].every(Number.isFinite)
   || reminderHours <= 0 || !Number.isInteger(maxReminders) || maxReminders < 1
-  || reminderCheckMinutes <= 0) {
-  throw new Error('Reminder settings must be positive numbers and MAX_REMINDERS must be a positive integer.');
+  || reminderCheckMinutes <= 0 || !Number.isInteger(linkGraceDays) || linkGraceDays < 0) {
+  throw new Error('Reminder settings must be positive numbers, MAX_REMINDERS must be a positive integer, and LINK_GRACE_DAYS must be a non-negative integer.');
 }
 const oauthConfigurations = new Map();
+const passwordResetAttempts = new Map();
 const uploadDirectory = path.join(__dirname, 'uploads');
 fs.mkdirSync(uploadDirectory, { recursive: true });
 
@@ -50,6 +54,7 @@ const sessionMiddleware = session({
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
+app.locals.eventTypeLabel = eventTypeLabel;
 app.use(express.urlencoded({ extended: false, limit: '32kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(sessionMiddleware);
@@ -299,13 +304,18 @@ function eventForOwner(eventId, userId) {
   return db.prepare('SELECT * FROM events WHERE id = ? AND user_id = ?').get(eventId, userId);
 }
 
-function vendorByToken(token) {
+function vendorByToken(token, vendorAccountId = null) {
   if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) return null;
   return db.prepare(`
-    SELECT vendors.*, events.title AS event_title, events.event_date, events.venue
+    SELECT vendors.*, events.title AS event_title, events.event_date, events.venue,
+      events.venue_notes
     FROM vendors JOIN events ON events.id = vendors.event_id
     WHERE vendors.token = ?
-  `).get(token);
+      AND (
+        date(events.event_date, '+' || ? || ' days') >= date('now')
+        OR (? IS NOT NULL AND vendors.account_id = ?)
+      )
+  `).get(token, linkGraceDays, vendorAccountId, vendorAccountId);
 }
 
 function recordChange(eventId, message) {
@@ -324,6 +334,37 @@ const demoEmailNote = mailConfigured ? '' : ' (demo mode: printed in the server 
 function vendorPageUrl(token) {
   const origin = process.env.APP_BASE_URL || `http://localhost:${port}`;
   return new URL(`/vendor/${token}`, origin).href;
+}
+
+function clientPageUrl(token) {
+  const origin = process.env.APP_BASE_URL || `http://localhost:${port}`;
+  return new URL(`/client/${token}`, origin).href;
+}
+
+function isValidDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function resetTokenHash(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function resetLinkUrl(token, request) {
+  const origin = process.env.APP_BASE_URL || `${request.protocol}://${request.get('host')}`;
+  return new URL(`/auth/reset/${token}`, origin).href;
+}
+
+function resetRequestLimited(ip) {
+  const now = Date.now();
+  const entry = passwordResetAttempts.get(ip);
+  if (!entry || now - entry.startedAt >= 15 * 60 * 1000) {
+    passwordResetAttempts.set(ip, { count: 1, startedAt: now });
+    return false;
+  }
+  entry.count += 1;
+  return entry.count > 5;
 }
 
 async function emailVendor(vendor, event, subject, text, quiet = false) {
@@ -402,7 +443,7 @@ io.on('connection', (socket) => {
     }
   });
   socket.on('join:vendor', (token) => {
-    if (vendorByToken(token)) socket.join(`vendor:${token}`);
+    if (vendorByToken(token, socket.request.session?.vendorUser?.id)) socket.join(`vendor:${token}`);
   });
 });
 
@@ -410,6 +451,120 @@ app.get('/', (request, response) => response.redirect(request.session.user ? '/d
 
 app.get('/learn', (_request, response) => {
   response.render('learning');
+});
+
+app.get('/auth/forgot', (_request, response) => {
+  response.render('forgot', { sent: false });
+});
+
+app.post('/auth/forgot', async (request, response, next) => {
+  const email = String(request.body.email || '').trim().toLowerCase();
+  for (const [ip, entry] of passwordResetAttempts) {
+    if (Date.now() - entry.startedAt >= 15 * 60 * 1000) passwordResetAttempts.delete(ip);
+  }
+  const limited = resetRequestLimited(request.ip);
+  if (!limited && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 160) {
+    try {
+      const account = db.prepare('SELECT id, name, email FROM users WHERE email = ?').get(email);
+      if (account) {
+        const token = crypto.randomBytes(32).toString('hex');
+        const tokenHash = resetTokenHash(token);
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          db.prepare("UPDATE password_reset_tokens SET used_at = datetime('now') WHERE user_id = ? AND used_at IS NULL")
+            .run(account.id);
+          db.prepare(`
+            INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+            VALUES (?, ?, datetime('now', '+1 hour'))
+          `).run(account.id, tokenHash);
+          db.exec('COMMIT');
+        } catch (error) {
+          db.exec('ROLLBACK');
+          throw error;
+        }
+        await sendMail({
+          to: account.email,
+          subject: 'Reset your Nodevents password',
+          text: [
+            `Hello ${account.name},`,
+            '',
+            'Use this one-time link within one hour to reset your Nodevents password:',
+            resetLinkUrl(token, request),
+            '',
+            'If you did not request this, you can ignore this message.',
+          ].join('\n'),
+        });
+      }
+    } catch (error) {
+      return next(error);
+    }
+  }
+  response.render('forgot', { sent: true });
+});
+
+app.get('/auth/reset/:token', (request, response) => {
+  const token = String(request.params.token || '');
+  const reset = /^[a-f0-9]{64}$/.test(token) && db.prepare(`
+    SELECT id FROM password_reset_tokens
+    WHERE token_hash = ? AND used_at IS NULL AND expires_at > datetime('now')
+  `).get(resetTokenHash(token));
+  if (!reset) {
+    return response.status(400).render('message', {
+      title: 'Reset link unavailable',
+      message: 'This password-reset link is invalid, expired, or has already been used. Request a new one to continue.',
+      href: '/auth/forgot',
+      linkText: 'Request another reset link',
+      vendorView: false,
+    });
+  }
+  response.render('reset', { token, error: null });
+});
+
+app.post('/auth/reset/:token', async (request, response, next) => {
+  const token = String(request.params.token || '');
+  const password = String(request.body.password || '');
+  const confirm = String(request.body.confirm || '');
+  if (!/^[a-f0-9]{64}$/.test(token)) return response.sendStatus(400);
+  if (password.length < 8 || password.length > 128 || password !== confirm) {
+    return response.status(400).render('reset', {
+      token,
+      error: password.length < 8 || password.length > 128
+        ? 'Use a password between 8 and 128 characters.'
+        : 'The passwords do not match.',
+    });
+  }
+  const passwordHash = await bcrypt.hash(password, 12);
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    const reset = db.prepare(`
+      SELECT user_id FROM password_reset_tokens
+      WHERE token_hash = ? AND used_at IS NULL AND expires_at > datetime('now')
+    `).get(resetTokenHash(token));
+    if (!reset) {
+      db.exec('ROLLBACK');
+      return response.status(400).render('message', {
+        title: 'Reset link unavailable',
+        message: 'This password-reset link is invalid, expired, or has already been used. Request a new one to continue.',
+        href: '/auth/forgot',
+        linkText: 'Request another reset link',
+        vendorView: false,
+      });
+    }
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, reset.user_id);
+    db.prepare("UPDATE password_reset_tokens SET used_at = datetime('now') WHERE user_id = ? AND used_at IS NULL")
+      .run(reset.user_id);
+    db.exec('COMMIT');
+  } catch (error) {
+    try { db.exec('ROLLBACK'); } catch (rollbackError) { console.error('Password reset rollback failed:', rollbackError); }
+    return next(error);
+  }
+  response.render('message', {
+    title: 'Password updated',
+    message: 'Your password has been reset. Sign in with your new password.',
+    href: '/auth',
+    linkText: 'Sign in',
+    vendorView: false,
+  });
 });
 
 app.get('/oauth-setup', (_request, response) => {
@@ -516,7 +671,7 @@ app.post('/vendor/:token/register', async (request, response, next) => {
 });
 
 app.post('/vendor/:token/claim', requireVendorAuth, (request, response) => {
-  const vendor = vendorByToken(request.params.token);
+  const vendor = vendorByToken(request.params.token, request.session.vendorUser.id);
   if (!vendor) return response.sendStatus(404);
   if (!vendor.email || vendor.email.trim().toLowerCase() !== request.session.vendorUser.email) {
     setNotice(request, 'This invitation email does not match your vendor account. Contact your planner if it needs updating.');
@@ -671,20 +826,34 @@ app.get('/dashboard', requireAuth, (request, response) => {
     GROUP BY events.id
     ORDER BY events.event_date, events.id DESC
   `).all(request.session.user.id);
-  response.render('dashboard', { events });
+  response.render('dashboard', { events, templates });
 });
 
 app.post('/events', requireAuth, (request, response) => {
   const title = String(request.body.title || '').trim();
   const eventDate = String(request.body.event_date || '').trim();
   const venue = String(request.body.venue || '').trim();
-  if (!title || title.length > 120 || !/^\d{4}-\d{2}-\d{2}$/.test(eventDate) || venue.length > 160) {
-    setNotice(request, 'Enter an event name, valid date, and venue under 160 characters.');
+  const eventType = String(request.body.event_type || 'other').trim();
+  if (!title || title.length > 120 || !isValidDate(eventDate) || venue.length > 160
+    || String(request.body.venue_notes || '').trim().length > 1000
+    || !isEventType(eventType)) {
+    setNotice(request, 'Enter an event name, valid date, venue details, and a valid event type.');
     return response.redirect('/dashboard');
   }
-  const result = db.prepare('INSERT INTO events (user_id, title, event_date, venue) VALUES (?, ?, ?, ?)')
-    .run(request.session.user.id, title, eventDate, venue);
-  response.redirect(`/events/${result.lastInsertRowid}`);
+  const venueNotes = String(request.body.venue_notes || '').trim();
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const result = db.prepare(
+      'INSERT INTO events (user_id, title, event_date, event_type, venue, venue_notes) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run(request.session.user.id, title, eventDate, eventType, venue, venueNotes);
+    const eventId = Number(result.lastInsertRowid);
+    createTemplateEntries(db, eventId, eventDate, eventType);
+    db.exec('COMMIT');
+    response.redirect(`/events/${eventId}`);
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
 });
 
 app.get('/events/:id', requireAuth, (request, response) => {
@@ -698,6 +867,8 @@ app.get('/events/:id', requireAuth, (request, response) => {
   `).all(eventId).map((vendor) => ({
     ...vendor,
     privateUrl: vendorPageUrl(vendor.token),
+    linkExpiresOn: db.prepare("SELECT date(?, '+' || ? || ' days') AS expires_on")
+      .get(event.event_date, linkGraceDays).expires_on,
   }));
   const tasks = db.prepare(`
     SELECT tasks.*, vendors.name AS vendor_name
@@ -716,10 +887,36 @@ app.get('/events/:id', requireAuth, (request, response) => {
     tasks,
     invoices,
     changes,
+    clientUrl: event.client_token ? clientPageUrl(event.client_token) : null,
+    mapsUrl: event.venue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.venue)}` : null,
     mailConfigured,
     reminderHours,
     maxReminders,
+    linkGraceDays,
   });
+});
+
+app.post('/events/:id/venue', requireAuth, async (request, response) => {
+  const eventId = Number(request.params.id);
+  const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.session.user.id);
+  if (!event) return response.sendStatus(404);
+  const venue = String(request.body.venue || '').trim();
+  const venueNotes = String(request.body.venue_notes || '').trim();
+  if (venue.length > 160 || venueNotes.length > 1000) {
+    setNotice(request, 'Keep the venue under 160 characters and the arrival notes under 1,000 characters.');
+    return response.redirect(`/events/${eventId}`);
+  }
+  if (venue === event.venue && venueNotes === event.venue_notes) {
+    setNotice(request, 'Venue details are unchanged.');
+    return response.redirect(`/events/${eventId}`);
+  }
+  db.prepare('UPDATE events SET venue = ?, venue_notes = ? WHERE id = ?')
+    .run(venue, venueNotes, eventId);
+  const message = 'Venue details or arrival notes were updated.';
+  recordChange(eventId, message);
+  emitEventUpdate(eventId, message);
+  await emailEventChange(eventId, null, message);
+  response.redirect(`/events/${eventId}`);
 });
 
 app.post('/events/:id/vendors', requireAuth, async (request, response) => {
@@ -748,6 +945,146 @@ app.post('/events/:id/vendors', requireAuth, async (request, response) => {
     setNotice(request, 'Vendor added. Add an email address if you want to send the private link.');
   }
   response.redirect(`/events/${eventId}`);
+});
+
+app.post('/events/:id/vendors/:vendorId/update', requireAuth, async (request, response) => {
+  const eventId = Number(request.params.id);
+  const vendorId = Number(request.params.vendorId);
+  const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.session.user.id);
+  if (!event) return response.sendStatus(404);
+  const vendor = Number.isSafeInteger(vendorId)
+    && db.prepare('SELECT * FROM vendors WHERE id = ? AND event_id = ?').get(vendorId, eventId);
+  if (!vendor) return response.sendStatus(404);
+  const name = String(request.body.name || '').trim();
+  const category = String(request.body.category || '').trim();
+  const email = String(request.body.email || '').trim().toLowerCase();
+  if (!name || name.length > 100 || category.length > 80 || email.length > 160
+    || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+    setNotice(request, 'Enter a vendor name and a valid email address, if provided.');
+    return response.redirect(`/events/${eventId}`);
+  }
+  const emailChanged = email !== vendor.email.trim().toLowerCase();
+  const token = emailChanged ? crypto.randomBytes(32).toString('hex') : vendor.token;
+  db.prepare(`
+    UPDATE vendors SET name = ?, category = ?, email = ?, token = ?,
+      last_notified_at = CASE WHEN ? THEN NULL ELSE last_notified_at END,
+      reminder_count = CASE WHEN ? THEN 0 ELSE reminder_count END
+    WHERE id = ? AND event_id = ?
+  `).run(name, category, email, token, Number(emailChanged), Number(emailChanged), vendorId, eventId);
+  recordChange(eventId, `${name}'s vendor details were updated.`);
+  emitEventUpdate(eventId, `${name}'s vendor details were updated.`);
+  if (email && emailChanged) {
+    const updatedVendor = db.prepare('SELECT * FROM vendors WHERE id = ?').get(vendorId);
+    const sent = await sendVendorInvite(updatedVendor, event, false);
+    setNotice(request, sent
+      ? `Vendor details saved. A fresh private link was emailed to ${name}${demoEmailNote}.`
+      : 'Vendor details saved, but the invitation email could not be sent. Resend it from this page.');
+  } else {
+    setNotice(request, 'Vendor details saved.');
+  }
+  response.redirect(`/events/${eventId}`);
+});
+
+app.post('/events/:id/vendors/:vendorId/regenerate', requireAuth, async (request, response) => {
+  const eventId = Number(request.params.id);
+  const vendorId = Number(request.params.vendorId);
+  const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.session.user.id);
+  if (!event) return response.sendStatus(404);
+  const vendor = Number.isSafeInteger(vendorId)
+    && db.prepare('SELECT * FROM vendors WHERE id = ? AND event_id = ?').get(vendorId, eventId);
+  if (!vendor) return response.sendStatus(404);
+  const token = crypto.randomBytes(32).toString('hex');
+  db.prepare(`
+    UPDATE vendors SET token = ?, last_notified_at = NULL, reminder_count = 0
+    WHERE id = ? AND event_id = ?
+  `).run(token, vendorId, eventId);
+  const updatedVendor = db.prepare('SELECT * FROM vendors WHERE id = ?').get(vendorId);
+  recordChange(eventId, `A fresh private link was created for ${vendor.name}.`);
+  emitEventUpdate(eventId, `${vendor.name}'s private link was changed.`);
+  if (updatedVendor.email) {
+    const sent = await sendVendorInvite(updatedVendor, event, false);
+    setNotice(request, sent
+      ? `A new private link was emailed to ${vendor.name}${demoEmailNote}. The previous link no longer works.`
+      : `The link was changed, but the email to ${vendor.name} could not be sent. Share the new link shown below.`);
+  } else {
+    setNotice(request, `A new private link was created for ${vendor.name}. Share the new link shown below.`);
+  }
+  response.redirect(`/events/${eventId}`);
+});
+
+app.post('/events/:id/client-link', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  if (!Number.isSafeInteger(eventId) || !eventForOwner(eventId, request.session.user.id)) {
+    return response.sendStatus(404);
+  }
+  const token = crypto.randomBytes(32).toString('hex');
+  db.prepare('UPDATE events SET client_token = ? WHERE id = ?').run(token, eventId);
+  recordChange(eventId, 'The read-only host link was created or replaced.');
+  setNotice(request, 'The host link was created. Anyone with the link can view the shared event schedule and vendor responses.');
+  response.redirect(`/events/${eventId}`);
+});
+
+app.post('/events/:id/client-link/revoke', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  if (!Number.isSafeInteger(eventId) || !eventForOwner(eventId, request.session.user.id)) {
+    return response.sendStatus(404);
+  }
+  db.prepare('UPDATE events SET client_token = NULL WHERE id = ?').run(eventId);
+  recordChange(eventId, 'The read-only host link was turned off.');
+  setNotice(request, 'The host link was turned off.');
+  response.redirect(`/events/${eventId}`);
+});
+
+app.get('/events/:id/timeline.pdf', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.session.user.id);
+  if (!event) return response.sendStatus(404);
+  const tasks = db.prepare(`
+    SELECT tasks.*, vendors.name AS vendor_name
+    FROM tasks LEFT JOIN vendors ON vendors.id = tasks.vendor_id
+    WHERE tasks.event_id = ? ORDER BY tasks.start_time, tasks.id
+  `).all(eventId);
+  const vendors = db.prepare('SELECT name, category, status FROM vendors WHERE event_id = ? ORDER BY name')
+    .all(eventId);
+  const filename = `${event.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'event'}-timeline.pdf`;
+  response.setHeader('Content-Type', 'application/pdf');
+  response.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  const document = new PDFDocument({ margin: 54, info: { Title: `${event.title} timeline`, Author: 'Nodevents' } });
+  document.pipe(response);
+  document.fontSize(22).fillColor('#20251f').text(event.title);
+  document.moveDown(0.35);
+  document.fontSize(11).fillColor('#71776f')
+    .text(`Event type: ${eventTypeLabel(event.event_type)}`);
+  document.text(`Event date: ${new Date(`${event.event_date}T12:00:00`).toLocaleDateString()}`);
+  document.text(`Venue: ${event.venue || 'To be confirmed'}`);
+  if (event.venue_notes) document.text(`Arrival notes: ${event.venue_notes}`);
+  document.moveDown();
+  document.fontSize(16).fillColor('#20251f').text('Event timeline');
+  document.moveDown(0.35);
+  if (tasks.length) {
+    tasks.forEach((task) => {
+      document.fontSize(11).fillColor('#b64d2b')
+        .text(new Date(task.start_time).toLocaleString());
+      document.fontSize(12).fillColor('#20251f').text(task.title);
+      if (task.vendor_name) document.fontSize(10).fillColor('#71776f').text(`Vendor: ${task.vendor_name}`);
+      if (task.notes) document.fontSize(10).fillColor('#71776f').text(task.notes);
+      document.moveDown(0.65);
+    });
+  } else {
+    document.fontSize(11).fillColor('#71776f').text('No timeline tasks have been added.');
+  }
+  document.moveDown();
+  document.fontSize(16).fillColor('#20251f').text('Vendor responses');
+  document.moveDown(0.35);
+  if (vendors.length) {
+    vendors.forEach((vendor) => {
+      document.fontSize(11).fillColor('#20251f')
+        .text(`${vendor.name}${vendor.category ? ` · ${vendor.category}` : ''} — ${vendor.status.replace('_', ' ')}`);
+    });
+  } else {
+    document.fontSize(11).fillColor('#71776f').text('No vendors have been added.');
+  }
+  document.end();
 });
 
 app.post('/events/:id/tasks', requireAuth, async (request, response) => {
@@ -832,8 +1169,39 @@ app.post('/events/:id/vendors/:vendorId/email', requireAuth, async (request, res
   response.redirect(`/events/${eventId}`);
 });
 
+app.get('/client/:token', (request, response) => {
+  const token = String(request.params.token || '');
+  if (!/^[a-f0-9]{64}$/.test(token)) return response.sendStatus(404);
+  const event = db.prepare(`
+    SELECT id, title, event_date, event_type, venue, venue_notes
+    FROM events WHERE client_token = ?
+  `).get(token);
+  if (!event) return response.status(404).render('message', {
+    title: 'Host link unavailable',
+    message: 'This read-only event link is no longer active. Please contact your planner for an updated link.',
+    href: '/auth',
+    linkText: 'Planner sign in',
+    vendorView: false,
+  });
+  const vendors = db.prepare(`
+    SELECT name, category, status FROM vendors
+    WHERE event_id = ? ORDER BY name
+  `).all(event.id);
+  const tasks = db.prepare(`
+    SELECT tasks.title, tasks.start_time, tasks.notes, vendors.name AS vendor_name
+    FROM tasks LEFT JOIN vendors ON vendors.id = tasks.vendor_id
+    WHERE tasks.event_id = ? ORDER BY tasks.start_time, tasks.id
+  `).all(event.id);
+  response.render('client', {
+    event,
+    vendors,
+    tasks,
+    mapsUrl: event.venue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.venue)}` : null,
+  });
+});
+
 app.get('/vendor/:token', (request, response) => {
-  const vendor = vendorByToken(request.params.token);
+  const vendor = vendorByToken(request.params.token, request.session.vendorUser?.id);
   if (!vendor) return response.status(404).render('message', {
     title: 'Link not found',
     message: 'This private vendor link is invalid or no longer active. Please contact your event planner for an updated link.',
@@ -845,11 +1213,16 @@ app.get('/vendor/:token', (request, response) => {
     ORDER BY start_time, id
   `).all(vendor.event_id, vendor.id);
   const invoices = db.prepare('SELECT * FROM invoices WHERE vendor_id = ? ORDER BY created_at DESC, id DESC').all(vendor.id);
-  response.render('vendor', { vendor, tasks, invoices });
+  response.render('vendor', {
+    vendor,
+    tasks,
+    invoices,
+    mapsUrl: vendor.venue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(vendor.venue)}` : null,
+  });
 });
 
 app.post('/vendor/:token/status', (request, response) => {
-  const vendor = vendorByToken(request.params.token);
+  const vendor = vendorByToken(request.params.token, request.session.vendorUser?.id);
   if (!vendor) return response.sendStatus(404);
   const status = String(request.body.status || '');
   const note = String(request.body.note || '').trim();
@@ -872,7 +1245,7 @@ app.post('/vendor/:token/status', (request, response) => {
 });
 
 app.post('/vendor/:token/invoices', invoiceUpload.single('invoice'), (request, response) => {
-  const vendor = vendorByToken(request.params.token);
+  const vendor = vendorByToken(request.params.token, request.session.vendorUser?.id);
   if (!vendor) {
     if (request.file) fs.unlinkSync(request.file.path);
     return response.sendStatus(404);

@@ -5,14 +5,36 @@
     <a href="/dashboard">← All events</a>
     <p class="eyebrow"><%= new Date(`${event.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'full' }) %></p>
     <h1><%= event.title %></h1>
+    <p><span class="badge event-type-badge"><%= eventTypeLabel(event.event_type) %></span></p>
     <p class="intro"><%= event.venue || 'Venue to be confirmed' %></p>
+    <% if (mapsUrl) { %><a href="<%= mapsUrl %>" target="_blank" rel="noopener noreferrer">Open venue in Maps</a><% } %>
   </div>
+  <a class="button" href="/events/<%= event.id %>/timeline.pdf">Download timeline PDF</a>
 </div>
 <div class="stats">
   <div class="stat"><strong><%= vendors.length %></strong><span>Vendors</span></div>
   <div class="stat"><strong><%= vendors.filter(vendor => vendor.status === 'pending').length %></strong><span>Awaiting response</span></div>
   <div class="stat"><strong><%= invoices.filter(invoice => invoice.status !== 'paid').length %></strong><span>Invoices to review/pay</span></div>
 </div>
+<section class="panel">
+  <h2>Venue and host sharing</h2>
+  <form class="stack" method="post" action="/events/<%= event.id %>/venue">
+    <label>Venue<input name="venue" maxlength="160" value="<%= event.venue %>" placeholder="Venue or address"></label>
+    <label>Arrival notes for vendors<textarea name="venue_notes" maxlength="1000" placeholder="Entrance, loading area, parking, or access details"><%= event.venue_notes %></textarea></label>
+    <button type="submit">Save venue details</button>
+  </form>
+  <p class="muted">Vendors receive an email when venue details change. Arrival notes are visible to vendors and anyone with your read-only host link.</p>
+  <% if (clientUrl) { %>
+    <div class="share-link">
+      <label>Read-only host link<input class="link-box" readonly value="<%= clientUrl %>" onclick="this.select()"></label>
+      <p class="muted">Anyone with this link can see the timeline, venue notes, and vendor response statuses. It does not show emails, invoices, private vendor links, or vendor notes.</p>
+      <form method="post" action="/events/<%= event.id %>/client-link"><button type="submit">Replace host link</button></form>
+      <form method="post" action="/events/<%= event.id %>/client-link/revoke"><button type="submit">Turn off host link</button></form>
+    </div>
+  <% } else { %>
+    <form method="post" action="/events/<%= event.id %>/client-link"><button type="submit">Create host link</button></form>
+  <% } %>
+</section>
 <div class="grid">
   <section class="panel">
     <h2>Add vendor</h2>
@@ -49,7 +71,19 @@
           <span class="badge <%= vendor.status %>"><%= vendor.status.replace('_', ' ') %></span>
           <div class="vendor-tools">
             <input class="link-box" aria-label="Private link for <%= vendor.name %>" readonly value="<%= vendor.privateUrl %>" onclick="this.select()">
-            <small>Personal link for <%= vendor.name %>. Share it only with this vendor.</small>
+            <small>Personal link for <%= vendor.name %>. Share it only with this vendor. Expires after <%= vendor.linkExpiresOn %>.</small>
+            <details class="vendor-edit">
+              <summary>Edit vendor details</summary>
+              <form class="stack" method="post" action="/events/<%= event.id %>/vendors/<%= vendor.id %>/update">
+                <label>Name<input name="name" maxlength="100" value="<%= vendor.name %>" required></label>
+                <label>Category<input name="category" maxlength="80" value="<%= vendor.category %>"></label>
+                <label>Email<input type="email" name="email" maxlength="160" value="<%= vendor.email %>"></label>
+                <button type="submit">Save vendor</button>
+              </form>
+            </details>
+            <form method="post" action="/events/<%= event.id %>/vendors/<%= vendor.id %>/regenerate">
+              <button type="submit">Create new link</button>
+            </form>
             <% if (vendor.email) { %>
               <form class="vendor-email-form" method="post" action="/events/<%= event.id %>/vendors/<%= vendor.id %>/email">
                 <button type="submit"><%= vendor.status === 'pending' && vendor.last_notified_at ? 'Send reminder' : 'Email private link' %></button>

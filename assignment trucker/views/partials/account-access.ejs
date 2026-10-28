@@ -4,4 +4,4 @@
   <a class="<%= activeRole === 'admin' ? 'is-active' : '' %>" href="/login?role=admin">Admin sign in</a>
 </nav>
 <% if (allowRegistration && showCreateLinks !== false) { %><nav class="auth-role-links auth-create-links" aria-label="Create an account"><a href="/register?role=student">Create student account</a><a href="/register?role=teacher">Create trainer account</a></nav><% } %>
-<p class="auth-staff-note">Trainer requests need admin approval. Admin accounts can only be created by an existing admin. <a href="/admin/users/new">Admin: manage staff accounts</a></p>
+<p class="auth-staff-note">Trainer requests need admin approval. The first admin account can be created from admin sign in; existing admins add later accounts in People. <a href="/admin/users/new">Admin: manage staff accounts</a></p>

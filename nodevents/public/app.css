@@ -173,11 +173,13 @@ h3 { font-size: 1rem; margin-bottom: .6rem; }
 .apple-icon { fill: #252921; }
 .social-note { display: block; margin-top: .6rem; text-align: center; font-size: .68rem; font-weight: 400; }
 .social-note a { color: var(--accent-dark); }
+.auth-recovery-link { margin: .55rem 0 0; text-align: center; font-size: .85rem; }
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 1rem; }
 .grid .panel { margin: 0; }
 .row { display: flex; align-items: end; flex-wrap: wrap; gap: .8rem; }
 .stack { display: flex; flex-direction: column; gap: .8rem; }
 label { display: flex; flex: 1 1 170px; flex-direction: column; gap: .3rem; color: var(--muted); font-size: .82rem; font-weight: 650; }
+.wide-field { flex-basis: 100%; }
 input, select, textarea { min-width: 0; width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: .65rem .75rem; background: #fff; color: var(--ink); }
 .password-field { display: flex; width: 100%; }
 .password-field input { border-radius: 8px 0 0 8px; }
@@ -197,12 +199,19 @@ textarea { min-height: 88px; resize: vertical; }
 .badge.pending, .badge.sent, .badge.changes_requested { color: var(--amber); }
 .badge.confirmed, .badge.approved, .badge.paid { color: var(--green); }
 .badge.declined { color: var(--red); }
+.event-type-badge { color: var(--accent-dark); font-weight: 750; }
 .plain { list-style: none; margin: 0; padding: 0; }
 .plain li { border-top: 1px solid var(--line); padding: .8rem 0; }
 .plain li:first-child { border-top: 0; }
 .vendor-row { display: grid; grid-template-columns: minmax(120px,1fr) minmax(110px,auto) minmax(220px,1.3fr); gap: .7rem; align-items: center; }
 .vendor-tools { display: flex; flex-direction: column; align-items: flex-start; gap: .4rem; min-width: 0; }
 .vendor-tools .link-box { width: 100%; }
+.vendor-edit { width: 100%; }
+.vendor-edit summary { color: var(--accent-dark); cursor: pointer; font-size: .84rem; font-weight: 700; }
+.vendor-edit form { margin-top: .65rem; }
+.share-link { display: grid; gap: .6rem; margin-top: 1rem; }
+.share-link form { margin: 0; }
+.share-link input { margin-top: .25rem; }
 .vendor-email-form { margin: 0; }
 .vendor-email-form button { padding: .4rem .65rem; font-size: .8rem; }
 .email-settings { margin-bottom: .5rem; font-size: .85rem; }

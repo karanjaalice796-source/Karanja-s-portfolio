@@ -30,7 +30,10 @@ db.exec(`
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     event_date TEXT NOT NULL,
+    event_type TEXT NOT NULL DEFAULT 'other',
     venue TEXT NOT NULL DEFAULT '',
+    venue_notes TEXT NOT NULL DEFAULT '',
+    client_token TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE TABLE IF NOT EXISTS vendors (
@@ -71,13 +74,34 @@ db.exec(`
     message TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL,
+    used_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
   CREATE INDEX IF NOT EXISTS idx_events_user ON events(user_id);
   CREATE INDEX IF NOT EXISTS idx_oauth_accounts_user ON oauth_accounts(user_id);
   CREATE INDEX IF NOT EXISTS idx_vendors_event ON vendors(event_id);
   CREATE INDEX IF NOT EXISTS idx_tasks_event_time ON tasks(event_id, start_time);
   CREATE INDEX IF NOT EXISTS idx_invoices_vendor ON invoices(vendor_id);
   CREATE INDEX IF NOT EXISTS idx_changes_event ON changes(event_id, id);
+  CREATE INDEX IF NOT EXISTS idx_password_reset_user ON password_reset_tokens(user_id, expires_at);
 `);
+
+const eventColumns = db.prepare('PRAGMA table_info(events)').all();
+if (!eventColumns.some((column) => column.name === 'event_type')) {
+  db.exec("ALTER TABLE events ADD COLUMN event_type TEXT NOT NULL DEFAULT 'other'");
+}
+if (!eventColumns.some((column) => column.name === 'venue_notes')) {
+  db.exec("ALTER TABLE events ADD COLUMN venue_notes TEXT NOT NULL DEFAULT ''");
+}
+if (!eventColumns.some((column) => column.name === 'client_token')) {
+  db.exec('ALTER TABLE events ADD COLUMN client_token TEXT');
+}
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_events_client_token ON events(client_token) WHERE client_token IS NOT NULL');
 
 const vendorColumns = db.prepare('PRAGMA table_info(vendors)').all();
 if (!vendorColumns.some((column) => column.name === 'account_id')) {
