@@ -1,0 +1,11 @@
+.admin-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .9rem; }
+.admin-stats .panel { display: grid; gap: .25rem; margin: 0; }
+.admin-stats strong { font-size: 2rem; line-height: 1.1; }
+.admin-stats span { color: var(--muted); font-size: .88rem; }
+.admin-accounts { margin-top: 1.5rem; }
+.admin-accounts form { margin: 0; }
+.admin-accounts button { white-space: nowrap; }
+.admin-accounts .badge { white-space: nowrap; }
+@media (max-width: 760px) {
+  .admin-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

@@ -1,41 +1,155 @@
 <%- include('partials/head', { title: 'Planner dashboard' }) %>
-<div class="heading-row">
-  <div>
-    <p class="eyebrow">Planner dashboard</p>
-    <h1>Your events</h1>
-    <p class="intro">See what is coming up and which vendors still need to confirm.</p>
+<%
+  const tones = {
+    wedding: 'coral',
+    birthday: 'saffron',
+    graduation: 'teal',
+    corporate: 'plum',
+    'baby-family': 'saffron',
+    religious: 'plum',
+    entertainment: 'coral',
+    education: 'teal',
+    sports: 'teal',
+    'private-gathering': 'sand',
+    community: 'plum',
+    'business-promotion': 'saffron',
+    other: 'sand',
+  };
+  const upcomingEvents = events.filter((event) => !event.isPast);
+  const pastEvents = events.filter((event) => event.isPast);
+  const summary = {
+    upcoming: upcomingEvents.length,
+    vendors: events.reduce((total, event) => total + Number(event.vendor_count), 0),
+    replied: events.reduce((total, event) => total + Number(event.replied_count), 0),
+    awaiting: events.reduce((total, event) => total + Number(event.pending_count), 0),
+  };
+  const attentionEvents = upcomingEvents.filter((event) => Number(event.pending_count) > 0).slice(0, 4);
+%>
+<div class="dash">
+  <section class="d-hero">
+    <div>
+      <p class="eyebrow">Planner dashboard</p>
+      <h1>Your events, all in one place</h1>
+      <p class="d-sub">Keep dates and vendor confirmations in view as your plans come together.</p>
+    </div>
+    <a class="button primary" href="#new">＋ New event</a>
+  </section>
+
+  <details class="d-new" id="new">
+    <summary><span class="plus" aria-hidden="true">+</span>Create an event<span class="d-hint">Add the date, venue, and event type</span></summary>
+    <form class="d-form" method="post" action="/events">
+      <label>Event name<input name="title" maxlength="120" placeholder="e.g. Maya & Jordan's wedding" required></label>
+      <label>Date<input type="date" name="event_date" required></label>
+      <label>Venue<input name="venue" maxlength="160" placeholder="Venue or location"></label>
+      <label>Event type
+        <select name="event_type" required>
+          <option value="other" <%= selectedEventType === 'other' ? 'selected' : '' %>>Other (blank event)</option>
+          <% Object.entries(templates).forEach(([key, template]) => { %><option value="<%= key %>" <%= selectedEventType === key ? 'selected' : '' %>><%= template.label %></option><% }) %>
+        </select>
+      </label>
+      <label class="wide-field">Venue and arrival notes<textarea name="venue_notes" maxlength="1000" placeholder="Entrance, loading area, parking, or access details"></textarea></label>
+      <button class="primary" type="submit">Create event</button>
+    </form>
+  </details>
+
+  <ul class="d-stats" aria-label="Event and vendor summary">
+    <li class="d-stat tone-coral">
+      <span class="d-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path></svg></span>
+      <strong data-count="<%= summary.upcoming %>"><%= summary.upcoming %></strong><span>Upcoming events</span>
+    </li>
+    <li class="d-stat tone-saffron">
+      <span class="d-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"></circle><path d="M3 20v-1a6 6 0 0 1 12 0v1M16 5a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 5v1"></path></svg></span>
+      <strong data-count="<%= summary.vendors %>"><%= summary.vendors %></strong><span>Vendors invited</span>
+    </li>
+    <li class="d-stat tone-teal">
+      <span class="d-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"></path><circle cx="12" cy="12" r="10"></circle></svg></span>
+      <strong data-count="<%= summary.replied %>"><%= summary.replied %></strong><span>Vendor replies received</span>
+    </li>
+    <li class="d-stat tone-plum">
+      <span class="d-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg></span>
+      <strong data-count="<%= summary.awaiting %>"><%= summary.awaiting %></strong><span>Awaiting a reply</span>
+    </li>
+  </ul>
+
+  <div class="d-main">
+    <div>
+      <h2 class="d-section">Coming up</h2>
+      <% if (upcomingEvents.length) { %>
+        <div class="d-list">
+          <% upcomingEvents.forEach((event) => {
+            const eventDate = new Date(`${event.event_date}T12:00:00`);
+            const tone = tones[event.event_type] || 'sand';
+            const confirmedPercent = event.vendor_count ? Math.round((Number(event.confirmed_count) / Number(event.vendor_count)) * 100) : 0;
+            const pendingPercent = event.vendor_count ? Math.round((Number(event.pending_count) / Number(event.vendor_count)) * 100) : 0;
+            const when = event.daysUntil === 0 ? 'Today' : event.daysUntil === 1 ? 'Tomorrow' : `In ${event.daysUntil} days`;
+          %>
+            <article class="d-card tone-<%= tone %>">
+              <a class="d-stretch" href="/events/<%= event.id %>" aria-label="Open <%= event.title %>"></a>
+              <time class="d-date" datetime="<%= event.event_date %>">
+                <span><%= eventDate.toLocaleDateString(undefined, { month: 'short' }) %></span>
+                <strong><%= eventDate.getDate() %></strong>
+              </time>
+              <div>
+                <div class="d-top">
+                  <span class="d-chip"><%= templates[event.event_type]?.label || 'Other' %></span>
+                  <span class="d-when <%= event.daysUntil <= 7 ? 'soon' : '' %>"><%= when %></span>
+                </div>
+                <h2><%= event.title %></h2>
+                <p class="d-meta"><%= eventDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) %> · <%= event.venue || 'Venue to be confirmed' %></p>
+                <p class="d-guests"><strong><%= event.vendor_count %></strong> vendors invited · <strong><%= event.pending_count %></strong> awaiting reply</p>
+                <div class="d-bars">
+                  <div>
+                    <div class="d-bar-label"><span>Confirmed</span><strong><%= event.confirmed_count %> of <%= event.vendor_count %></strong></div>
+                    <div class="meter" role="progressbar" aria-label="Vendor confirmations" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= confirmedPercent %>"><span style="width: <%= confirmedPercent %>%"></span></div>
+                  </div>
+                  <div>
+                    <div class="d-bar-label"><span>Awaiting reply</span><strong><%= event.pending_count %></strong></div>
+                    <div class="meter pending-meter" role="progressbar" aria-label="Vendors awaiting reply" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= pendingPercent %>"><span style="width: <%= pendingPercent %>%"></span></div>
+                  </div>
+                </div>
+              </div>
+            </article>
+          <% }) %>
+        </div>
+      <% } else { %>
+        <section class="d-empty">
+          <div class="d-art" aria-hidden="true"><span></span><span></span><span></span></div>
+          <h2>No upcoming events yet</h2>
+          <p>Create an event to start organizing dates and vendor replies in one place.</p>
+        </section>
+      <% } %>
+
+      <% if (pastEvents.length) { %>
+        <details class="d-past">
+          <summary>Past events (<%= pastEvents.length %>)</summary>
+          <ul class="plain">
+            <% pastEvents.forEach((event) => { %>
+              <li><a href="/events/<%= event.id %>"><strong><%= event.title %></strong></a><span class="muted"><%= new Date(`${event.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'medium' }) %></span></li>
+            <% }) %>
+          </ul>
+        </details>
+      <% } %>
+    </div>
+
+    <aside class="d-side">
+      <section class="d-attn">
+        <h2>Vendor replies</h2>
+        <% if (attentionEvents.length) { %>
+          <p class="muted">These upcoming events still have vendors to hear from.</p>
+          <ul class="plain">
+            <% attentionEvents.forEach((event) => { %>
+              <li class="<%= event.daysUntil <= 7 ? 'lvl-soon' : '' %>">
+                <a href="/events/<%= event.id %>"><strong><%= event.title %></strong></a><br>
+                <span class="muted"><%= event.pending_count %> awaiting reply · <%= event.daysUntil === 0 ? 'today' : event.daysUntil === 1 ? 'tomorrow' : `in ${event.daysUntil} days` %></span>
+              </li>
+            <% }) %>
+          </ul>
+        <% } else { %>
+          <p class="muted">No pending vendor replies for upcoming events. You’re all caught up.</p>
+        <% } %>
+      </section>
+    </aside>
   </div>
 </div>
-<section class="panel">
-  <h2>Create an event</h2>
-  <form class="row" method="post" action="/events">
-    <label>Event name<input name="title" maxlength="120" placeholder="e.g. Maya & Jordan's wedding" required></label>
-    <label>Date<input type="date" name="event_date" required></label>
-    <label>Venue<input name="venue" maxlength="160" placeholder="Venue or location"></label>
-    <label>Event type
-      <select name="event_type" required>
-        <option value="other">Other (blank event)</option>
-        <% Object.entries(templates).forEach(([key, template]) => { %><option value="<%= key %>"><%= template.label %></option><% }) %>
-      </select>
-    </label>
-    <label class="wide-field">Venue and arrival notes<textarea name="venue_notes" maxlength="1000" placeholder="Entrance, loading area, parking, or access details"></textarea></label>
-    <button class="primary" type="submit">Create event</button>
-  </form>
-</section>
-<% if (events.length) { %>
-  <div class="cards">
-    <% events.forEach((event) => { %>
-      <article class="panel event-card">
-        <p class="eyebrow"><%= new Date(`${event.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'medium' }) %></p>
-        <h2><a href="/events/<%= event.id %>"><%= event.title %></a></h2>
-        <p><span class="badge event-type-badge"><%= templates[event.event_type]?.label || 'Other' %></span></p>
-        <p class="muted"><%= event.venue || 'Venue to be confirmed' %></p>
-        <p><strong><%= event.vendor_count %></strong> vendors · <strong><%= event.pending_count %></strong> awaiting confirmation</p>
-        <a class="button" href="/events/<%= event.id %>">Open event</a>
-      </article>
-    <% }) %>
-  </div>
-<% } else { %>
-  <section class="panel"><h2>Your first event starts here</h2><p class="muted">Create an event above, then add vendors and build its timeline.</p></section>
-<% } %>
+<script src="/dashboard.js" defer></script>
 <%- include('partials/foot') %>

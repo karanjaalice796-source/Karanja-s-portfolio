@@ -1,27 +1,69 @@
 <%- include('partials/head', { title: 'My vendor events', vendorView: true }) %>
-<div class="heading-row">
-  <div>
-    <p class="eyebrow">Vendor account</p>
-    <h1>My event invitations</h1>
-    <p class="intro">Open an event to see its details, schedule, respond to your planner, or send an invoice.</p>
-  </div>
-</div>
-<% if (vendors.length) { %>
-  <div class="cards">
-    <% vendors.forEach((vendor) => { %>
-      <article class="panel event-card">
-        <p class="eyebrow"><%= new Date(`${vendor.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'medium' }) %></p>
-        <h2><%= vendor.event_title %></h2>
-        <p class="muted"><%= vendor.venue || 'Venue to be confirmed' %></p>
-        <p><%= vendor.category || 'Event vendor' %> · <span class="badge <%= vendor.status %>"><%= vendor.status.replace('_', ' ') %></span></p>
-        <a class="button primary" href="/vendor/<%= vendor.token %>">Open event details</a>
-      </article>
-    <% }) %>
-  </div>
-<% } else { %>
-  <section class="panel">
-    <h2>No invitations linked yet</h2>
-    <p class="muted">Open the personal invitation link from your planner while signed in, then choose “Add this event to my vendor account.”</p>
+<%
+  const statusTones = {
+    confirmed: 'teal',
+    pending: 'saffron',
+    declined: 'coral',
+    changes_requested: 'plum',
+  };
+%>
+<div class="dash">
+  <section class="d-hero">
+    <div>
+      <p class="eyebrow">Vendor dashboard</p>
+      <h1>My event invitations</h1>
+      <p class="d-sub">Keep your event dates, planner requests, and service details together.</p>
+    </div>
+    <a class="button primary" href="/learn#vendors">Vendor guide</a>
   </section>
-<% } %>
+
+  <ul class="d-stats" aria-label="Vendor invitation summary">
+    <li class="d-stat tone-coral">
+      <strong><%= vendors.length %></strong><span>Linked invitations</span>
+    </li>
+    <li class="d-stat tone-teal">
+      <strong><%= vendors.filter(vendor => vendor.status === 'confirmed').length %></strong><span>Confirmed</span>
+    </li>
+    <li class="d-stat tone-saffron">
+      <strong><%= vendors.filter(vendor => vendor.status === 'pending').length %></strong><span>Awaiting your reply</span>
+    </li>
+    <li class="d-stat tone-plum">
+      <strong><%= vendors.filter(vendor => vendor.status === 'changes_requested').length %></strong><span>Need coordination</span>
+    </li>
+  </ul>
+
+  <section>
+    <h2 class="d-section">Your invitations</h2>
+    <% if (vendors.length) { %>
+      <div class="d-list vendor-event-list">
+        <% vendors.forEach((vendor) => {
+          const eventDate = new Date(`${vendor.event_date}T12:00:00`);
+          const statusLabel = vendor.status.replace('_', ' ');
+        %>
+          <article class="d-card tone-<%= statusTones[vendor.status] || 'sand' %>">
+            <time class="d-date" datetime="<%= vendor.event_date %>">
+              <span><%= eventDate.toLocaleDateString(undefined, { month: 'short' }) %></span>
+              <strong><%= eventDate.getDate() %></strong>
+            </time>
+            <div>
+              <div class="d-top">
+                <span class="d-chip"><%= vendor.category || 'Event vendor' %></span>
+                <span class="badge <%= vendor.status %>"><%= statusLabel %></span>
+              </div>
+              <h2><%= vendor.event_title %></h2>
+              <p class="d-meta"><%= eventDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) %> · <%= vendor.venue || 'Venue to be confirmed' %></p>
+              <% if (vendor.services) { %><p class="d-guests"><strong>Services:</strong> <%= vendor.services %></p><% } %>
+              <a class="button primary vendor-event-link" href="/vendor/<%= vendor.token %>">Open event details</a>
+            </div>
+          </article>
+        <% }) %>
+      </div>
+    <% } else { %>
+      <section class="d-empty">
+        <h2>No invitations linked yet</h2>
+        <p>Open your personal invitation link from a planner while signed in, then choose “Add this event to my vendor account.”</p>
+      </section>
+    <% } %>
+  </section>
+</div>
 <%- include('partials/foot') %>

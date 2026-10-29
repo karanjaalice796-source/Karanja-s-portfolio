@@ -1,0 +1,66 @@
+.planning-panel { padding: clamp(1rem, 3vw, 1.4rem); }
+.planning-panel h2 { margin-bottom: .35rem; }
+.section-heading { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: .75rem; margin-bottom: 1rem; }
+.section-heading h2 { margin-bottom: .25rem; }
+.section-heading p { margin-bottom: 0; }
+.budget-form, .guest-add-form { align-items: end; }
+.budget-form label, .guest-add-form label { flex: 1 1 155px; }
+.budget-summary, .guest-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin: 1rem 0; }
+.budget-summary > div, .guest-summary > div { display: grid; gap: .2rem; min-width: 0; padding: .8rem; border: 1px solid var(--line); border-radius: 12px; background: var(--page); }
+.budget-summary span, .guest-summary span { color: var(--muted); font-size: .82rem; }
+.budget-summary strong { overflow-wrap: anywhere; font-size: 1.05rem; }
+.guest-summary strong { font-size: 1.5rem; line-height: 1.1; }
+.budget-note { margin: .75rem 0 0; }
+.budget-warning { display: inline-block; padding: .35rem .65rem; border: 1px solid #e5b5ad; border-radius: 999px; background: rgba(163, 66, 61, .08); color: var(--red); font-size: .82rem; font-weight: 750; }
+.budget-summary .over-budget { color: var(--red); }
+.guest-list { margin-top: 1rem; }
+.guest-list > li { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem; }
+.guest-edit-form { flex: 1 1 650px; align-items: end; }
+.guest-edit-form label { flex: 1 1 130px; }
+.guest-list > li > form:last-child { flex: 0 0 auto; margin: 0; }
+.guest-list button { padding: .55rem .7rem; }
+.event-tools-nav { position: sticky; top: 76px; z-index: 5; display: flex; flex-wrap: wrap; gap: .55rem; margin: -1rem 0 1.25rem; padding: .5rem 0; background: var(--page); }
+.event-tools-nav a { padding: .55rem .85rem; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); font-size: .88rem; font-weight: 750; text-decoration: none; }
+.event-tools-nav a:hover { border-color: var(--accent); background: var(--panel); }
+.planning-panel[id] { scroll-margin-top: 7rem; }
+.guest-summary, .catering-summary { grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); }
+.guest-actions { display: flex; flex: 1 1 220px; flex-wrap: wrap; align-items: center; gap: .65rem; }
+.guest-actions form { margin: 0; }
+.guest-actions small { flex: 1 1 100%; }
+.guest-qr { position: relative; }
+.guest-qr summary, .checkin-scanner > summary { color: var(--accent-dark); cursor: pointer; font-size: .86rem; font-weight: 750; }
+.guest-qr img { display: block; width: min(220px, 100%); height: auto; margin: .6rem 0; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.guest-qr small { display: block; max-width: 220px; }
+.checkin-scanner { margin-top: 1.2rem; padding: 1rem; border: 1px solid var(--line); border-radius: 14px; background: var(--page); }
+.scanner-controls { display: flex; flex-wrap: wrap; gap: .6rem; }
+.checkin-scanner video { display: block; width: min(100%, 440px); max-height: 340px; margin: .8rem 0; border-radius: 12px; background: #111; object-fit: cover; }
+.manual-checkin { align-items: end; }
+.catering-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin: 1rem 0; }
+.catering-summary > div { display: grid; gap: .2rem; min-width: 0; padding: .8rem; border: 1px solid var(--line); border-radius: 12px; background: var(--page); }
+.catering-summary strong { font-size: 1.2rem; overflow-wrap: anywhere; }
+.catering-summary span { color: var(--muted); font-size: .82rem; }
+.allowance-form { align-items: end; margin: 1rem 0; }
+.allowance-form label { max-width: 220px; }
+.catering-add-form { align-items: end; margin: 1rem 0; }
+.catering-add-form label { flex: 1 1 150px; }
+.catering-table-wrap { margin: 1rem 0; }
+.catering-table { min-width: 920px; }
+.catering-table input { min-width: 100px; }
+.catering-table .quantity-fields { display: flex; gap: .35rem; }
+.catering-table .quantity-fields input:first-child { width: 130px; }
+.catering-table .quantity-fields input:last-child { width: 100px; }
+.catering-actions { display: flex; align-items: center; gap: .4rem; }
+.catering-actions form { margin: 0; }
+.catering-actions button { padding: .5rem .65rem; }
+.share-catering-form { align-items: end; margin-top: 1rem; }
+.share-catering-form label { flex: 1 1 250px; }
+.guest-rsvp-panel { max-width: 620px; margin: clamp(2rem, 8vh, 5rem) auto; }
+.guest-rsvp-panel h1 { font-size: clamp(2rem, 5vw, 2.8rem); }
+.guest-rsvp-actions { align-items: center; margin: 1.25rem 0; }
+.guest-rsvp-actions button { min-width: 150px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+@media (max-width: 700px) {
+  .budget-summary, .guest-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .catering-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .guest-edit-form { flex-basis: 100%; }
+}

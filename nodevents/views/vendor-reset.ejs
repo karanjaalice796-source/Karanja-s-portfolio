@@ -1,0 +1,23 @@
+<%- include('partials/head', { title: 'Choose a new vendor password', vendorView: true }) %>
+<section class="auth-container">
+  <p class="eyebrow">Vendor account access</p>
+  <h1 class="auth-heading">Choose a new password</h1>
+  <p class="auth-intro">Use a password between 8 and 128 characters.</p>
+  <% if (error) { %><p class="error" role="alert"><%= error %></p><% } %>
+  <form class="auth-form" method="post" action="/vendor/reset/<%= token %>">
+    <label class="auth-field">New password
+      <span class="password-field auth-password-field">
+        <input class="auth-input" type="password" name="password" autocomplete="new-password" minlength="8" maxlength="128" data-password-input required>
+        <button class="password-toggle" type="button" data-password-toggle aria-label="Show password" aria-pressed="false">Show</button>
+      </span>
+    </label>
+    <label class="auth-field">Confirm new password
+      <span class="password-field auth-password-field">
+        <input class="auth-input" type="password" name="confirm" autocomplete="new-password" minlength="8" maxlength="128" data-password-input required>
+        <button class="password-toggle" type="button" data-password-toggle aria-label="Show password" aria-pressed="false">Show</button>
+      </span>
+    </label>
+    <button class="login-button" type="submit">Update password</button>
+  </form>
+</section>
+<%- include('partials/foot') %>

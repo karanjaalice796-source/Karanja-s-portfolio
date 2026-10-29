@@ -1,0 +1,41 @@
+<%- include('partials/head', { title: 'Admin dashboard' }) %>
+<div class="heading-row">
+  <div>
+    <p class="eyebrow">Platform administration</p>
+    <h1>Admin dashboard</h1>
+    <p class="intro">Review platform totals and manage planner account access.</p>
+  </div>
+</div>
+<section class="admin-stats" aria-label="Platform totals">
+  <div class="panel"><strong><%= totals.planners %></strong><span>Active planner accounts</span></div>
+  <div class="panel"><strong><%= totals.suspended %></strong><span>Suspended accounts</span></div>
+  <div class="panel"><strong><%= totals.events %></strong><span>Events created</span></div>
+  <div class="panel"><strong><%= totals.vendors %></strong><span>Vendor invitations</span></div>
+</section>
+<section class="panel admin-accounts">
+  <h2>Planner accounts</h2>
+  <p class="muted">Suspending an account signs the planner out on their next request and disconnects their live event updates. Admin accounts cannot be suspended here.</p>
+  <% if (planners.length) { %>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Planner</th><th>Account created</th><th>Events</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody>
+          <% planners.forEach((planner) => { %>
+            <tr>
+              <td><strong><%= planner.name %></strong><br><span class="muted"><%= planner.email %></span></td>
+              <td><%= new Date(`${planner.created_at.replace(' ', 'T')}Z`).toLocaleDateString(undefined, { dateStyle: 'medium' }) %></td>
+              <td><%= planner.event_count %></td>
+              <td><span class="badge <%= planner.is_suspended ? 'declined' : 'confirmed' %>"><%= planner.is_suspended ? 'Suspended' : 'Active' %></span></td>
+              <td>
+                <form method="post" action="/admin/users/<%= planner.id %>/<%= planner.is_suspended ? 'restore' : 'suspend' %>">
+                  <button type="submit"><%= planner.is_suspended ? 'Restore account' : 'Suspend account' %></button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } else { %><p class="muted">No planner accounts to manage yet.</p><% } %>
+</section>
+<%- include('partials/foot') %>

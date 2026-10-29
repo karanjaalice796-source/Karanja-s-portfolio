@@ -1,0 +1,32 @@
+<%- include('partials/head', { title: 'Vendor profile', vendorView: true }) %>
+<section class="panel vendor-profile-editor">
+  <p class="eyebrow">Find Vendors directory</p>
+  <h1>Your public vendor profile</h1>
+  <p class="intro">Publish a profile so planners can find your services and invite your account to an event. Your account email is not shown in the public directory.</p>
+  <% if (profile?.is_published) { %>
+    <p class="profile-published-note">Your profile is published. <a href="/vendors/<%= profile.id %>">View public profile</a>.</p>
+  <% } else if (profile) { %>
+    <p class="muted">This profile is saved as a draft and is not visible in Find Vendors.</p>
+  <% } %>
+  <form class="stack" method="post" action="/vendor/profile">
+    <label>Business or display name<input name="business_name" maxlength="120" value="<%= profile?.business_name || vendorUser.name %>" required></label>
+    <fieldset class="service-category-picker">
+      <legend>Categories of services provided</legend>
+      <p class="muted">Select every service type you offer so planners can find you in the right category.</p>
+      <div class="service-category-options">
+        <% vendorServiceCategories.forEach((serviceCategory) => { %>
+          <label><input type="checkbox" name="service_categories" value="<%= serviceCategory %>" <%= selectedServiceCategories.includes(serviceCategory) ? 'checked' : '' %>><span><%= serviceCategory %></span></label>
+        <% }) %>
+      </div>
+    </fieldset>
+    <label>Services offered<textarea name="services" maxlength="1500" placeholder="e.g. Buffet setup, meal service, cleanup, and delivery"><%= profile?.services || '' %></textarea></label>
+    <label>About your business<textarea name="description" maxlength="2000" placeholder="Tell planners about your experience and what makes your services a good fit"><%= profile?.description || '' %></textarea></label>
+    <label>Service area or location<input name="location" maxlength="160" value="<%= profile?.location || '' %>" placeholder="e.g. Nairobi and Kiambu"></label>
+    <label class="profile-publish-toggle">
+      <input type="checkbox" name="is_published" <%= profile?.is_published ? 'checked' : '' %>>
+      Publish this profile in Find Vendors
+    </label>
+    <button class="primary" type="submit">Save vendor profile</button>
+  </form>
+</section>
+<%- include('partials/foot') %>

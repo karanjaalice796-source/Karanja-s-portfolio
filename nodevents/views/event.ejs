@@ -1,4 +1,19 @@
-<%- include('partials/head', { title: event.title }) %>
+<%
+  const toolTitles = {
+    overview: event.title,
+    budget: `${event.title} · Budget Planner`,
+    guests: `${event.title} · Guest Management`,
+    catering: `${event.title} · Catering Management`,
+  };
+%>
+<%- include('partials/head', { title: toolTitles[toolPage], activeTool: toolPage }) %>
+<%
+  const money = (amount) => `${event.budget_currency} ${Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const cateringMoney = money;
+  const overBudget = Number(event.budget_total) > 0 && budgetTotals.comparison > Number(event.budget_total);
+  const listedGuests = guestTotals.attending + guestTotals.declined + guestTotals.awaiting;
+%>
+<div class="planner-event">
 <div data-event-id="<%= event.id %>"></div>
 <div class="heading-row">
   <div>
@@ -16,6 +31,163 @@
   <div class="stat"><strong><%= vendors.filter(vendor => vendor.status === 'pending').length %></strong><span>Awaiting response</span></div>
   <div class="stat"><strong><%= invoices.filter(invoice => invoice.status !== 'paid').length %></strong><span>Invoices to review/pay</span></div>
 </div>
+<nav class="event-tools-nav" aria-label="Event planning tools">
+  <a class="<%= toolPage === 'budget' ? 'active' : '' %>" href="/events/<%= event.id %>/budget">Budget Planner</a>
+  <a class="<%= toolPage === 'guests' ? 'active' : '' %>" href="/events/<%= event.id %>/guests">Guest Management</a>
+  <a class="<%= toolPage === 'catering' ? 'active' : '' %>" href="/events/<%= event.id %>/catering">Catering Management</a>
+  <a href="/vendors">Find Vendors</a>
+</nav>
+<% if (toolPage === 'overview' || toolPage === 'budget') { %>
+<section class="panel planning-panel" id="budget-management">
+  <div class="section-heading">
+    <div><h2>Event budget</h2><p class="muted">Estimate vendor costs against invoices and payments.</p></div>
+    <% if (overBudget) { %><span class="budget-warning">Over budget</span><% } %>
+  </div>
+  <form class="row budget-form" method="post" action="/events/<%= event.id %>/budget">
+    <label>Total budget<input type="number" name="budget_total" min="0" max="9999999999.99" step="0.01" value="<%= Number(event.budget_total).toFixed(2) %>" required></label>
+    <label>Currency code<input name="budget_currency" maxlength="3" pattern="[A-Za-z]{3}" value="<%= event.budget_currency %>" aria-describedby="currency-help" required><small id="currency-help">Three-letter code, e.g. KES, USD.</small></label>
+    <label>Expected guests<input type="number" name="expected_guests" min="0" max="100000" step="1" value="<%= event.expected_guests %>" required></label>
+    <button type="submit">Save budget</button>
+  </form>
+  <div class="budget-summary">
+    <div><span>Planned vendor estimates</span><strong><%= money(budgetTotals.estimated) %></strong></div>
+    <div><span>Invoices received</span><strong><%= money(budgetTotals.invoiced) %></strong></div>
+    <div><span>Paid so far</span><strong><%= money(budgetTotals.paid) %></strong></div>
+    <div><span>Budget remaining</span><strong class="<%= overBudget ? 'over-budget' : '' %>"><%= money(Number(event.budget_total) - budgetTotals.comparison) %></strong></div>
+  </div>
+  <p class="muted budget-note">
+    Planning headcount: <strong><%= headcount %></strong>
+    <% if (guests.length) { %> (attending plus awaiting RSVPs)<% } else { %> (expected guests until you add a guest list)<% } %>.
+    <% if (headcount) { %> Planned cost per person: <strong><%= money(budgetTotals.estimated / headcount) %></strong>; budget per person: <strong><%= money(Number(event.budget_total) / headcount) %></strong>.<% } %>
+  </p>
+  <% if (guests.length && listedGuests > Number(event.expected_guests)) { %>
+    <p class="budget-warning" role="status">Your guest list includes <%= listedGuests %> people, more than the expected <%= event.expected_guests %>.</p>
+  <% } %>
+</section>
+<% } %>
+<% if (toolPage === 'overview' || toolPage === 'guests') { %>
+<section class="panel planning-panel" id="guest-management">
+  <div class="section-heading">
+    <div><h2>Guest management</h2><p class="muted">Invite guests, track RSVPs, and check them in. Group entries count as people, not rows.</p></div>
+  </div>
+  <div class="guest-summary" aria-label="RSVP totals">
+    <div><strong><%= guestTotals.invited %></strong><span>Total invited</span></div>
+    <div><strong><%= guestTotals.attending %></strong><span>Confirmed attendance</span></div>
+    <div><strong><%= guestTotals.declined %></strong><span>Declined</span></div>
+    <div><strong><%= guestTotals.awaiting %></strong><span>Awaiting reply</span></div>
+    <div><strong><%= guestTotals.checkedIn %></strong><span>Checked in</span></div>
+  </div>
+  <form class="row guest-add-form" method="post" action="/events/<%= event.id %>/guests">
+    <label>Guest or household name<input name="name" maxlength="120" placeholder="e.g. Amina Otieno" required></label>
+    <label>Email for invitation<input type="email" name="email" maxlength="160" placeholder="guest@example.com"></label>
+    <label>People in group<input type="number" name="group_size" min="1" max="1000" value="1" required></label>
+    <label>RSVP status<select name="rsvp_status"><option value="awaiting">Awaiting reply</option><option value="attending">Attending</option><option value="declined">Declined</option></select></label>
+    <button class="primary" type="submit">Add guest</button>
+  </form>
+  <% if (guests.length) { %>
+    <ul class="plain guest-list">
+      <% guests.forEach((guest) => { %>
+        <li>
+          <form class="row guest-edit-form" method="post" action="/events/<%= event.id %>/guests/<%= guest.id %>/update">
+            <label>Name<input name="name" maxlength="120" value="<%= guest.name %>" required></label>
+            <label>Email<input type="email" name="email" maxlength="160" value="<%= guest.email %>" placeholder="guest@example.com"></label>
+            <label>People<input type="number" name="group_size" min="1" max="1000" value="<%= guest.group_size %>" required></label>
+            <label>RSVP<select name="rsvp_status"><option value="awaiting" <%= guest.rsvp_status === 'awaiting' ? 'selected' : '' %>>Awaiting</option><option value="attending" <%= guest.rsvp_status === 'attending' ? 'selected' : '' %>>Attending</option><option value="declined" <%= guest.rsvp_status === 'declined' ? 'selected' : '' %>>Declined</option></select></label>
+            <button type="submit">Save</button>
+          </form>
+          <div class="guest-actions">
+            <% if (guest.email) { %>
+              <form method="post" action="/events/<%= event.id %>/guests/<%= guest.id %>/invite"><button type="submit">Send invitation / resend</button></form>
+            <% } else { %><small>Add an email address to send the private RSVP link and check-in QR.</small><% } %>
+            <details class="guest-qr">
+              <summary>Show check-in QR</summary>
+              <img src="/events/<%= event.id %>/guests/<%= guest.id %>/qr" alt="Check-in QR code for <%= guest.name %>" width="220" height="220" loading="lazy">
+              <small>Keep this code private; the event planner scans it at arrival.</small>
+            </details>
+            <% if (guest.checked_in_at) { %>
+              <span class="badge confirmed">Checked in · <%= new Date(`${guest.checked_in_at.replace(' ', 'T')}Z`).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) %></span>
+            <% } else { %>
+              <form method="post" action="/events/<%= event.id %>/guests/check-in">
+                <input type="hidden" name="checkin_token" value="<%= guest.checkin_token %>">
+                <button type="submit">Check in manually</button>
+              </form>
+            <% } %>
+          </div>
+          <form method="post" action="/events/<%= event.id %>/guests/<%= guest.id %>/delete"><button type="submit" aria-label="Remove <%= guest.name %>">Remove</button></form>
+        </li>
+      <% }) %>
+    </ul>
+  <% } else { %><p class="muted">No guests yet. Add guests to calculate headcount from RSVPs.</p><% } %>
+  <details class="checkin-scanner">
+    <summary>Scan a guest check-in QR code</summary>
+    <p class="muted">Camera access requires permission and a secure connection (localhost or HTTPS). You can also enter a code manually.</p>
+    <div class="scanner-controls">
+      <button type="button" class="primary" data-start-scanner>Start camera</button>
+      <button type="button" data-stop-scanner disabled>Stop camera</button>
+    </div>
+    <video data-checkin-video muted playsinline aria-label="Guest check-in QR scanner"></video>
+    <p data-scanner-status class="muted" role="status" aria-live="polite">Scanner is stopped.</p>
+    <form class="row manual-checkin" method="post" action="/events/<%= event.id %>/guests/check-in">
+      <label>Check-in code<input name="checkin_token" pattern="[a-fA-F0-9]{64}" maxlength="64" required></label>
+      <button type="submit">Check in guest</button>
+    </form>
+  </details>
+</section>
+<% } %>
+<% if (toolPage === 'overview' || toolPage === 'catering') { %>
+<section class="panel planning-panel" id="catering-management">
+  <div class="section-heading">
+    <div><h2>Catering management</h2><p class="muted">Menu quantities use confirmed RSVPs, not check-ins. Set recipe quantities that suit your menu; estimates are not dietary or recipe advice.</p></div>
+  </div>
+  <div class="catering-summary">
+    <div><strong><%= guestTotals.attending %></strong><span>Confirmed guests</span></div>
+    <div><strong><%= event.catering_allowance_percent %>%</strong><span>Extra allowance</span></div>
+    <div><strong><%= cateringTotals.portions %></strong><span>Planned portions</span></div>
+    <div><strong><%= cateringMoney(cateringTotals.estimatedCost) %></strong><span>Estimated food cost</span></div>
+  </div>
+  <form class="row allowance-form" method="post" action="/events/<%= event.id %>/catering/allowance">
+    <label>Extra allowance (%)<input type="number" name="allowance_percent" min="0" max="200" step="0.01" value="<%= Number(event.catering_allowance_percent).toFixed(2) %>" required></label>
+    <button type="submit">Update portions</button>
+  </form>
+  <p class="muted">Calculation: <strong><%= guestTotals.attending %> confirmed guests × (1 + <%= event.catering_allowance_percent %>% allowance) = <%= cateringTotals.portions %> planned portions</strong>. Each food quantity equals portions × quantity per portion, unless you enter a final adjusted quantity.</p>
+  <form class="row catering-add-form" method="post" action="/events/<%= event.id %>/catering/items">
+    <label>Food item<input name="name" maxlength="100" placeholder="e.g. Rice" required></label>
+    <label>Quantity per portion<input type="number" name="amount_per_portion" min="0" max="9999999999.999" step="0.001" placeholder="e.g. 0.1" required></label>
+    <label>Unit<input name="unit" maxlength="24" placeholder="kg, litres, portions…" required></label>
+    <label>Cost per unit (<%= event.budget_currency %>)<input type="number" name="cost_per_unit" min="0" max="9999999999.99" step="0.01" value="0" required></label>
+    <button class="primary" type="submit">Add menu item</button>
+  </form>
+  <% if (cateringItems.length) { %>
+    <div class="table-scroll catering-table-wrap">
+      <table class="catering-table">
+        <thead><tr><th>Food item</th><th>Recipe amount per portion</th><th>Unit cost</th><th>Calculated quantity</th><th>Final quantity</th><th>Estimate</th><th>Actions</th></tr></thead>
+        <tbody>
+          <% cateringItems.forEach((item) => { %>
+            <tr>
+              <td><form id="catering-item-<%= item.id %>" method="post" action="/events/<%= event.id %>/catering/items/<%= item.id %>/update"></form><input form="catering-item-<%= item.id %>" name="name" maxlength="100" value="<%= item.name %>" required></td>
+              <td><div class="quantity-fields"><input form="catering-item-<%= item.id %>" type="number" name="amount_per_portion" min="0" step="0.001" value="<%= Number(item.amount_per_portion).toFixed(3) %>" required><input form="catering-item-<%= item.id %>" name="unit" maxlength="24" value="<%= item.unit %>" required></div></td>
+              <td><label class="sr-only" for="cost-<%= item.id %>">Cost per unit</label><input id="cost-<%= item.id %>" form="catering-item-<%= item.id %>" type="number" name="cost_per_unit" min="0" step="0.01" value="<%= Number(item.cost_per_unit).toFixed(2) %>" required></td>
+              <td><%= Number(item.calculated_quantity).toLocaleString(undefined, { maximumFractionDigits: 3 }) %> <%= item.unit %></td>
+              <td><label class="sr-only" for="override-<%= item.id %>">Final quantity override</label><input id="override-<%= item.id %>" form="catering-item-<%= item.id %>" type="number" name="quantity_override" min="0" step="0.001" value="<%= item.quantity_override === null ? '' : item.quantity_override %>" placeholder="Use calculation"></td>
+              <td><%= cateringMoney(item.estimated_cost) %></td>
+              <td class="catering-actions"><button form="catering-item-<%= item.id %>" type="submit">Save</button><form method="post" action="/events/<%= event.id %>/catering/items/<%= item.id %>/delete"><button type="submit">Remove</button></form></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <a class="button" href="/events/<%= event.id %>/catering/shopping-list.csv">Download shopping list (CSV)</a>
+    <% const cateringVendors = vendors.filter(vendor => vendor.category.toLowerCase().includes('cater') && vendor.email); %>
+    <% if (cateringVendors.length) { %>
+      <form class="row share-catering-form" method="post" action="/events/<%= event.id %>/catering/share">
+        <label>Share requirements with caterer<select name="vendor_id" required><% cateringVendors.forEach(vendor => { %><option value="<%= vendor.id %>"><%= vendor.name %> · <%= vendor.email %></option><% }) %></select></label>
+        <button type="submit">Email requirements</button>
+      </form>
+    <% } else { %><p class="muted">Add an emailed vendor with a Catering category to share requirements by email.</p><% } %>
+  <% } else { %><p class="muted">No menu items yet. Add your own portions and units; actual quantities depend on your recipes and serving choices.</p><% } %>
+</section>
+<% } %>
+<% if (toolPage === 'overview') { %>
 <section class="panel">
   <h2>Venue and host sharing</h2>
   <form class="stack" method="post" action="/events/<%= event.id %>/venue">
@@ -36,12 +208,15 @@
   <% } %>
 </section>
 <div class="grid">
-  <section class="panel">
+  <section class="panel" id="vendor-management">
     <h2>Add vendor</h2>
     <form class="stack" method="post" action="/events/<%= event.id %>/vendors">
       <label>Vendor name<input name="name" maxlength="100" required></label>
       <label>Category<input name="category" maxlength="80" placeholder="Catering, DJ, photography…"></label>
+      <label>Services for this event<textarea name="services" maxlength="1000" placeholder="e.g. Buffet setup, meal service, and cleanup"></textarea></label>
       <label>Email <small>(optional)</small><input type="email" name="email" maxlength="160"></label>
+      <label>Fixed estimate<input type="number" name="estimated_cost" min="0" max="9999999999.99" step="0.01" value="0"></label>
+      <label>Cost per guest<input type="number" name="cost_per_guest" min="0" max="9999999999.99" step="0.01" value="0"></label>
       <button class="primary" type="submit">Add vendor</button>
     </form>
   </section>
@@ -57,7 +232,8 @@
   </section>
 </div>
 <section class="panel">
-  <h2>Vendor confirmations</h2>
+  <h2>Vendor availability and replies</h2>
+  <p class="muted">A confirmed reply means available for this event date; a decline means unavailable. A change request needs follow-up.</p>
   <p class="muted email-settings">
     <%= mailConfigured
       ? `SMTP is configured. Pending vendors with email addresses are reminded every ${reminderHours} hours, up to ${maxReminders} times.`
@@ -67,8 +243,15 @@
     <ul class="plain">
       <% vendors.forEach((vendor) => { %>
         <li class="vendor-row">
-          <div><strong><%= vendor.name %></strong><br><small><%= vendor.category || 'Vendor' %><%= vendor.email ? ` · ${vendor.email}` : '' %></small></div>
-          <span class="badge <%= vendor.status %>"><%= vendor.status.replace('_', ' ') %></span>
+          <div>
+            <strong><%= vendor.name %></strong><br>
+            <small><%= vendor.category || 'Vendor' %><%= vendor.email ? ` · ${vendor.email}` : '' %></small><br>
+            <% if (vendor.services) { %><small>Services: <%= vendor.services %></small><br><% } %>
+            <% if (vendor.estimated_cost || vendor.cost_per_guest) { %>
+              <small>Estimate: <%= money(vendor.estimated_cost + vendor.cost_per_guest * headcount) %></small>
+            <% } else { %><small class="muted">Add an estimate in Edit vendor details.</small><% } %>
+          </div>
+          <span class="badge <%= vendor.status %>"><%= vendor.availabilityLabel %></span>
           <div class="vendor-tools">
             <input class="link-box" aria-label="Private link for <%= vendor.name %>" readonly value="<%= vendor.privateUrl %>" onclick="this.select()">
             <small>Personal link for <%= vendor.name %>. Share it only with this vendor. Expires after <%= vendor.linkExpiresOn %>.</small>
@@ -77,7 +260,10 @@
               <form class="stack" method="post" action="/events/<%= event.id %>/vendors/<%= vendor.id %>/update">
                 <label>Name<input name="name" maxlength="100" value="<%= vendor.name %>" required></label>
                 <label>Category<input name="category" maxlength="80" value="<%= vendor.category %>"></label>
+                <label>Services for this event<textarea name="services" maxlength="1000"><%= vendor.services %></textarea></label>
                 <label>Email<input type="email" name="email" maxlength="160" value="<%= vendor.email %>"></label>
+                <label>Fixed estimate<input type="number" name="estimated_cost" min="0" max="9999999999.99" step="0.01" value="<%= Number(vendor.estimated_cost).toFixed(2) %>"></label>
+                <label>Cost per guest<input type="number" name="cost_per_guest" min="0" max="9999999999.99" step="0.01" value="<%= Number(vendor.cost_per_guest).toFixed(2) %>"></label>
                 <button type="submit">Save vendor</button>
               </form>
             </details>
@@ -124,7 +310,7 @@
         <tr>
           <td><%= invoice.vendor_name %></td>
           <td><a href="/invoices/<%= invoice.id %>/download"><%= invoice.original_name %></a></td>
-          <td><%= Number(invoice.amount).toFixed(2) %></td>
+          <td><%= money(invoice.amount) %></td>
           <td><span class="badge <%= invoice.status %>"><%= invoice.status %></span></td>
           <td><% if (invoice.status === 'sent') { %>
             <div class="actions">
@@ -143,4 +329,7 @@
   <h2>Recent changes</h2>
   <% if (changes.length) { %><ul class="plain"><% changes.forEach(change => { %><li><strong><%= change.message %></strong><br><small><%= change.created_at %></small></li><% }) %></ul><% } else { %><p class="muted">Updates to vendors and the timeline will be listed here.</p><% } %>
 </section>
+<% } %>
+</div>
+<script src="/guest-checkin.js" defer></script>
 <%- include('partials/foot') %>

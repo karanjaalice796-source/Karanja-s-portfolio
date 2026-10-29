@@ -17,6 +17,11 @@
   document.addEventListener('pointerout', track);
 
   document.addEventListener('click', function (event) {
+    var button = event.target.closest && event.target.closest('[data-back-to-top]');
+    if (button) window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+  });
+
+  document.addEventListener('click', function (event) {
     var button = event.target.closest && event.target.closest('button, .button');
     if (!button || button.disabled || prefersReducedMotion()) return;
     var rect = button.getBoundingClientRect();

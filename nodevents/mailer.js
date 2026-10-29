@@ -19,9 +19,12 @@ if (configured) {
   });
 }
 
-async function sendMail({ to, subject, text }) {
+async function sendMail({ to, subject, text, attachments = [] }) {
   if (!configured) {
-    console.log(`\n[demo mode: email not actually sent]\nTo: ${to}\nSubject: ${subject}\n\n${text}\n`);
+    const attachmentNote = attachments.length
+      ? `\nAttachments: ${attachments.map((attachment) => attachment.filename).join(', ')}`
+      : '';
+    console.log(`\n[demo mode: email not actually sent]\nTo: ${to}\nSubject: ${subject}\n\n${text}${attachmentNote}\n`);
     return true;
   }
 
@@ -31,6 +34,7 @@ async function sendMail({ to, subject, text }) {
       to,
       subject,
       text,
+      attachments,
     });
     return true;
   } catch (error) {

@@ -18,10 +18,14 @@
         <input class="auth-input" type="email" name="email" autocomplete="email" maxlength="160" placeholder="E-mail" required>
       </label>
       <label class="auth-field">Password
-        <input class="auth-input" type="password" name="password" autocomplete="current-password" maxlength="128" placeholder="Password" required>
+        <span class="password-field auth-password-field">
+          <input class="auth-input" type="password" name="password" autocomplete="current-password" maxlength="128" placeholder="Password" data-password-input required>
+          <button class="password-toggle" type="button" data-password-toggle aria-label="Show password" aria-pressed="false">Show</button>
+        </span>
       </label>
       <button class="login-button" type="submit">Sign in</button>
     </form>
+    <p class="auth-recovery-link"><a href="/vendor/forgot">Forgot password?</a></p>
   </div>
   <div id="vendor-register-panel" role="tabpanel" aria-labelledby="vendor-register-tab" data-auth-panel="register" <%= mode === 'login' ? 'hidden' : '' %>>
     <form class="auth-form" method="post" action="<%= vendor ? `/vendor/${vendor.token}/register` : '/vendor/register' %>">
@@ -35,7 +39,10 @@
         </label>
       <% } %>
       <label class="auth-field">Create password <small>(8 characters or more)</small>
-        <input class="auth-input" type="password" name="password" autocomplete="new-password" minlength="8" maxlength="128" required>
+        <span class="password-field auth-password-field">
+          <input class="auth-input" type="password" name="password" autocomplete="new-password" minlength="8" maxlength="128" data-password-input required>
+          <button class="password-toggle" type="button" data-password-toggle aria-label="Show password" aria-pressed="false">Show</button>
+        </span>
       </label>
       <button class="login-button" type="submit">Create account</button>
     </form>

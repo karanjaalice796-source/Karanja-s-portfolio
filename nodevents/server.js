@@ -9,9 +9,29 @@ const session = require('express-session');
 const multer = require('multer');
 const { Server } = require('socket.io');
 const PDFDocument = require('pdfkit');
+const QRCode = require('qrcode');
 const db = require('./db');
 const { sendMail, configured: mailConfigured } = require('./mailer');
 const { templates, isEventType, eventTypeLabel, createTemplateEntries } = require('./templates');
+
+const vendorServiceCategories = [
+  'Catering',
+  'Venue',
+  'Photography',
+  'Videography',
+  'Decoration',
+  'Florist',
+  'Music and DJ',
+  'MC and Host',
+  'Event planning',
+  'Rentals and equipment',
+  'Transport',
+  'Cake and desserts',
+  'Hair and makeup',
+  'Security',
+  'Cleaning',
+  'Other',
+];
 
 const app = express();
 const server = http.createServer(app);
@@ -68,11 +88,26 @@ app.use((request, response, next) => {
       return response.sendStatus(403);
     }
   }
-  response.locals.user = request.session.user || null;
+  response.locals.user = null;
+  response.locals.isAdmin = false;
   response.locals.vendorUser = request.session.vendorUser || null;
   response.locals.vendorView = request.path.startsWith('/vendor');
   response.locals.notice = request.session.notice || null;
   delete request.session.notice;
+  const sessionUserId = request.session.user?.id;
+  if (!sessionUserId) return next();
+  const account = db.prepare('SELECT id, name, email, is_admin, is_suspended FROM users WHERE id = ?')
+    .get(sessionUserId);
+  if (!account || account.is_suspended) {
+    return request.session.destroy((error) => {
+      if (error) return next(error);
+      response.clearCookie('nodevents.sid');
+      next();
+    });
+  }
+  request.currentUser = account;
+  response.locals.user = { id: account.id, name: account.name, email: account.email };
+  response.locals.isAdmin = Boolean(account.is_admin);
   next();
 });
 
@@ -248,7 +283,7 @@ async function completeOauthSignIn(request, response, next, provider, claims) {
   }
 
   let user = db.prepare(`
-    SELECT users.id, users.name, users.email
+    SELECT users.id, users.name, users.email, users.is_suspended
     FROM oauth_accounts JOIN users ON users.id = oauth_accounts.user_id
     WHERE oauth_accounts.provider = ? AND oauth_accounts.provider_subject = ?
   `).get(provider, claims.sub);
@@ -259,7 +294,7 @@ async function completeOauthSignIn(request, response, next, provider, claims) {
     db.exec('BEGIN');
     try {
       const concurrentlyLinkedUser = db.prepare(`
-        SELECT users.id, users.name, users.email
+        SELECT users.id, users.name, users.email, users.is_suspended
         FROM oauth_accounts JOIN users ON users.id = oauth_accounts.user_id
         WHERE oauth_accounts.provider = ? AND oauth_accounts.provider_subject = ?
       `).get(provider, claims.sub);
@@ -283,6 +318,10 @@ async function completeOauthSignIn(request, response, next, provider, claims) {
     }
   }
 
+  if (user.is_suspended) {
+    return renderAuth(response, 'This account is suspended. Contact the site administrator for help.', 403);
+  }
+
   request.session.regenerate((error) => {
     if (error) return next(error);
     request.session.user = { id: user.id, name: user.name, email: user.email };
@@ -291,7 +330,13 @@ async function completeOauthSignIn(request, response, next, provider, claims) {
 }
 
 function requireAuth(request, response, next) {
-  if (!request.session.user) return response.redirect('/auth');
+  if (!request.currentUser) return response.redirect('/auth');
+  next();
+}
+
+function requireAdmin(request, response, next) {
+  if (!request.currentUser) return response.redirect('/auth');
+  if (!request.currentUser.is_admin) return response.sendStatus(403);
   next();
 }
 
@@ -341,10 +386,33 @@ function clientPageUrl(token) {
   return new URL(`/client/${token}`, origin).href;
 }
 
+function guestRsvpUrl(token, request) {
+  const origin = process.env.APP_BASE_URL || `${request.protocol}://${request.get('host')}`;
+  return new URL(`/guest/rsvp/${token}`, origin).href;
+}
+
 function isValidDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function parseAmount(value) {
+  const text = String(value ?? '0').trim();
+  if (!/^\d{1,10}(?:\.\d{1,2})?$/.test(text)) return null;
+  const amount = Number(text);
+  return Number.isFinite(amount) ? amount : null;
+}
+
+function parseQuantity(value) {
+  const text = String(value ?? '').trim();
+  if (!/^\d{1,10}(?:\.\d{1,3})?$/.test(text)) return null;
+  const amount = Number(text);
+  return Number.isFinite(amount) ? amount : null;
+}
+
+function formatQuantity(value) {
+  return String(Number(Number(value).toFixed(3)));
 }
 
 function resetTokenHash(token) {
@@ -410,6 +478,37 @@ async function sendVendorInvite(vendor, event, reminder, quiet = false) {
   return sent;
 }
 
+async function sendGuestInvitation(guest, event, request) {
+  const checkinQr = await QRCode.toBuffer(guest.checkin_token, { type: 'png', width: 320, margin: 2 });
+  return sendMail({
+    to: guest.email,
+    subject: `Invitation: ${event.title}`,
+    text: [
+      `Hello ${guest.name},`,
+      '',
+      `You are invited to ${event.title} on ${event.event_date}${event.venue ? ` at ${event.venue}` : ''}.`,
+      `This invitation is for ${guest.group_size} ${guest.group_size === 1 ? 'person' : 'people'}.`,
+      '',
+      'Please reply using your private RSVP link:',
+      guestRsvpUrl(guest.rsvp_token, request),
+      '',
+      'Your check-in QR code is attached. Please show it to the event planner when you arrive.',
+      'Do not forward your private invitation or QR code.',
+    ].join('\n'),
+    attachments: [{
+      filename: 'event-check-in.png',
+      content: checkinQr,
+      contentType: 'image/png',
+    }],
+  });
+}
+
+function csvCell(value) {
+  let text = String(value ?? '');
+  if (/^[\s]*[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
 async function emailEventChange(eventId, vendorId, message) {
   const event = db.prepare('SELECT * FROM events WHERE id = ?').get(eventId);
   if (!event) return;
@@ -447,10 +546,83 @@ io.on('connection', (socket) => {
   });
 });
 
-app.get('/', (request, response) => response.redirect(request.session.user ? '/dashboard' : '/auth'));
+app.get('/', (_request, response) => {
+  response.render('home');
+});
+
+app.get('/browse-events', (_request, response) => {
+  response.render('browse-events', { templates });
+});
+
+app.get('/vendors', (request, response) => {
+  const search = String(request.query.q || '').trim().slice(0, 100);
+  const category = String(request.query.category || '').trim().slice(0, 80);
+  const conditions = ['vendor_profiles.is_published = 1'];
+  const values = [];
+  if (search) {
+    conditions.push(`(
+      vendor_profiles.business_name LIKE ? COLLATE NOCASE
+      OR vendor_profiles.category LIKE ? COLLATE NOCASE
+      OR vendor_profiles.service_categories LIKE ? COLLATE NOCASE
+      OR vendor_profiles.services LIKE ? COLLATE NOCASE
+      OR vendor_profiles.description LIKE ? COLLATE NOCASE
+      OR vendor_profiles.location LIKE ? COLLATE NOCASE
+    )`);
+    const term = `%${search}%`;
+    values.push(term, term, term, term, term, term);
+  }
+  if (category) {
+    conditions.push(`(
+      vendor_profiles.category = ? COLLATE NOCASE
+      OR instr('|' || vendor_profiles.service_categories || '|', '|' || ? || '|') > 0
+    )`);
+    values.push(category, category);
+  }
+  const vendors = db.prepare(`
+    SELECT vendor_profiles.id, vendor_profiles.business_name, vendor_profiles.category,
+      vendor_profiles.service_categories, vendor_profiles.services,
+      vendor_profiles.description, vendor_profiles.location
+    FROM vendor_profiles
+    WHERE ${conditions.join(' AND ')}
+    ORDER BY vendor_profiles.business_name COLLATE NOCASE
+    LIMIT 100
+  `).all(...values);
+  const savedCategories = db.prepare(`
+    SELECT DISTINCT category FROM vendor_profiles
+    WHERE is_published = 1 AND category <> ''
+    ORDER BY category COLLATE NOCASE
+  `).all().map((row) => row.category);
+  const categories = [...new Set([...vendorServiceCategories, ...savedCategories])].sort((a, b) => a.localeCompare(b));
+  const events = request.currentUser
+    ? db.prepare('SELECT id, title, event_date FROM events WHERE user_id = ? ORDER BY event_date, id DESC')
+      .all(request.currentUser.id)
+    : [];
+  response.render('vendor-directory', { vendors, categories, search, category, events });
+});
+
+app.get('/vendors/:profileId', (request, response) => {
+  const profileId = Number(request.params.profileId);
+  if (!Number.isSafeInteger(profileId) || profileId <= 0) return response.sendStatus(404);
+  const vendor = db.prepare(`
+    SELECT id, business_name, category, service_categories, services, description, location
+    FROM vendor_profiles WHERE id = ? AND is_published = 1
+  `).get(profileId);
+  if (!vendor) return response.sendStatus(404);
+  const events = request.currentUser
+    ? db.prepare('SELECT id, title, event_date FROM events WHERE user_id = ? ORDER BY event_date, id DESC')
+      .all(request.currentUser.id)
+    : [];
+  response.render('vendor-profile', { vendor, events });
+});
 
 app.get('/learn', (_request, response) => {
   response.render('learning');
+});
+
+app.get('/plans', (_request, response) => {
+  response.render('plans', {
+    supportEmail: process.env.SUPPORT_EMAIL || '',
+  });
 });
 
 app.get('/auth/forgot', (_request, response) => {
@@ -567,6 +739,122 @@ app.post('/auth/reset/:token', async (request, response, next) => {
   });
 });
 
+function vendorResetLinkUrl(token, request) {
+  const origin = process.env.APP_BASE_URL || `${request.protocol}://${request.get('host')}`;
+  return new URL(`/vendor/reset/${token}`, origin).href;
+}
+
+app.get('/vendor/forgot', (_request, response) => {
+  response.render('vendor-forgot', { sent: false });
+});
+
+app.post('/vendor/forgot', async (request, response, next) => {
+  const email = String(request.body.email || '').trim().toLowerCase();
+  for (const [ip, entry] of passwordResetAttempts) {
+    if (Date.now() - entry.startedAt >= 15 * 60 * 1000) passwordResetAttempts.delete(ip);
+  }
+  const limited = resetRequestLimited(request.ip);
+  if (!limited && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 160) {
+    try {
+      const account = db.prepare('SELECT id, name, email FROM vendor_accounts WHERE email = ?').get(email);
+      if (account) {
+        const token = crypto.randomBytes(32).toString('hex');
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          db.prepare(`UPDATE vendor_password_reset_tokens SET used_at = datetime('now')
+            WHERE vendor_account_id = ? AND used_at IS NULL`).run(account.id);
+          db.prepare(`INSERT INTO vendor_password_reset_tokens (vendor_account_id, token_hash, expires_at)
+            VALUES (?, ?, datetime('now', '+1 hour'))`).run(account.id, resetTokenHash(token));
+          db.exec('COMMIT');
+        } catch (error) {
+          db.exec('ROLLBACK');
+          throw error;
+        }
+        await sendMail({
+          to: account.email,
+          subject: 'Reset your Nodevents vendor password',
+          text: [
+            `Hello ${account.name},`,
+            '',
+            'Use this one-time link within one hour to reset your vendor password:',
+            vendorResetLinkUrl(token, request),
+            '',
+            'If you did not request this, you can ignore this message.',
+          ].join('\n'),
+        });
+      }
+    } catch (error) {
+      return next(error);
+    }
+  }
+  response.render('vendor-forgot', { sent: true });
+});
+
+app.get('/vendor/reset/:token', (request, response) => {
+  const token = String(request.params.token || '');
+  const reset = /^[a-f0-9]{64}$/.test(token) && db.prepare(`
+    SELECT id FROM vendor_password_reset_tokens
+    WHERE token_hash = ? AND used_at IS NULL AND expires_at > datetime('now')
+  `).get(resetTokenHash(token));
+  if (!reset) {
+    return response.status(400).render('message', {
+      title: 'Reset link unavailable',
+      message: 'This password-reset link is invalid, expired, or has already been used. Request a new one to continue.',
+      href: '/vendor/forgot',
+      linkText: 'Request another reset link',
+      vendorView: true,
+    });
+  }
+  response.render('vendor-reset', { token, error: null });
+});
+
+app.post('/vendor/reset/:token', async (request, response, next) => {
+  const token = String(request.params.token || '');
+  const password = String(request.body.password || '');
+  const confirm = String(request.body.confirm || '');
+  if (!/^[a-f0-9]{64}$/.test(token)) return response.sendStatus(400);
+  if (password.length < 8 || password.length > 128 || password !== confirm) {
+    return response.status(400).render('vendor-reset', {
+      token,
+      error: password.length < 8 || password.length > 128
+        ? 'Use a password between 8 and 128 characters.'
+        : 'The passwords do not match.',
+    });
+  }
+  const passwordHash = await bcrypt.hash(password, 12);
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    const reset = db.prepare(`SELECT vendor_account_id FROM vendor_password_reset_tokens
+      WHERE token_hash = ? AND used_at IS NULL AND expires_at > datetime('now')`)
+      .get(resetTokenHash(token));
+    if (!reset) {
+      db.exec('ROLLBACK');
+      return response.status(400).render('message', {
+        title: 'Reset link unavailable',
+        message: 'This password-reset link is invalid, expired, or has already been used. Request a new one to continue.',
+        href: '/vendor/forgot',
+        linkText: 'Request another reset link',
+        vendorView: true,
+      });
+    }
+    db.prepare('UPDATE vendor_accounts SET password_hash = ? WHERE id = ?')
+      .run(passwordHash, reset.vendor_account_id);
+    db.prepare(`UPDATE vendor_password_reset_tokens SET used_at = datetime('now')
+      WHERE vendor_account_id = ? AND used_at IS NULL`).run(reset.vendor_account_id);
+    db.exec('COMMIT');
+  } catch (error) {
+    try { db.exec('ROLLBACK'); } catch (rollbackError) { console.error('Vendor password reset rollback failed:', rollbackError); }
+    return next(error);
+  }
+  response.render('message', {
+    title: 'Password updated',
+    message: 'Your vendor password has been reset. Sign in with your new password.',
+    href: '/vendor/login',
+    linkText: 'Sign in',
+    vendorView: true,
+  });
+});
+
 app.get('/oauth-setup', (_request, response) => {
   response.sendFile(path.join(__dirname, 'OAUTH-SETUP.md'));
 });
@@ -642,13 +930,64 @@ app.post('/vendor/register', (request, response, next) => {
 
 app.get('/vendor/dashboard', requireVendorAuth, (request, response) => {
   const vendors = db.prepare(`
-    SELECT vendors.id, vendors.name, vendors.category, vendors.token, vendors.status,
+    SELECT vendors.id, vendors.name, vendors.category, vendors.services, vendors.token, vendors.status,
       events.title AS event_title, events.event_date, events.venue
     FROM vendors JOIN events ON events.id = vendors.event_id
     WHERE vendors.account_id = ?
     ORDER BY events.event_date, events.title, vendors.id
   `).all(request.session.vendorUser.id);
   response.render('vendor-dashboard', { vendors });
+});
+
+app.get('/vendor/profile', requireVendorAuth, (request, response) => {
+  const profile = db.prepare('SELECT * FROM vendor_profiles WHERE vendor_account_id = ?')
+    .get(request.session.vendorUser.id) || null;
+  let selectedServiceCategories = [];
+  if (profile?.service_categories) {
+    selectedServiceCategories = profile.service_categories.split('|').filter((item) => vendorServiceCategories.includes(item));
+  } else if (profile?.category && vendorServiceCategories.includes(profile.category)) {
+    selectedServiceCategories = [profile.category];
+  }
+  response.render('vendor-profile-edit', { profile, vendorServiceCategories, selectedServiceCategories });
+});
+
+app.post('/vendor/profile', requireVendorAuth, (request, response) => {
+  const businessName = String(request.body.business_name || '').trim();
+  const submittedCategories = Array.isArray(request.body.service_categories)
+    ? request.body.service_categories
+    : request.body.service_categories ? [request.body.service_categories] : [];
+  const selectedServiceCategories = [...new Set(submittedCategories
+    .map((item) => String(item).trim())
+    .filter((item) => vendorServiceCategories.includes(item)))];
+  const category = selectedServiceCategories[0] || '';
+  const serviceCategories = selectedServiceCategories.join('|');
+  const services = String(request.body.services || '').trim();
+  const description = String(request.body.description || '').trim();
+  const location = String(request.body.location || '').trim();
+  const isPublished = request.body.is_published === 'on' ? 1 : 0;
+  if (!businessName || businessName.length > 120 || !category
+    || services.length > 1500 || description.length > 2000 || location.length > 160) {
+    setNotice(request, 'Enter a business name, choose at least one service category, and keep services, description, and location within their character limits.');
+    return response.redirect('/vendor/profile');
+  }
+  db.prepare(`
+    INSERT INTO vendor_profiles
+      (vendor_account_id, business_name, category, service_categories, services, description, location, is_published, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(vendor_account_id) DO UPDATE SET
+      business_name = excluded.business_name,
+      category = excluded.category,
+      service_categories = excluded.service_categories,
+      services = excluded.services,
+      description = excluded.description,
+      location = excluded.location,
+      is_published = excluded.is_published,
+      updated_at = datetime('now')
+  `).run(request.session.vendorUser.id, businessName, category, serviceCategories, services, description, location, isPublished);
+  setNotice(request, isPublished
+    ? 'Vendor profile saved and published in Find Vendors.'
+    : 'Vendor profile saved as a draft and hidden from Find Vendors.');
+  response.redirect('/vendor/profile');
 });
 
 app.get('/vendor/:token/register', (request, response) => {
@@ -801,6 +1140,9 @@ app.post('/auth/login', async (request, response, next) => {
   if (!account || !(await bcrypt.compare(password, account.password_hash))) {
     return renderAuth(response, 'Email or password is incorrect.', 401);
   }
+  if (account.is_suspended) {
+    return renderAuth(response, 'This account is suspended. Contact the site administrator for help.', 403);
+  }
   request.session.regenerate((error) => {
     if (error) return next(error);
     request.session.user = { id: account.id, name: account.name, email: account.email };
@@ -816,17 +1158,73 @@ app.post('/auth/logout', requireAuth, (request, response, next) => {
   });
 });
 
+app.get('/admin', requireAuth, requireAdmin, (request, response) => {
+  const totals = {
+    planners: db.prepare('SELECT COUNT(*) AS count FROM users WHERE is_admin = 0 AND is_suspended = 0').get().count,
+    suspended: db.prepare('SELECT COUNT(*) AS count FROM users WHERE is_admin = 0 AND is_suspended = 1').get().count,
+    events: db.prepare('SELECT COUNT(*) AS count FROM events').get().count,
+    vendors: db.prepare('SELECT COUNT(*) AS count FROM vendors').get().count,
+  };
+  const planners = db.prepare(`
+    SELECT users.id, users.name, users.email, users.is_suspended, users.created_at,
+      COUNT(events.id) AS event_count
+    FROM users LEFT JOIN events ON events.user_id = users.id
+    WHERE users.is_admin = 0
+    GROUP BY users.id
+    ORDER BY users.created_at DESC, users.id DESC
+  `).all();
+  response.render('admin', { totals, planners });
+});
+
+app.post('/admin/users/:userId/suspend', requireAuth, requireAdmin, (request, response) => {
+  const userId = Number(request.params.userId);
+  if (!Number.isSafeInteger(userId) || userId <= 0) return response.sendStatus(404);
+  const target = db.prepare('SELECT id, name, is_admin FROM users WHERE id = ?').get(userId);
+  if (!target) return response.sendStatus(404);
+  if (target.is_admin || target.id === request.currentUser.id) return response.sendStatus(403);
+  db.prepare('UPDATE users SET is_suspended = 1 WHERE id = ? AND is_admin = 0').run(userId);
+  for (const socket of io.sockets.sockets.values()) {
+    if (socket.request.session?.user?.id === userId) socket.disconnect(true);
+  }
+  setNotice(request, `${target.name}'s planner account was suspended.`);
+  response.redirect('/admin');
+});
+
+app.post('/admin/users/:userId/restore', requireAuth, requireAdmin, (request, response) => {
+  const userId = Number(request.params.userId);
+  if (!Number.isSafeInteger(userId) || userId <= 0) return response.sendStatus(404);
+  const target = db.prepare('SELECT id, name, is_admin FROM users WHERE id = ?').get(userId);
+  if (!target) return response.sendStatus(404);
+  if (target.is_admin) return response.sendStatus(403);
+  db.prepare('UPDATE users SET is_suspended = 0 WHERE id = ? AND is_admin = 0').run(userId);
+  setNotice(request, `${target.name}'s planner account was restored.`);
+  response.redirect('/admin');
+});
+
 app.get('/dashboard', requireAuth, (request, response) => {
   const events = db.prepare(`
     SELECT events.*,
       COUNT(vendors.id) AS vendor_count,
-      COALESCE(SUM(CASE WHEN vendors.status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_count
+      COALESCE(SUM(CASE WHEN vendors.status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_count,
+      COALESCE(SUM(CASE WHEN vendors.status = 'confirmed' THEN 1 ELSE 0 END), 0) AS confirmed_count,
+      COALESCE(SUM(CASE WHEN vendors.status <> 'pending' THEN 1 ELSE 0 END), 0) AS replied_count
     FROM events LEFT JOIN vendors ON vendors.event_id = events.id
     WHERE events.user_id = ?
     GROUP BY events.id
     ORDER BY events.event_date, events.id DESC
   `).all(request.session.user.id);
-  response.render('dashboard', { events, templates });
+  const today = new Date();
+  const todayOrdinal = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  const dashboardEvents = events.map((event) => {
+    const [year, month, day] = event.event_date.split('-').map(Number);
+    const daysUntil = Math.round((Date.UTC(year, month - 1, day) - todayOrdinal) / 86400000);
+    return { ...event, daysUntil, isPast: daysUntil < 0 };
+  });
+  const requestedEventType = String(request.query.event_type || '');
+  const selectedEventType = Object.prototype.hasOwnProperty.call(templates, requestedEventType)
+    ? requestedEventType
+    : 'other';
+  response.render('dashboard', { events: dashboardEvents, templates, selectedEventType });
 });
 
 app.post('/events', requireAuth, (request, response) => {
@@ -856,20 +1254,48 @@ app.post('/events', requireAuth, (request, response) => {
   }
 });
 
-app.get('/events/:id', requireAuth, (request, response) => {
-  const eventId = Number(request.params.id);
+function renderPlannerEvent(request, response, eventId, toolPage = 'overview') {
   const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.session.user.id);
   if (!event) return response.sendStatus(404);
   const vendors = db.prepare(`
     SELECT vendors.*,
-      (SELECT COUNT(*) FROM invoices WHERE invoices.vendor_id = vendors.id) AS invoice_count
+      (SELECT COUNT(*) FROM invoices WHERE invoices.vendor_id = vendors.id) AS invoice_count,
+      (SELECT COALESCE(SUM(amount), 0) FROM invoices WHERE invoices.vendor_id = vendors.id) AS invoiced_amount
     FROM vendors WHERE event_id = ? ORDER BY name
   `).all(eventId).map((vendor) => ({
     ...vendor,
+    availabilityLabel: {
+      pending: 'Awaiting availability',
+      confirmed: 'Available · confirmed',
+      declined: 'Unavailable · declined',
+      changes_requested: 'Needs coordination',
+    }[vendor.status],
     privateUrl: vendorPageUrl(vendor.token),
     linkExpiresOn: db.prepare("SELECT date(?, '+' || ? || ' days') AS expires_on")
       .get(event.event_date, linkGraceDays).expires_on,
   }));
+  const guests = db.prepare('SELECT * FROM guests WHERE event_id = ? ORDER BY name, id').all(eventId);
+  const guestTotals = guests.reduce((totals, guest) => {
+    totals[guest.rsvp_status] += guest.group_size;
+    totals.invited += guest.group_size;
+    if (guest.checked_in_at) totals.checkedIn += guest.group_size;
+    return totals;
+  }, { attending: 0, declined: 0, awaiting: 0, invited: 0, checkedIn: 0 });
+  const headcount = guests.length ? guestTotals.attending + guestTotals.awaiting : event.expected_guests;
+  const cateringItems = db.prepare('SELECT * FROM catering_items WHERE event_id = ? ORDER BY id').all(eventId);
+  const plannedPortions = Math.ceil(guestTotals.attending * (1 + event.catering_allowance_percent / 100));
+  const cateringTotals = {
+    portions: plannedPortions,
+    estimatedCost: 0,
+    items: cateringItems.map((item) => {
+      const quantity = item.quantity_override === null
+        ? item.amount_per_portion * plannedPortions
+        : item.quantity_override;
+      const estimatedCost = quantity * item.cost_per_unit;
+      return { ...item, calculated_quantity: quantity, estimated_cost: estimatedCost };
+    }),
+  };
+  cateringTotals.estimatedCost = cateringTotals.items.reduce((total, item) => total + item.estimated_cost, 0);
   const tasks = db.prepare(`
     SELECT tasks.*, vendors.name AS vendor_name
     FROM tasks LEFT JOIN vendors ON vendors.id = tasks.vendor_id
@@ -880,10 +1306,27 @@ app.get('/events/:id', requireAuth, (request, response) => {
     FROM invoices JOIN vendors ON vendors.id = invoices.vendor_id
     WHERE vendors.event_id = ? ORDER BY invoices.created_at DESC, invoices.id DESC
   `).all(eventId);
+  const budgetTotals = {
+    estimated: vendors.reduce((total, vendor) => total + vendor.estimated_cost + vendor.cost_per_guest * headcount, 0),
+    invoiced: invoices.reduce((total, invoice) => total + invoice.amount, 0),
+    paid: invoices.reduce((total, invoice) => total + (invoice.status === 'paid' ? invoice.amount : 0), 0),
+    comparison: vendors.reduce((total, vendor) => total + Math.max(
+      vendor.estimated_cost + vendor.cost_per_guest * headcount,
+      vendor.invoiced_amount,
+    ), 0),
+  };
   const changes = db.prepare('SELECT * FROM changes WHERE event_id = ? ORDER BY id DESC LIMIT 12').all(eventId);
   response.render('event', {
     event,
+    toolPage,
+    activeTool: toolPage,
     vendors,
+    guests,
+    guestTotals,
+    headcount,
+    cateringItems: cateringTotals.items,
+    cateringTotals,
+    budgetTotals,
     tasks,
     invoices,
     changes,
@@ -894,6 +1337,69 @@ app.get('/events/:id', requireAuth, (request, response) => {
     maxReminders,
     linkGraceDays,
   });
+}
+
+app.get('/events/:id', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  return renderPlannerEvent(request, response, eventId);
+});
+
+app.get('/events/:id/:toolPage', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const tools = { budget: 'budget', guests: 'guests', catering: 'catering' };
+  const toolPage = tools[request.params.toolPage];
+  if (!toolPage) return response.sendStatus(404);
+  return renderPlannerEvent(request, response, eventId, toolPage);
+});
+
+app.get('/events/:id/guests/:guestId/qr', requireAuth, async (request, response) => {
+  const eventId = Number(request.params.id);
+  const guestId = Number(request.params.guestId);
+  if (!Number.isSafeInteger(eventId) || !Number.isSafeInteger(guestId)
+    || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const guest = db.prepare('SELECT checkin_token FROM guests WHERE id = ? AND event_id = ?').get(guestId, eventId);
+  if (!guest) return response.sendStatus(404);
+  const png = await QRCode.toBuffer(guest.checkin_token, { type: 'png', width: 320, margin: 2 });
+  response.type('png').set('Cache-Control', 'private, no-store').send(png);
+});
+
+app.get('/guest/rsvp/:token', (request, response) => {
+  const token = String(request.params.token || '');
+  if (!/^[a-f0-9]{64}$/.test(token)) return response.sendStatus(404);
+  const guest = db.prepare(`
+    SELECT guests.id, guests.name, guests.group_size, guests.rsvp_status, guests.checked_in_at,
+      events.title AS event_title, events.event_date, events.venue
+    FROM guests JOIN events ON events.id = guests.event_id
+    WHERE guests.rsvp_token = ?
+  `).get(token);
+  if (!guest) return response.sendStatus(404);
+  response.render('guest-rsvp', { guest, token, saved: false });
+});
+
+app.post('/guest/rsvp/:token', (request, response) => {
+  const token = String(request.params.token || '');
+  if (!/^[a-f0-9]{64}$/.test(token)) return response.sendStatus(404);
+  const guest = db.prepare('SELECT id, event_id, checked_in_at FROM guests WHERE rsvp_token = ?').get(token);
+  if (!guest) return response.sendStatus(404);
+  const status = String(request.body.rsvp_status || '');
+  if (!['attending', 'declined'].includes(status) || (guest.checked_in_at && status !== 'attending')) {
+    return response.status(400).render('message', {
+      title: 'RSVP not saved',
+      message: 'Choose attending or declined. Guests who have checked in remain marked as attending.',
+      href: `/guest/rsvp/${token}`,
+      linkText: 'Return to your invitation',
+      vendorView: false,
+    });
+  }
+  db.prepare('UPDATE guests SET rsvp_status = ? WHERE id = ?').run(status, guest.id);
+  const updatedGuest = db.prepare(`
+    SELECT guests.id, guests.name, guests.group_size, guests.rsvp_status, guests.checked_in_at,
+      events.title AS event_title, events.event_date, events.venue
+    FROM guests JOIN events ON events.id = guests.event_id WHERE guests.id = ?
+  `).get(guest.id);
+  recordChange(guest.event_id, `${updatedGuest.name} RSVP updated: ${updatedGuest.rsvp_status}.`);
+  emitEventUpdate(guest.event_id, 'A guest RSVP was updated.');
+  response.render('guest-rsvp', { guest: updatedGuest, token, saved: true });
 });
 
 app.post('/events/:id/venue', requireAuth, async (request, response) => {
@@ -919,19 +1425,335 @@ app.post('/events/:id/venue', requireAuth, async (request, response) => {
   response.redirect(`/events/${eventId}`);
 });
 
+app.post('/events/:id/budget', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.currentUser.id);
+  if (!event) return response.sendStatus(404);
+  const budgetTotal = parseAmount(request.body.budget_total);
+  const budgetCurrency = String(request.body.budget_currency || '').trim().toUpperCase();
+  const expectedGuestsText = String(request.body.expected_guests || '').trim();
+  const expectedGuests = /^\d{1,6}$/.test(expectedGuestsText) ? Number(expectedGuestsText) : null;
+  if (budgetTotal === null || !/^[A-Z]{3}$/.test(budgetCurrency)
+    || expectedGuests === null || expectedGuests > 100000) {
+    setNotice(request, 'Enter a non-negative budget, a three-letter currency code, and up to 100,000 expected guests.');
+    return response.redirect(`/events/${eventId}/budget`);
+  }
+  db.prepare('UPDATE events SET budget_total = ?, budget_currency = ?, expected_guests = ? WHERE id = ?')
+    .run(budgetTotal, budgetCurrency, expectedGuests, eventId);
+  recordChange(eventId, 'The event budget and expected guest count were updated.');
+  setNotice(request, 'Budget and expected guest count saved.');
+  response.redirect(`/events/${eventId}/budget`);
+});
+
+app.post('/events/:id/guests', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  if (!Number.isSafeInteger(eventId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const name = String(request.body.name || '').trim();
+  const email = String(request.body.email || '').trim().toLowerCase();
+  const groupSizeText = String(request.body.group_size || '1').trim();
+  const groupSize = /^\d{1,4}$/.test(groupSizeText) ? Number(groupSizeText) : null;
+  const status = String(request.body.rsvp_status || 'awaiting');
+  if (!name || name.length > 120 || email.length > 160 || (email && !emailPattern.test(email))
+    || groupSize === null || groupSize < 1 || groupSize > 1000
+    || !['attending', 'declined', 'awaiting'].includes(status)) {
+    setNotice(request, 'Enter a guest name, valid email if provided, group size between 1 and 1,000, and a valid RSVP status.');
+    return response.redirect(`/events/${eventId}/guests`);
+  }
+  db.prepare(`
+    INSERT INTO guests (event_id, name, email, group_size, rsvp_status, rsvp_token, checkin_token)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    eventId,
+    name,
+    email,
+    groupSize,
+    status,
+    crypto.randomBytes(32).toString('hex'),
+    crypto.randomBytes(32).toString('hex'),
+  );
+  recordChange(eventId, 'The guest list was updated.');
+  setNotice(request, email ? 'Guest added. Send the invitation from the guest list.' : 'Guest added. Add an email address to send a private RSVP link.');
+  response.redirect(`/events/${eventId}/guests`);
+});
+
+app.post('/events/:id/guests/:guestId/update', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const guestId = Number(request.params.guestId);
+  if (!Number.isSafeInteger(eventId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const guest = Number.isSafeInteger(guestId)
+    && db.prepare('SELECT id, email, checked_in_at FROM guests WHERE id = ? AND event_id = ?').get(guestId, eventId);
+  if (!guest) return response.sendStatus(404);
+  const name = String(request.body.name || '').trim();
+  const email = String(request.body.email || '').trim().toLowerCase();
+  const groupSizeText = String(request.body.group_size || '').trim();
+  const groupSize = /^\d{1,4}$/.test(groupSizeText) ? Number(groupSizeText) : null;
+  const status = String(request.body.rsvp_status || '');
+  if (!name || name.length > 120 || email.length > 160 || (email && !emailPattern.test(email))
+    || groupSize === null || groupSize < 1 || groupSize > 1000
+    || (guest.checked_in_at && status !== 'attending')
+    || !['attending', 'declined', 'awaiting'].includes(status)) {
+    setNotice(request, 'Enter a guest name, valid email if provided, group size between 1 and 1,000, and a valid RSVP status.');
+    return response.redirect(`/events/${eventId}`);
+  }
+  const emailChanged = email !== guest.email;
+  const tokenSql = emailChanged
+    ? ', rsvp_token = ?, checkin_token = ?'
+    : '';
+  const values = [name, email, groupSize, status];
+  if (emailChanged) values.push(crypto.randomBytes(32).toString('hex'), crypto.randomBytes(32).toString('hex'));
+  values.push(guestId, eventId);
+  db.prepare(`
+    UPDATE guests SET name = ?, email = ?, group_size = ?, rsvp_status = ?${tokenSql}
+    WHERE id = ? AND event_id = ?
+  `).run(...values);
+  recordChange(eventId, 'The guest list was updated.');
+  setNotice(request, emailChanged ? 'Guest details saved. The old invitation and check-in QR are no longer valid.' : 'Guest RSVP saved.');
+  response.redirect(`/events/${eventId}/guests`);
+});
+
+app.post('/events/:id/guests/:guestId/delete', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const guestId = Number(request.params.guestId);
+  if (!Number.isSafeInteger(eventId) || !Number.isSafeInteger(guestId)
+    || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const result = db.prepare('DELETE FROM guests WHERE id = ? AND event_id = ?').run(guestId, eventId);
+  if (!result.changes) return response.sendStatus(404);
+  recordChange(eventId, 'The guest list was updated.');
+  setNotice(request, 'Guest removed.');
+  response.redirect(`/events/${eventId}`);
+});
+
+app.post('/events/:id/guests/:guestId/invite', requireAuth, async (request, response) => {
+  const eventId = Number(request.params.id);
+  const guestId = Number(request.params.guestId);
+  const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.currentUser.id);
+  if (!event) return response.sendStatus(404);
+  const guest = Number.isSafeInteger(guestId)
+    && db.prepare('SELECT * FROM guests WHERE id = ? AND event_id = ?').get(guestId, eventId);
+  if (!guest) return response.sendStatus(404);
+  if (!guest.email || !emailPattern.test(guest.email)) {
+    setNotice(request, `Add a valid email address for ${guest.name} before sending an invitation.`);
+  } else {
+    const sent = await sendGuestInvitation(guest, event, request);
+    if (sent) {
+      recordChange(eventId, `A guest invitation and check-in QR were emailed to ${guest.name}${demoEmailNote}.`);
+      setNotice(request, `Invitation and check-in QR sent to ${guest.name}${demoEmailNote}.`);
+    } else {
+      setNotice(request, `Could not email ${guest.name}. Check SMTP settings and try again.`);
+    }
+  }
+  response.redirect(`/events/${eventId}/guests`);
+});
+
+app.post('/events/:id/guests/check-in', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const token = String(request.body.checkin_token || '');
+  if (!Number.isSafeInteger(eventId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  if (!/^[a-f0-9]{64}$/.test(token)) {
+    if (request.accepts('json')) return response.status(400).json({ error: 'That check-in code is not valid.' });
+    setNotice(request, 'Enter a valid guest check-in code.');
+    return response.redirect(`/events/${eventId}/guests`);
+  }
+  const guest = db.prepare('SELECT id, name, checked_in_at FROM guests WHERE event_id = ? AND checkin_token = ?')
+    .get(eventId, token);
+  if (!guest) {
+    if (request.accepts('json')) return response.status(404).json({ error: 'That code does not belong to a guest at this event.' });
+    setNotice(request, 'That check-in code does not belong to a guest at this event.');
+    return response.redirect(`/events/${eventId}/guests`);
+  }
+  if (guest.checked_in_at) {
+    const message = `${guest.name} has already checked in.`;
+    if (request.accepts('json')) return response.status(409).json({ error: message });
+    setNotice(request, message);
+    return response.redirect(`/events/${eventId}/guests`);
+  }
+  db.prepare("UPDATE guests SET rsvp_status = 'attending', checked_in_at = datetime('now') WHERE id = ?")
+    .run(guest.id);
+  const message = `${guest.name} checked in.`;
+  recordChange(eventId, message);
+  emitEventUpdate(eventId, message);
+  if (request.accepts('json')) return response.json({ message });
+  setNotice(request, message);
+  response.redirect(`/events/${eventId}/guests`);
+});
+
+app.post('/events/:id/catering/allowance', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  if (!Number.isSafeInteger(eventId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const allowanceText = String(request.body.allowance_percent || '').trim();
+  const allowance = /^(?:\d{1,3})(?:\.\d{1,2})?$/.test(allowanceText) ? Number(allowanceText) : null;
+  if (allowance === null || allowance < 0 || allowance > 200) {
+    setNotice(request, 'Enter a catering allowance between 0 and 200 percent.');
+    return response.redirect(`/events/${eventId}/catering`);
+  }
+  db.prepare('UPDATE events SET catering_allowance_percent = ? WHERE id = ?').run(allowance, eventId);
+  recordChange(eventId, 'The catering extra allowance was updated.');
+  setNotice(request, 'Catering allowance saved.');
+  response.redirect(`/events/${eventId}/catering`);
+});
+
+app.post('/events/:id/catering/items', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  if (!Number.isSafeInteger(eventId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const name = String(request.body.name || '').trim();
+  const unit = String(request.body.unit || '').trim();
+  const amountPerPortion = parseQuantity(request.body.amount_per_portion);
+  const costPerUnit = parseAmount(request.body.cost_per_unit);
+  if (!name || name.length > 100 || !unit || unit.length > 24
+    || amountPerPortion === null || costPerUnit === null) {
+    setNotice(request, 'Enter an item, unit (up to 24 characters), valid quantity per portion, and non-negative unit cost.');
+    return response.redirect(`/events/${eventId}/catering`);
+  }
+  db.prepare(`
+    INSERT INTO catering_items (event_id, name, amount_per_portion, unit, cost_per_unit)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(eventId, name, amountPerPortion, unit, costPerUnit);
+  recordChange(eventId, `Catering item added: ${name}.`);
+  setNotice(request, 'Catering item added.');
+  response.redirect(`/events/${eventId}/catering`);
+});
+
+app.post('/events/:id/catering/items/:itemId/update', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const itemId = Number(request.params.itemId);
+  if (!Number.isSafeInteger(eventId) || !Number.isSafeInteger(itemId)
+    || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const item = db.prepare('SELECT id FROM catering_items WHERE id = ? AND event_id = ?').get(itemId, eventId);
+  if (!item) return response.sendStatus(404);
+  const name = String(request.body.name || '').trim();
+  const unit = String(request.body.unit || '').trim();
+  const amountPerPortion = parseQuantity(request.body.amount_per_portion);
+  const costPerUnit = parseAmount(request.body.cost_per_unit);
+  const overrideText = String(request.body.quantity_override || '').trim();
+  const quantityOverride = overrideText ? parseQuantity(overrideText) : null;
+  if (!name || name.length > 100 || !unit || unit.length > 24
+    || amountPerPortion === null || costPerUnit === null
+    || (overrideText && quantityOverride === null)) {
+    setNotice(request, 'Enter a valid item, unit, per-portion quantity, unit cost, and optional final quantity.');
+    return response.redirect(`/events/${eventId}/catering`);
+  }
+  db.prepare(`
+    UPDATE catering_items
+    SET name = ?, amount_per_portion = ?, unit = ?, cost_per_unit = ?, quantity_override = ?
+    WHERE id = ? AND event_id = ?
+  `).run(name, amountPerPortion, unit, costPerUnit, quantityOverride, itemId, eventId);
+  recordChange(eventId, `Catering item updated: ${name}.`);
+  setNotice(request, quantityOverride === null ? 'Catering item saved; quantity follows the RSVP calculation.' : 'Final catering quantity saved.');
+  response.redirect(`/events/${eventId}/catering`);
+});
+
+app.post('/events/:id/catering/items/:itemId/delete', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const itemId = Number(request.params.itemId);
+  if (!Number.isSafeInteger(eventId) || !Number.isSafeInteger(itemId)
+    || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const result = db.prepare('DELETE FROM catering_items WHERE id = ? AND event_id = ?').run(itemId, eventId);
+  if (!result.changes) return response.sendStatus(404);
+  recordChange(eventId, 'A catering item was removed.');
+  setNotice(request, 'Catering item removed.');
+  response.redirect(`/events/${eventId}/catering`);
+});
+
+app.get('/events/:id/catering/shopping-list.csv', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.currentUser.id);
+  if (!event) return response.sendStatus(404);
+  const guests = db.prepare("SELECT COALESCE(SUM(group_size), 0) AS count FROM guests WHERE event_id = ? AND rsvp_status = 'attending'")
+    .get(eventId).count;
+  const portions = Math.ceil(guests * (1 + event.catering_allowance_percent / 100));
+  const items = db.prepare('SELECT * FROM catering_items WHERE event_id = ? ORDER BY id').all(eventId);
+  const rows = [
+    ['Event', event.title],
+    ['Confirmed guests', guests],
+    ['Extra allowance (%)', event.catering_allowance_percent],
+    ['Planned portions', portions],
+    [],
+    ['Food item', 'Final quantity', 'Unit', 'Quantity per portion', 'Unit cost', 'Estimated cost'],
+    ...items.map((item) => {
+      const quantity = item.quantity_override === null
+        ? item.amount_per_portion * portions
+        : item.quantity_override;
+      return [
+        item.name,
+        formatQuantity(quantity),
+        item.unit,
+        item.amount_per_portion,
+        item.cost_per_unit.toFixed(2),
+        (quantity * item.cost_per_unit).toFixed(2),
+      ];
+    }),
+  ];
+  response.type('text/csv; charset=utf-8');
+  response.set('Content-Disposition', `attachment; filename="event-${eventId}-shopping-list.csv"`);
+  response.send(`\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}`);
+});
+
+app.post('/events/:id/catering/share', requireAuth, async (request, response) => {
+  const eventId = Number(request.params.id);
+  const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.currentUser.id);
+  if (!event) return response.sendStatus(404);
+  const vendorId = Number(request.body.vendor_id);
+  if (!Number.isSafeInteger(vendorId) || vendorId <= 0) return response.sendStatus(400);
+  const vendor = db.prepare('SELECT * FROM vendors WHERE id = ? AND event_id = ?').get(vendorId, eventId);
+  if (!vendor) return response.sendStatus(404);
+  if (!vendor.email || !emailPattern.test(vendor.email)) {
+    setNotice(request, 'Add a valid email address to the selected caterer before sharing the shopping list.');
+    return response.redirect(`/events/${eventId}/catering`);
+  }
+  const confirmedGuests = db.prepare("SELECT COALESCE(SUM(group_size), 0) AS count FROM guests WHERE event_id = ? AND rsvp_status = 'attending'")
+    .get(eventId).count;
+  const portions = Math.ceil(confirmedGuests * (1 + event.catering_allowance_percent / 100));
+  const items = db.prepare('SELECT * FROM catering_items WHERE event_id = ? ORDER BY id').all(eventId);
+  const lines = items.map((item) => {
+    const quantity = item.quantity_override === null
+      ? item.amount_per_portion * portions
+      : item.quantity_override;
+    return `- ${item.name}: ${formatQuantity(quantity)} ${item.unit}${item.quantity_override === null ? '' : ' (planner-adjusted)'}`;
+  });
+  const sent = await sendMail({
+    to: vendor.email,
+    subject: `Catering requirements: ${event.title}`,
+    text: [
+      `Hello ${vendor.name},`,
+      '',
+      `Catering requirements for ${event.title} on ${event.event_date}:`,
+      `Confirmed guests: ${confirmedGuests}`,
+      `Extra allowance: ${event.catering_allowance_percent}%`,
+      `Planned portions: ${portions}`,
+      '',
+      ...(lines.length ? lines : ['No food items have been added yet.']),
+      '',
+      'These are planner estimates; please confirm menu and serving quantities together.',
+    ].join('\n'),
+  });
+  if (!sent) {
+    setNotice(request, `Could not email ${vendor.name}. Check SMTP settings and try again.`);
+  } else {
+    recordChange(eventId, `Catering requirements shared with ${vendor.name}${demoEmailNote}.`);
+    setNotice(request, `Catering requirements emailed to ${vendor.name}${demoEmailNote}.`);
+  }
+  response.redirect(`/events/${eventId}/catering`);
+});
+
 app.post('/events/:id/vendors', requireAuth, async (request, response) => {
   const eventId = Number(request.params.id);
   if (!eventForOwner(eventId, request.session.user.id)) return response.sendStatus(404);
   const name = String(request.body.name || '').trim();
   const category = String(request.body.category || '').trim();
+  const services = String(request.body.services || '').trim();
   const email = String(request.body.email || '').trim();
-  if (!name || name.length > 100 || category.length > 80 || email.length > 160
+  const estimatedCost = parseAmount(request.body.estimated_cost);
+  const costPerGuest = parseAmount(request.body.cost_per_guest);
+  if (!name || name.length > 100 || category.length > 80 || services.length > 1000 || email.length > 160
+    || estimatedCost === null || costPerGuest === null
     || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
-    setNotice(request, 'Enter a vendor name and a valid email address, if provided.');
+    setNotice(request, 'Enter a vendor name, valid estimated costs, and a valid email address, if provided.');
     return response.redirect(`/events/${eventId}`);
   }
-  const result = db.prepare('INSERT INTO vendors (event_id, name, category, email, token) VALUES (?, ?, ?, ?, ?)')
-    .run(eventId, name, category, email, crypto.randomBytes(32).toString('hex'));
+  const result = db.prepare(`
+    INSERT INTO vendors (event_id, name, category, services, email, token, estimated_cost, cost_per_guest)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(eventId, name, category, services, email, crypto.randomBytes(32).toString('hex'), estimatedCost, costPerGuest);
   const vendor = db.prepare('SELECT * FROM vendors WHERE id = ?').get(Number(result.lastInsertRowid));
   const event = eventForOwner(eventId, request.session.user.id);
   recordChange(eventId, `${name} was added as a vendor.`);
@@ -947,6 +1769,47 @@ app.post('/events/:id/vendors', requireAuth, async (request, response) => {
   response.redirect(`/events/${eventId}`);
 });
 
+app.post('/vendors/:profileId/request', requireAuth, async (request, response) => {
+  const eventId = Number(request.body.event_id);
+  const profileId = Number(request.params.profileId);
+  const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.currentUser.id);
+  if (!event || !Number.isSafeInteger(profileId) || profileId <= 0) return response.sendStatus(404);
+  const profile = db.prepare(`
+    SELECT vendor_profiles.vendor_account_id, vendor_profiles.business_name,
+      vendor_profiles.category, vendor_profiles.services, vendor_accounts.email
+    FROM vendor_profiles
+    JOIN vendor_accounts ON vendor_accounts.id = vendor_profiles.vendor_account_id
+    WHERE vendor_profiles.id = ? AND vendor_profiles.is_published = 1
+  `).get(profileId);
+  if (!profile) return response.sendStatus(404);
+  const existing = db.prepare('SELECT id FROM vendors WHERE event_id = ? AND account_id = ?')
+    .get(eventId, profile.vendor_account_id);
+  if (existing) {
+    setNotice(request, `${profile.business_name} is already linked to this event.`);
+    return response.redirect(`/events/${eventId}#vendor-management`);
+  }
+  const result = db.prepare(`
+    INSERT INTO vendors (event_id, name, category, services, email, token, account_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    eventId,
+    profile.business_name,
+    profile.category,
+    profile.services,
+    profile.email,
+    crypto.randomBytes(32).toString('hex'),
+    profile.vendor_account_id,
+  );
+  const vendor = db.prepare('SELECT * FROM vendors WHERE id = ?').get(Number(result.lastInsertRowid));
+  recordChange(eventId, `${profile.business_name} was invited from Find Vendors.`);
+  emitEventUpdate(eventId, `${profile.business_name} was added to the event.`);
+  const sent = await sendVendorInvite(vendor, event, false);
+  setNotice(request, sent
+    ? `${profile.business_name} was added and invited${demoEmailNote}.`
+    : `${profile.business_name} was added, but the invitation email could not be sent. Check the email settings.`);
+  response.redirect(`/events/${eventId}#vendor-management`);
+});
+
 app.post('/events/:id/vendors/:vendorId/update', requireAuth, async (request, response) => {
   const eventId = Number(request.params.id);
   const vendorId = Number(request.params.vendorId);
@@ -957,20 +1820,24 @@ app.post('/events/:id/vendors/:vendorId/update', requireAuth, async (request, re
   if (!vendor) return response.sendStatus(404);
   const name = String(request.body.name || '').trim();
   const category = String(request.body.category || '').trim();
+  const services = String(request.body.services || '').trim();
   const email = String(request.body.email || '').trim().toLowerCase();
-  if (!name || name.length > 100 || category.length > 80 || email.length > 160
+  const estimatedCost = parseAmount(request.body.estimated_cost);
+  const costPerGuest = parseAmount(request.body.cost_per_guest);
+  if (!name || name.length > 100 || category.length > 80 || services.length > 1000 || email.length > 160
+    || estimatedCost === null || costPerGuest === null
     || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
-    setNotice(request, 'Enter a vendor name and a valid email address, if provided.');
+    setNotice(request, 'Enter a vendor name, valid estimated costs, and a valid email address, if provided.');
     return response.redirect(`/events/${eventId}`);
   }
   const emailChanged = email !== vendor.email.trim().toLowerCase();
   const token = emailChanged ? crypto.randomBytes(32).toString('hex') : vendor.token;
   db.prepare(`
-    UPDATE vendors SET name = ?, category = ?, email = ?, token = ?,
+    UPDATE vendors SET name = ?, category = ?, services = ?, email = ?, token = ?, estimated_cost = ?, cost_per_guest = ?,
       last_notified_at = CASE WHEN ? THEN NULL ELSE last_notified_at END,
       reminder_count = CASE WHEN ? THEN 0 ELSE reminder_count END
     WHERE id = ? AND event_id = ?
-  `).run(name, category, email, token, Number(emailChanged), Number(emailChanged), vendorId, eventId);
+  `).run(name, category, services, email, token, estimatedCost, costPerGuest, Number(emailChanged), Number(emailChanged), vendorId, eventId);
   recordChange(eventId, `${name}'s vendor details were updated.`);
   emitEventUpdate(eventId, `${name}'s vendor details were updated.`);
   if (email && emailChanged) {

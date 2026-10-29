@@ -19,17 +19,50 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap">
   <link rel="stylesheet" href="/polish.css">
   <link rel="stylesheet" href="/auth-fit.css">
+  <% if (title === 'Planner dashboard' || title === 'My vendor events' || title === 'Vendor directory') { %><link rel="stylesheet" href="/dashboard.css"><% } %>
+  <% if (title === 'Admin dashboard') { %><link rel="stylesheet" href="/admin.css"><% } %>
+  <% if (typeof event !== 'undefined' || title.startsWith('RSVP ·')) { %><link rel="stylesheet" href="/planning.css"><% } %>
+  <link rel="stylesheet" href="/navigation.css">
 </head>
-<body>
+<body id="top">
+<%
+  const isAuthPage = title === 'Planner sign in' || title === 'Vendor sign in';
+  const showPlannerSidebar = Boolean(user && (
+    title === 'Planner dashboard'
+    || title === 'Vendor directory'
+    || (typeof vendor !== 'undefined' && vendor)
+    || (typeof event !== 'undefined' && event && event.id)
+  ));
+  const isVendorDiscovery = title === 'Vendor directory' || (typeof vendor !== 'undefined' && vendor);
+  const selectedTool = typeof activeTool !== 'undefined' ? activeTool : '';
+  const navEvent = typeof event !== 'undefined' && event && event.id
+    ? event
+    : (typeof events !== 'undefined' && events && events.length
+      ? events.find((item) => !item.isPast) || events[0]
+      : null);
+  const plannerToolHref = (section) => user && navEvent
+    ? `/events/${navEvent.id}/${section}`
+    : user ? '/dashboard#new' : '/auth';
+%>
+  <% if (!isAuthPage) { %>
   <header class="bar">
-    <a class="brand" href="<%= vendorView ? '#vendor-content' : (user ? '/dashboard' : '/auth') %>">Nodevents<small>EVENT COORDINATION</small></a>
-    <% if (vendorView) { %>
-      <span class="portal-label"><%= vendorUser ? `Vendor account · ${vendorUser.name}` : 'Vendor portal' %></span>
-    <% } else { %>
+    <a class="brand" href="/">Nodevents<small>EVENT COORDINATION</small></a>
+    <% if (!isAuthPage && vendorView) { %>
       <nav class="bar-nav" aria-label="Main navigation">
-        <a href="/learn">How it works</a>
-        <a href="/vendor/login">Vendor sign in</a>
-        <% if (!user) { %><a href="/auth">Planner sign in</a><% } %>
+        <% if (vendorUser) { %><a href="/vendor/dashboard">My events</a><% } else { %><a href="/vendor/login">Vendor sign in</a><% } %>
+        <% if (vendorUser) { %><a href="/vendor/profile">Vendor profile</a><% } %>
+      </nav>
+    <% } else if (!isAuthPage && user) { %>
+      <nav class="bar-nav" aria-label="Main navigation">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/dashboard#new">New event</a>
+        <% if (isAdmin) { %><a href="/admin">Admin</a><% } %>
+      </nav>
+    <% } else if (!isAuthPage) { %>
+      <nav class="bar-nav" aria-label="Main navigation">
+        <a href="/browse-events">Browse Events</a>
+        <a href="/vendors">Find Vendors</a>
+        <a href="/auth">Planner sign in</a>
       </nav>
     <% } %>
     <button class="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false">
@@ -41,6 +74,14 @@
         <path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z"></path>
       </svg>
     </button>
+    <% if (vendorView && vendorUser) { %>
+      <div class="bar-actions">
+        <span class="muted">Hi, <%= vendorUser.name %></span>
+        <form method="post" action="/vendor/logout">
+          <button class="account-action" type="submit">Log out</button>
+        </form>
+      </div>
+    <% } %>
     <% if (user && !vendorView) { %>
       <div class="bar-actions">
         <span class="muted">Hi, <%= user.name %></span>
@@ -49,14 +90,33 @@
         </form>
       </div>
     <% } %>
-    <% if (vendorUser && vendorView) { %>
-      <div class="bar-actions">
-        <a class="vendor-account-link" href="/vendor/dashboard">My events</a>
-        <form method="post" action="/vendor/logout">
-          <button class="account-action" type="submit">Log out</button>
-        </form>
-      </div>
-    <% } %>
   </header>
-  <main>
+  <% } %>
+  <div class="app-shell <%= showPlannerSidebar ? 'has-sidebar' : '' %>">
+    <% if (showPlannerSidebar) { %>
+    <aside class="side-nav" aria-label="Site navigation">
+      <p class="side-nav-title">Explore Nodevents</p>
+      <nav aria-label="Primary">
+        <a class="<%= title === 'Nodevents · Event Planner' ? 'active' : '' %>" href="/">Home</a>
+        <a class="<%= title === 'Browse Events' ? 'active' : '' %>" href="/browse-events">Browse Events</a>
+        <a class="<%= isVendorDiscovery ? 'active' : '' %>" href="/vendors">Find Vendors</a>
+        <a class="<%= title === 'Planner dashboard' ? 'active' : '' %>" href="<%= user ? '/dashboard' : vendorUser ? '/vendor/dashboard' : '/auth' %>"><%= vendorUser && !user ? 'My Vendor Events' : 'My Events' %></a>
+        <span class="side-nav-divider" role="presentation"></span>
+        <p class="side-nav-title">Planning tools</p>
+        <a class="<%= selectedTool === 'guests' ? 'active' : '' %>" href="<%= plannerToolHref('guests') %>">Guest Management</a>
+        <a class="<%= selectedTool === 'catering' ? 'active' : '' %>" href="<%= plannerToolHref('catering') %>">Catering Management</a>
+        <a class="<%= selectedTool === 'budget' ? 'active' : '' %>" href="<%= plannerToolHref('budget') %>">Budget Planner</a>
+        <span class="side-nav-divider" role="presentation"></span>
+        <% if (vendorUser) { %><a href="/vendor/profile">Vendor Profile</a><% } %>
+        <% if (user) { %><a href="/plans">Plans and payments</a><% } else if (!vendorView) { %><a href="/plans">Plans and payments</a><% } %>
+        <% if (user && isAdmin) { %><a href="/admin">Admin</a><% } %>
+      </nav>
+      <% if (!user && !vendorUser) { %>
+        <p class="side-nav-hint">Sign in to manage events and planning tools.</p>
+      <% } else if (user && !navEvent) { %>
+        <p class="side-nav-hint">Create an event to open its guest, catering, and budget tools.</p>
+      <% } %>
+    </aside>
+    <% } %>
+    <main>
   <% if (notice) { %><p class="flash" role="status"><%= notice %></p><% } %>

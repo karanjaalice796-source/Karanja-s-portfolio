@@ -1,0 +1,60 @@
+<%- include('partials/head', { title: 'Vendor directory' }) %>
+<div class="dash">
+  <section class="d-hero">
+    <div>
+      <p class="eyebrow">Find Vendors</p>
+      <h1>Discover event services.</h1>
+      <p class="d-sub">Search published vendor profiles by category, services, business name, or location.</p>
+    </div>
+    <% if (vendorUser) { %>
+      <a class="button primary" href="/vendor/profile">Manage your profile</a>
+    <% } else { %>
+      <a class="button primary" href="/vendor/login">Vendor sign in</a>
+    <% } %>
+  </section>
+
+  <form class="directory-search panel" method="get" action="/vendors">
+    <label>Search vendors<input type="search" name="q" maxlength="100" value="<%= search %>" placeholder="e.g. photography, Nairobi, catering"></label>
+    <label>Category
+      <select name="category">
+        <option value="">All categories</option>
+        <% categories.forEach((item) => { %><option value="<%= item %>" <%= category.toLowerCase() === item.toLowerCase() ? 'selected' : '' %>><%= item %></option><% }) %>
+      </select>
+    </label>
+    <button class="primary" type="submit">Search</button>
+    <% if (search || category) { %><a class="button" href="/vendors">Clear filters</a><% } %>
+  </form>
+
+  <div class="directory-results-heading">
+    <h2>Vendor profiles</h2>
+    <span class="muted"><%= vendors.length %><%= vendors.length === 100 ? '+' : '' %> results</span>
+  </div>
+  <% if (vendors.length) { %>
+    <div class="directory-grid">
+      <% vendors.forEach((vendor) => { %>
+        <article class="panel directory-card">
+          <div class="directory-categories">
+            <% const profileCategories = vendor.service_categories
+              ? vendor.service_categories.split('|')
+              : [vendor.category]; %>
+            <% profileCategories.forEach((serviceCategory) => { %><span class="directory-category"><%= serviceCategory %></span><% }) %>
+          </div>
+          <h2><a href="/vendors/<%= vendor.id %>"><%= vendor.business_name %></a></h2>
+          <% if (vendor.location) { %><p class="muted"><%= vendor.location %></p><% } %>
+          <% if (vendor.services) { %><p class="directory-services"><strong>Services:</strong> <%= vendor.services %></p><% } %>
+          <% if (vendor.description) { %><p class="muted"><%= vendor.description %></p><% } %>
+          <a href="/vendors/<%= vendor.id %>">View profile</a>
+        </article>
+      <% }) %>
+    </div>
+  <% } else { %>
+    <section class="d-empty">
+      <h2><%= search || category ? 'No matching vendors' : 'No vendor profiles published yet' %></h2>
+      <p><%= search || category
+        ? 'Try another search or clear the category filter.'
+        : 'Vendors can publish a profile from their account. Check back as the directory grows.' %></p>
+      <% if (search || category) { %><a class="button" href="/vendors">Show all profiles</a><% } %>
+    </section>
+  <% } %>
+</div>
+<%- include('partials/foot') %>

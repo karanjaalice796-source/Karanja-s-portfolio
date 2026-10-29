@@ -21,6 +21,12 @@
       <span>Your role</span>
       <strong><%= vendor.category || 'Event vendor' %></strong>
     </div>
+    <% if (vendor.services) { %>
+      <div class="vendor-detail">
+        <span>Services for this event</span>
+        <strong><%= vendor.services %></strong>
+      </div>
+    <% } %>
     <% if (vendor.venue_notes) { %><p class="vendor-note"><strong>Arrival notes from your planner:</strong> <%= vendor.venue_notes %></p><% } %>
   </div>
   <div class="vendor-response-summary">

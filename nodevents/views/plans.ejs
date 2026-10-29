@@ -1,0 +1,51 @@
+<%- include('partials/head', { title: 'Plans and payments' }) %>
+<section class="plans-hero">
+  <p class="eyebrow">Plans and payments</p>
+  <h1>Choose how you’d like to subscribe.</h1>
+  <p class="intro">Subscription checkout is not active yet. These options explain the planned billing choices; this page will not collect payment details or charge you.</p>
+</section>
+
+<nav class="learning-nav" aria-label="Plan sections">
+  <a href="#subscription-options">Subscription options</a>
+  <a href="#payment-methods">Payment methods</a>
+</nav>
+
+<section class="learning-section" id="subscription-options">
+  <div class="learning-section-heading">
+    <span class="learning-number">01</span>
+    <div><p class="eyebrow">Subscription options</p><h2>Monthly or annual billing</h2></div>
+  </div>
+  <div class="subscription-grid">
+    <article class="panel subscription-card">
+      <p class="eyebrow">Flexible</p>
+      <h3>Monthly subscription</h3>
+      <p>Pay month to month once subscriptions are available.</p>
+      <span class="subscription-status">Not available yet</span>
+    </article>
+    <article class="panel subscription-card">
+      <p class="eyebrow">Yearly</p>
+      <h3>Annual subscription</h3>
+      <p>Choose annual billing once plans and prices are published.</p>
+      <span class="subscription-status">Not available yet</span>
+    </article>
+  </div>
+  <p class="muted">Pricing, plan limits, and cancellation terms have not been set. No subscription or trial is started from this page.</p>
+</section>
+
+<section class="learning-section" id="payment-methods">
+  <div class="learning-section-heading">
+    <span class="learning-number">02</span>
+    <div><p class="eyebrow">Payment methods</p><h2>Payment options being prepared</h2></div>
+  </div>
+  <ul class="payment-method-list">
+    <li><strong>M-Pesa</strong><span>Planned; payment collection is not enabled.</span></li>
+    <li><strong>Debit or credit card</strong><span>Planned; card details are not collected here.</span></li>
+    <li><strong>Bank transfer</strong><span>Planned; no account or payment instructions are active.</span></li>
+  </ul>
+  <% if (supportEmail) { %>
+    <p class="muted">For subscription questions, contact <a href="mailto:<%= supportEmail %>"><%= supportEmail %></a>.</p>
+  <% } else { %>
+    <p class="muted">Contact the Nodevents administrator for subscription questions.</p>
+  <% } %>
+</section>
+<%- include('partials/foot') %>
