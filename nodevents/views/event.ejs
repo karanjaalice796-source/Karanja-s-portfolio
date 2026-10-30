@@ -35,7 +35,11 @@
   <a class="<%= toolPage === 'budget' ? 'active' : '' %>" href="/events/<%= event.id %>/budget">Budget Planner</a>
   <a class="<%= toolPage === 'guests' ? 'active' : '' %>" href="/events/<%= event.id %>/guests">Guest Management</a>
   <a class="<%= toolPage === 'catering' ? 'active' : '' %>" href="/events/<%= event.id %>/catering">Catering Management</a>
-  <a href="/vendors">Find Vendors</a>
+  <a href="/events/<%= event.id %>/logistics">Event Logistics</a>
+  <a href="/events/<%= event.id %>/tickets">Registration & Tickets</a>
+  <a href="/events/<%= event.id %>/event-day">Event day</a>
+  <a href="/events/<%= event.id %>/reports">Reports</a>
+  <a href="/vendors">Find vendors</a>
 </nav>
 <% if (toolPage === 'overview' || toolPage === 'budget') { %>
 <section class="panel planning-panel" id="budget-management">

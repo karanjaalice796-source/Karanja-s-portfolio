@@ -1,0 +1,17 @@
+<%- include('partials/head', { title: `Event feedback · ${event.title}` }) %>
+<section class="panel public-registration">
+  <p class="eyebrow">Post-event feedback</p>
+  <h1><%= event.title %></h1>
+  <% if (saved) { %>
+    <p class="intro">Thank you for sharing your feedback. Your response has been saved.</p>
+    <a class="button" href="/tickets/<%= registration.qr_token %>">Return to your ticket</a>
+  <% } else { %>
+    <p class="muted">Your feedback helps the organizer improve future events.</p>
+    <form class="stack" method="post" action="/tickets/<%= registration.qr_token %>/feedback">
+      <label>Overall rating<select name="rating" required><option value="">Choose a rating</option><option value="5">5 — Excellent</option><option value="4">4 — Good</option><option value="3">3 — Okay</option><option value="2">2 — Poor</option><option value="1">1 — Very poor</option></select></label>
+      <label>Comments <small>(optional)</small><textarea name="comments" maxlength="1500"></textarea></label>
+      <button class="primary" type="submit">Submit feedback</button>
+    </form>
+  <% } %>
+</section>
+<%- include('partials/foot') %>

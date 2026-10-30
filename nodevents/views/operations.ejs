@@ -1,0 +1,241 @@
+<%
+  const moduleTitles = {
+    logistics: 'Event logistics',
+    tickets: 'Registration and tickets',
+    'event-day': 'Event-day operations',
+    reports: 'Event reports',
+  };
+  const cash = (amount) => `${event.budget_currency} ${Number(amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+%>
+<%- include('partials/head', { title: `${moduleTitles[module]} · ${event.title}`, activeTool: module }) %>
+<div class="operations-page">
+  <div data-event-id="<%= event.id %>"></div>
+  <div class="operations-heading">
+    <div>
+      <a href="/events/<%= event.id %>">← <%= event.title %></a>
+      <p class="eyebrow"><%= new Date(`${event.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'full' }) %></p>
+      <h1><%= moduleTitles[module] %></h1>
+      <p class="muted"><%= event.venue || 'Venue to be confirmed' %></p>
+    </div>
+    <nav class="event-tools-nav" aria-label="Event modules">
+      <a href="/events/<%= event.id %>/logistics" class="<%= module === 'logistics' ? 'active' : '' %>">Logistics</a>
+      <a href="/events/<%= event.id %>/budget">Budget</a>
+      <a href="/events/<%= event.id %>/guests">Guests</a>
+      <a href="/events/<%= event.id %>/catering">Catering</a>
+      <a href="/events/<%= event.id %>/tickets" class="<%= module === 'tickets' ? 'active' : '' %>">Tickets</a>
+      <a href="/events/<%= event.id %>/event-day" class="<%= module === 'event-day' ? 'active' : '' %>">Event day</a>
+      <a href="/events/<%= event.id %>/reports" class="<%= module === 'reports' ? 'active' : '' %>">Reports</a>
+      <a href="/vendors">Find Vendors</a>
+    </nav>
+  </div>
+
+  <% if (module === 'logistics') { %>
+    <section class="panel operations-panel">
+      <h2>Venue map and layout</h2>
+      <p class="muted">Add labeled areas and position them on the simple venue map using percentages from the top-left corner.</p>
+      <div class="venue-map" aria-label="Event venue layout">
+        <% zones.forEach((zone) => { %>
+          <div class="venue-zone" style="left:<%= zone.position_x %>%;top:<%= zone.position_y %>%">
+            <strong><%= zone.label %></strong><small><%= zone.zone_type %></small>
+          </div>
+        <% }) %>
+        <% if (!zones.length) { %><span class="venue-map-hint">Add your first venue area below</span><% } %>
+      </div>
+      <form class="row operations-form" method="post" action="/events/<%= event.id %>/logistics/zones">
+        <label>Area name<input name="label" maxlength="80" placeholder="Stage, entrance, dining" required></label>
+        <label>Area type<select name="zone_type"><% ['Stage','Entrance','Seating','Catering','Emergency exit','Registration','Other'].forEach(type => { %><option><%= type %></option><% }) %></select></label>
+        <label>Horizontal position (%)<input type="number" name="position_x" min="0" max="100" value="50" required></label>
+        <label>Vertical position (%)<input type="number" name="position_y" min="0" max="100" value="50" required></label>
+        <label class="wide-field">Notes<input name="notes" maxlength="240" placeholder="Optional setup or access notes"></label>
+        <button class="primary" type="submit">Add map area</button>
+      </form>
+      <% if (zones.length) { %>
+        <ul class="compact-list"><% zones.forEach(zone => { %><li><strong><%= zone.label %></strong> · <%= zone.zone_type %><% if (zone.notes) { %> · <%= zone.notes %><% } %>
+          <form method="post" action="/events/<%= event.id %>/logistics/zones/<%= zone.id %>/delete"><button type="submit" class="button-small">Remove</button></form></li><% }) %></ul>
+      <% } %>
+    </section>
+
+    <section class="panel operations-panel">
+      <h2>Team and task workflow</h2>
+      <form class="row operations-form" method="post" action="/events/<%= event.id %>/logistics/staff">
+        <label>Team member<input name="name" maxlength="80" required></label>
+        <label>Email<input type="email" name="email" maxlength="160"></label>
+        <label>Role<input name="role" maxlength="60" placeholder="Coordinator, usher…" required></label>
+        <button type="submit">Add team member</button>
+      </form>
+      <form class="row operations-form" method="post" action="/events/<%= event.id %>/tasks">
+        <label>Task<input name="title" maxlength="160" required></label>
+        <label>Deadline<input type="datetime-local" name="start_time" required></label>
+        <label>Assign to<select name="assigned_staff_id"><option value="">Unassigned</option><% staff.forEach(person => { %><option value="<%= person.id %>"><%= person.name %> · <%= person.role %></option><% }) %></select></label>
+        <label>Priority<select name="priority"><option value="normal">Normal</option><option value="high">High</option><option value="low">Low</option></select></label>
+        <label class="wide-field">Details<input name="notes" maxlength="1000"></label>
+        <button class="primary" type="submit">Create task</button>
+      </form>
+      <ul class="compact-list">
+        <% tasks.forEach(task => { %>
+          <li class="<%= task.completed ? 'is-complete' : '' %>">
+            <form method="post" action="/events/<%= event.id %>/logistics/tasks/<%= task.id %>/toggle"><button type="submit"><%= task.completed ? 'Reopen' : 'Complete' %></button></form>
+            <strong><%= task.title %></strong> · <%= task.priority %> priority · <%= task.assignee_name || 'Unassigned' %> · <%= new Date(task.start_time).toLocaleString() %>
+          </li>
+        <% }) %>
+      </ul>
+      <% if (!tasks.length) { %><p class="muted">No tasks yet.</p><% } %>
+    </section>
+
+    <section class="panel operations-panel">
+      <h2>Vendor contracts and arrival</h2>
+      <p class="muted">Track agreement references and terms. Store signed documents in your approved secure document storage; do not enter sensitive payment credentials here.</p>
+      <% vendors.forEach(vendor => { const contract = vendor.contract_id ? vendor : null; %>
+        <details class="operations-item">
+          <summary><strong><%= vendor.name %></strong> · <%= contract ? contract.contract_status : 'No contract recorded' %></summary>
+          <form class="row operations-form" method="post" action="/events/<%= event.id %>/logistics/vendors/<%= vendor.id %>/contract">
+            <label>Contract reference<input name="reference" maxlength="100" value="<%= contract ? vendor.contract_reference : '' %>" placeholder="Internal reference"></label>
+            <label>Agreed amount (<%= event.budget_currency %>)<input type="number" name="agreed_amount" min="0" step="0.01" value="<%= contract ? vendor.agreed_amount : vendor.estimated_cost %>" required></label>
+            <label>Deposit amount<input type="number" name="deposit_amount" min="0" step="0.01" value="<%= contract ? vendor.deposit_amount : 0 %>" required></label>
+            <label>Deadline<input type="date" name="due_date" value="<%= contract ? vendor.contract_due_date : '' %>"></label>
+            <label>Status<select name="status"><% ['draft','sent','signed','complete','cancelled'].forEach(status => { %><option value="<%= status %>" <%= contract && vendor.contract_status === status ? 'selected' : '' %>><%= status %></option><% }) %></select></label>
+            <label class="wide-field">Terms / notes<textarea name="terms" maxlength="3000"><%= contract ? vendor.contract_terms : '' %></textarea></label>
+            <button type="submit">Save agreement record</button>
+          </form>
+        </details>
+      <% }) %>
+      <% if (!vendors.length) { %><p class="muted">Add vendors to record agreements.</p><% } %>
+    </section>
+
+    <section class="panel operations-panel">
+      <h2>Expenses and actual spending</h2>
+      <p class="operations-totals">Planned: <strong><%= cash(expenseTotals.estimated) %></strong> · Actual: <strong><%= cash(expenseTotals.actual) %></strong> · Remaining against budget: <strong><%= cash(Number(event.budget_total) - expenseTotals.actual) %></strong></p>
+      <form class="row operations-form" method="post" action="/events/<%= event.id %>/logistics/expenses">
+        <label>Expense category<input name="category" maxlength="80" placeholder="Venue, catering, transport…" required></label>
+        <label>Description<input name="description" maxlength="160" required></label>
+        <label>Estimated amount<input type="number" name="estimated_amount" min="0" step="0.01" value="0" required></label>
+        <label>Actual amount<input type="number" name="actual_amount" min="0" step="0.01" value="0" required></label>
+        <label>Expense date<input type="date" name="expense_date"></label>
+        <label>Vendor<select name="vendor_id"><option value="">Other expense</option><% vendors.forEach(vendor => { %><option value="<%= vendor.id %>"><%= vendor.name %></option><% }) %></select></label>
+        <label>Status<select name="status"><option value="planned">Planned</option><option value="paid">Paid</option></select></label>
+        <label class="wide-field">Notes<input name="notes" maxlength="500"></label>
+        <button class="primary" type="submit">Add expense</button>
+      </form>
+      <% if (expenses.length) { %><div class="table-scroll"><table><thead><tr><th>Expense</th><th>Vendor</th><th>Estimate</th><th>Actual</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+        <% expenses.forEach(expense => { %><tr>
+          <td><form id="expense-<%= expense.id %>" method="post" action="/events/<%= event.id %>/logistics/expenses/<%= expense.id %>/update"></form><label class="sr-only" for="expense-desc-<%= expense.id %>">Expense description</label><input id="expense-desc-<%= expense.id %>" form="expense-<%= expense.id %>" name="description" maxlength="160" value="<%= expense.description %>" required><small><%= expense.category %> · <%= expense.expense_date || 'No date' %></small></td>
+          <td><%= expense.vendor_name || '—' %></td>
+          <td><label class="sr-only" for="expense-est-<%= expense.id %>">Estimated amount</label><input id="expense-est-<%= expense.id %>" form="expense-<%= expense.id %>" type="number" name="estimated_amount" min="0" step="0.01" value="<%= expense.estimated_amount %>" required></td>
+          <td><label class="sr-only" for="expense-actual-<%= expense.id %>">Actual amount</label><input id="expense-actual-<%= expense.id %>" form="expense-<%= expense.id %>" type="number" name="actual_amount" min="0" step="0.01" value="<%= expense.actual_amount %>" required></td>
+          <td><select form="expense-<%= expense.id %>" name="status"><option value="planned" <%= expense.status === 'planned' ? 'selected' : '' %>>Planned</option><option value="paid" <%= expense.status === 'paid' ? 'selected' : '' %>>Paid</option></select></td>
+          <td><button form="expense-<%= expense.id %>" type="submit" class="button-small">Save</button><form method="post" action="/events/<%= event.id %>/logistics/expenses/<%= expense.id %>/delete"><button type="submit" class="button-small">Remove</button></form></td>
+        </tr><% }) %>
+      </tbody></table></div><% } else { %><p class="muted">No expenses recorded.</p><% } %>
+    </section>
+  <% } %>
+
+  <% if (module === 'tickets') { %>
+    <section class="panel operations-panel">
+      <h2>Public registration form</h2>
+      <p class="muted">Free tickets are confirmed immediately. Paid tickets stay pending until the organizer verifies an external payment; no payment is collected by Nodevents yet.</p>
+      <form class="stack" method="post" action="/events/<%= event.id %>/tickets/settings">
+        <label>Custom registration questions <small>One question per line, up to 5</small><textarea name="custom_questions" maxlength="1000" placeholder="Dietary requirements&#10;Organization"><%= customQuestions.join('\n') %></textarea></label>
+        <label class="profile-publish-toggle"><input type="checkbox" name="registration_is_open" <%= event.registration_is_open ? 'checked' : '' %>> Open public registration</label>
+        <button type="submit">Save registration form</button>
+      </form>
+      <p>Registration link: <a href="/register/<%= event.registration_token %>">/register/<%= event.registration_token %></a></p>
+      <form class="row operations-form" method="post" action="/events/<%= event.id %>/tickets/types">
+        <label>Ticket category<input name="name" maxlength="60" placeholder="Regular, VIP, Early Bird" required></label>
+        <label>Price (<%= event.budget_currency %>)<input type="number" name="price" min="0" max="9999999" step="0.01" value="0" required></label>
+        <label>Capacity<input type="number" name="capacity" min="1" max="100000" required></label>
+        <button type="submit">Add ticket category</button>
+      </form>
+      <% if (ticketTypes.length) { %><div class="table-scroll"><table><thead><tr><th>Ticket</th><th>Price</th><th>Capacity</th><th>Issued / reserved</th><th>Available</th><th></th></tr></thead><tbody>
+        <% ticketTypes.forEach(ticket => { %><tr><td><strong><%= ticket.name %></strong></td><td><%= cash(ticket.price) %></td><td><%= ticket.capacity %></td><td><%= ticket.issued %></td><td><%= Math.max(0, ticket.capacity - ticket.issued) %></td><td><form method="post" action="/events/<%= event.id %>/tickets/types/<%= ticket.id %>/delete"><button class="button-small" type="submit" <%= ticket.registration_count ? 'disabled' : '' %>>Remove</button></form></td></tr><% }) %>
+      </tbody></table></div><% } else { %><p class="muted">Add a ticket category before opening registration.</p><% } %>
+      <h3>Registrations</h3>
+      <% if (registrations.length) { %><div class="table-scroll"><table><thead><tr><th>Attendee</th><th>Ticket</th><th>Payment</th><th>Status</th><th>Attendance</th><th>Action</th></tr></thead><tbody>
+        <% registrations.forEach(registration => { %><tr>
+          <td><strong><%= registration.full_name %></strong><br><small><%= registration.email %></small><% if (registration.answers.length) { %><br><small><%= registration.answers.map(answer => `${answer.question}: ${answer.answer}`).join(' · ') %></small><% } %></td>
+          <td><%= registration.ticket_name %></td>
+          <td><%= registration.price ? cash(registration.price) : 'Free' %><% if (registration.payment_reference) { %><br><small><%= registration.payment_method %>: <%= registration.payment_reference %></small><% } %></td>
+          <td><%= registration.status.replace('_', ' ') %></td><td><%= registration.checked_in_at ? 'Checked in' : 'Not checked in' %></td>
+          <td><% if (registration.status === 'awaiting_payment') { %><form method="post" action="/events/<%= event.id %>/tickets/<%= registration.id %>/verify-payment"><label>Verified method/reference<input name="payment_reference" maxlength="100" placeholder="Verified M-Pesa/bank receipt" required></label><button type="submit">Verify payment & issue ticket</button></form><% } else if (registration.status === 'confirmed') { %><a href="/tickets/<%= registration.qr_token %>">View ticket</a><% } %>
+            <% if (registration.status !== 'cancelled') { %><form method="post" action="/events/<%= event.id %>/tickets/<%= registration.id %>/cancel"><button class="button-small" type="submit">Cancel</button></form><% } %>
+          </td>
+        </tr><% }) %>
+      </tbody></table></div><% } else { %><p class="muted">No registrations yet.</p><% } %>
+    </section>
+  <% } %>
+
+  <% if (module === 'event-day') { %>
+    <section class="panel operations-panel">
+      <h2>Live attendance</h2>
+      <div class="operations-metrics">
+        <div><strong data-live-registered><%= attendance.confirmed %></strong><span>Confirmed tickets</span></div>
+        <div><strong data-live-checked-in><%= attendance.ticketCheckedIn %></strong><span>Ticket check-ins</span></div>
+        <div><strong><%= attendance.guestCheckedIn %></strong><span>Guest-list check-ins</span></div>
+        <div><strong data-live-awaiting-payment><%= attendance.pendingPayment %></strong><span>Awaiting payment</span></div>
+      </div>
+      <details class="checkin-scanner" open>
+        <summary>Scan a ticket QR code</summary>
+        <p class="muted">Paid tickets must be verified before check-in. Duplicate scans are rejected.</p>
+        <div class="scanner-controls"><button type="button" class="primary" data-start-scanner>Start camera</button><button type="button" data-stop-scanner disabled>Stop camera</button></div>
+        <video data-checkin-video muted playsinline aria-label="Ticket QR scanner"></video>
+        <p data-scanner-status class="muted" role="status" aria-live="polite">Scanner is stopped.</p>
+        <form class="row manual-checkin" data-checkin-mode="ticket" method="post" action="/events/<%= event.id %>/tickets/check-in">
+          <label>Ticket code<input name="qr_token" pattern="[a-f0-9]{64}" maxlength="64" required></label><button type="submit">Check in ticket</button>
+        </form>
+      </details>
+    </section>
+    <section class="panel operations-panel">
+      <h2>Team coordination</h2>
+      <% if (staff.length) { %><ul class="compact-list"><% staff.forEach(person => { %><li><strong><%= person.name %></strong> · <%= person.role %> · <%= person.email || 'No email' %></li><% }) %></ul><% } else { %><p class="muted">Add team members in Event Logistics to coordinate duties.</p><% } %>
+      <h2>Vendor arrival and setup</h2>
+      <% if (vendors.length) { %><ul class="compact-list"><% vendors.forEach(vendor => { %><li><strong><%= vendor.name %></strong> · <%= vendor.arrival_status.replace('_', ' ') %>
+        <form method="post" action="/events/<%= event.id %>/event-day/vendors/<%= vendor.id %>/arrival"><select name="arrival_status" aria-label="Arrival status for <%= vendor.name %>"><% ['not_arrived','arrived','setting_up','ready','delayed'].forEach(status => { %><option value="<%= status %>" <%= vendor.arrival_status === status ? 'selected' : '' %>><%= status.replace('_', ' ') %></option><% }) %></select><button type="submit">Update</button></form>
+      </li><% }) %></ul><% } else { %><p class="muted">No vendors linked to this event.</p><% } %>
+    </section>
+    <section class="panel operations-panel">
+      <h2>Catering service monitoring</h2>
+      <p>Planned portions: <strong><%= catering.portions %></strong> · Meals served: <strong><%= event.meals_served_count %></strong> · Remaining: <strong><%= Math.max(0, catering.portions - event.meals_served_count) %></strong></p>
+      <form class="row operations-form" method="post" action="/events/<%= event.id %>/event-day/meals"><label>Meals served<input type="number" name="meals_served_count" min="0" max="100000" value="<%= event.meals_served_count %>" required></label><button type="submit">Save meals served</button></form>
+    </section>
+    <section class="panel operations-panel">
+      <h2>Announcements to confirmed attendees</h2>
+      <form class="stack" method="post" action="/events/<%= event.id %>/event-day/announcements">
+        <label>Subject<input name="subject" maxlength="120" required></label>
+        <label>Message<textarea name="message" maxlength="2000" required></textarea></label>
+        <button class="primary" type="submit">Send event update</button>
+      </form>
+      <% if (announcements.length) { %><ul class="compact-list"><% announcements.forEach(item => { %><li><strong><%= item.subject %></strong> · sent to <%= item.sent_count %> confirmed attendees · <%= item.created_at %></li><% }) %></ul><% } %>
+    </section>
+    <section class="panel operations-panel">
+      <h2>Incident reports</h2>
+      <form class="row operations-form" method="post" action="/events/<%= event.id %>/event-day/incidents">
+        <label>Reported by<input name="reported_by" maxlength="80" required></label><label>Issue<input name="title" maxlength="120" required></label>
+        <label>Severity<select name="severity"><option value="normal">Normal</option><option value="high">High</option><option value="low">Low</option></select></label>
+        <label class="wide-field">Details<textarea name="details" maxlength="1000"></textarea></label><button type="submit">Report incident</button>
+      </form>
+      <% if (incidents.length) { %><ul class="compact-list"><% incidents.forEach(item => { %><li><strong><%= item.title %></strong> · <%= item.severity %> · <%= item.status %> · <%= item.reported_by %><% if (item.details) { %><p><%= item.details %></p><% } %><% if (item.status === 'open') { %><form method="post" action="/events/<%= event.id %>/event-day/incidents/<%= item.id %>/resolve"><button class="button-small" type="submit">Resolve</button></form><% } %></li><% }) %></ul><% } else { %><p class="muted">No incidents reported.</p><% } %>
+    </section>
+    <script src="/guest-checkin.js" defer></script>
+  <% } %>
+
+  <% if (module === 'reports') { %>
+    <section class="panel operations-panel">
+      <div class="section-heading"><div><h2>Event performance</h2><p class="muted">Actuals update as tickets are checked in, invoices are recorded, and expenses are saved.</p></div><a class="button" href="/events/<%= event.id %>/reports.csv">Download CSV report</a></div>
+      <div class="operations-metrics">
+        <div><strong><%= report.registered %></strong><span>Confirmed registrations</span></div>
+        <div><strong><%= report.checkedIn %></strong><span>Checked in</span></div>
+        <div><strong><%= report.attendanceRate %>%</strong><span>Attendance rate</span></div>
+        <div><strong><%= report.noShowRate %>%</strong><span>No-show rate</span></div>
+        <div><strong><%= cash(report.ticketRevenue) %></strong><span>Confirmed ticket value</span></div>
+        <div><strong><%= cash(report.expensesActual) %></strong><span>Recorded expenses</span></div>
+        <div><strong><%= cash(report.invoicesPaid) %></strong><span>Invoices marked paid</span></div>
+        <div><strong><%= cash(Number(event.budget_total) - report.expensesActual - report.invoicesPaid) %></strong><span>Budget less recorded spending</span></div>
+        <div><strong><%= catering.portions %> / <%= event.meals_served_count %></strong><span>Planned portions / meals served</span></div>
+      </div>
+      <h3>Attendee feedback</h3>
+      <p>Responses: <strong><%= report.feedbackCount %></strong> · Average rating: <strong><%= report.averageRating ? `${report.averageRating.toFixed(1)} / 5` : 'Not rated yet' %></strong></p>
+      <% if (feedback.length) { %><ul class="compact-list"><% feedback.forEach(item => { %><li><strong><%= item.attendee_name %></strong> · <%= item.rating %>/5<% if (item.comments) { %><p><%= item.comments %></p><% } %></li><% }) %></ul><% } else { %><p class="muted">Feedback appears here after attendees submit a post-event survey.</p><% } %>
+      <p class="muted">Ticket value is not net profit. Taxes, refunds, external income, and unrecorded costs may change the final result.</p>
+    </section>
+  <% } %>
+</div>
+<%- include('partials/foot') %>

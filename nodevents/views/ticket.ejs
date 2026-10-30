@@ -1,0 +1,20 @@
+<%- include('partials/head', { title: `Ticket · ${event.title}` }) %>
+<section class="panel public-registration ticket-badge">
+  <p class="eyebrow"><%= registration.status === 'confirmed' ? 'Digital ticket' : 'Registration status' %></p>
+  <h1><%= event.title %></h1>
+  <p class="intro"><%= new Date(`${event.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'full' }) %><%= event.venue ? ` · ${event.venue}` : '' %></p>
+  <p><strong><%= registration.full_name %></strong> · <%= registration.ticket_name %></p>
+  <% if (registration.status === 'awaiting_payment') { %>
+    <p class="budget-warning">Payment verification is pending. Your ticket is not confirmed and this registration QR cannot be used for entry.</p>
+    <p>Payment method: <%= registration.payment_method || 'Not specified' %><%= registration.payment_reference ? ` · Reference: ${registration.payment_reference}` : '' %></p>
+    <p class="muted">Contact the event organizer with your payment receipt. Do not send your PIN or password.</p>
+  <% } else if (registration.status === 'cancelled') { %>
+    <p class="error">This registration has been cancelled.</p>
+  <% } else { %>
+    <p class="badge confirmed">Confirmed ticket</p>
+    <img class="ticket-qr" src="/tickets/<%= registration.qr_token %>/qr" alt="Check-in QR for <%= registration.full_name %>">
+    <p class="muted">Show this QR code to event staff. It can only be checked in once.</p>
+    <% if (event.event_date <= today) { %><a class="button" href="/tickets/<%= registration.qr_token %>/feedback">Share event feedback</a><% } %>
+  <% } %>
+</section>
+<%- include('partials/foot') %>

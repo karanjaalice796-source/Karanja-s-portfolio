@@ -26,14 +26,15 @@
 </head>
 <body id="top">
 <%
-  const isAuthPage = title === 'Planner sign in' || title === 'Vendor sign in';
+  const isAuthPage = title === 'Planner sign in' || title === 'Vendor sign in' || title === 'Create vendor account';
+  const isPublicVendorProfile = title.endsWith('· Vendor profile');
   const showPlannerSidebar = Boolean(user && (
     title === 'Planner dashboard'
     || title === 'Vendor directory'
-    || (typeof vendor !== 'undefined' && vendor)
+    || isPublicVendorProfile
     || (typeof event !== 'undefined' && event && event.id)
   ));
-  const isVendorDiscovery = title === 'Vendor directory' || (typeof vendor !== 'undefined' && vendor);
+  const isVendorDiscovery = title === 'Vendor directory' || isPublicVendorProfile;
   const selectedTool = typeof activeTool !== 'undefined' ? activeTool : '';
   const navEvent = typeof event !== 'undefined' && event && event.id
     ? event
@@ -106,6 +107,10 @@
         <a class="<%= selectedTool === 'guests' ? 'active' : '' %>" href="<%= plannerToolHref('guests') %>">Guest Management</a>
         <a class="<%= selectedTool === 'catering' ? 'active' : '' %>" href="<%= plannerToolHref('catering') %>">Catering Management</a>
         <a class="<%= selectedTool === 'budget' ? 'active' : '' %>" href="<%= plannerToolHref('budget') %>">Budget Planner</a>
+        <a class="<%= selectedTool === 'logistics' ? 'active' : '' %>" href="<%= plannerToolHref('logistics') %>">Event Logistics</a>
+        <a class="<%= selectedTool === 'tickets' ? 'active' : '' %>" href="<%= plannerToolHref('tickets') %>">Registration & Tickets</a>
+        <a class="<%= selectedTool === 'event-day' ? 'active' : '' %>" href="<%= plannerToolHref('event-day') %>">Event-day Operations</a>
+        <a class="<%= selectedTool === 'reports' ? 'active' : '' %>" href="<%= plannerToolHref('reports') %>">Reports & Analytics</a>
         <span class="side-nav-divider" role="presentation"></span>
         <% if (vendorUser) { %><a href="/vendor/profile">Vendor Profile</a><% } %>
         <% if (user) { %><a href="/plans">Plans and payments</a><% } else if (!vendorView) { %><a href="/plans">Plans and payments</a><% } %>

@@ -9,6 +9,14 @@
     if (vendorElement) socket.emit('join:vendor', vendorElement.dataset.vendorToken);
   });
   socket.on('update', function (data) {
+    if (data.attendance) {
+      const checkedIn = document.querySelector('[data-live-checked-in]');
+      const registered = document.querySelector('[data-live-registered]');
+      const awaitingPayment = document.querySelector('[data-live-awaiting-payment]');
+      if (checkedIn) checkedIn.textContent = data.attendance.checkedIn;
+      if (registered) registered.textContent = data.attendance.confirmed;
+      if (awaitingPayment) awaitingPayment.textContent = data.attendance.awaitingPayment;
+    }
     let banner = document.getElementById('live-banner');
     if (!banner) {
       banner = document.createElement('div');

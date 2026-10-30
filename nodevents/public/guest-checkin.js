@@ -7,6 +7,9 @@
   if (!video || !startButton || !stopButton || !status || !form) return;
 
   var eventId = document.querySelector('[data-event-id]').getAttribute('data-event-id');
+  var isTicketCheckin = form.dataset.checkinMode === 'ticket';
+  var tokenField = isTicketCheckin ? 'qr_token' : 'checkin_token';
+  var attendeeType = isTicketCheckin ? 'ticket' : 'guest';
   var stream = null;
   var scanning = false;
   var detector = null;
@@ -24,19 +27,20 @@
 
   async function submitCheckin(token) {
     if (!/^[a-f0-9]{64}$/i.test(token)) {
-      status.textContent = 'The scanned QR code is not a valid check-in code.';
+      status.textContent = 'The scanned QR code is not a valid ' + attendeeType + ' code.';
       return;
     }
     scanning = false;
-    status.textContent = 'Checking in guest…';
+    status.textContent = 'Checking in ' + attendeeType + '…';
     try {
-      var response = await fetch('/events/' + encodeURIComponent(eventId) + '/guests/check-in', {
+      var endpoint = isTicketCheckin ? '/tickets/check-in' : '/guests/check-in';
+      var response = await fetch('/events/' + encodeURIComponent(eventId) + endpoint, {
         method: 'POST',
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
         },
-        body: new URLSearchParams({ checkin_token: token }),
+        body: new URLSearchParams({ [tokenField]: token }),
         credentials: 'same-origin',
       });
       var result = await response.json();
@@ -89,7 +93,7 @@
       scanning = true;
       startButton.disabled = true;
       stopButton.disabled = false;
-      status.textContent = 'Camera is ready. Hold a guest check-in QR code in view.';
+      status.textContent = 'Camera is ready. Hold a ' + attendeeType + ' check-in QR code in view.';
       window.requestAnimationFrame(scanFrame);
     } catch (error) {
       console.error('Guest check-in camera could not start:', error);
@@ -107,7 +111,7 @@
 
   form.addEventListener('submit', function (event) {
     event.preventDefault();
-    var token = new FormData(form).get('checkin_token');
+    var token = new FormData(form).get(tokenField);
     submitCheckin(String(token || '').trim());
   });
 

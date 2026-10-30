@@ -368,7 +368,21 @@ function recordChange(eventId, message) {
 }
 
 function emitEventUpdate(eventId, message) {
-  io.to(`event:${eventId}`).emit('update', { message });
+  const attendance = db.prepare(`
+    SELECT
+      COALESCE(SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END), 0) AS confirmed,
+      COALESCE(SUM(CASE WHEN status = 'awaiting_payment' THEN 1 ELSE 0 END), 0) AS awaiting_payment,
+      COALESCE(SUM(CASE WHEN status = 'confirmed' AND checked_in_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS checked_in
+    FROM registrations WHERE event_id = ?
+  `).get(eventId);
+  io.to(`event:${eventId}`).emit('update', {
+    message,
+    attendance: {
+      confirmed: Number(attendance.confirmed),
+      awaitingPayment: Number(attendance.awaiting_payment),
+      checkedIn: Number(attendance.checked_in),
+    },
+  });
   db.prepare('SELECT token FROM vendors WHERE event_id = ?').all(eventId)
     .forEach(({ token }) => io.to(`vendor:${token}`).emit('update', { message }));
 }
@@ -389,6 +403,23 @@ function clientPageUrl(token) {
 function guestRsvpUrl(token, request) {
   const origin = process.env.APP_BASE_URL || `${request.protocol}://${request.get('host')}`;
   return new URL(`/guest/rsvp/${token}`, origin).href;
+}
+
+function ticketPageUrl(token, request = null) {
+  const origin = process.env.APP_BASE_URL || (request ? `${request.protocol}://${request.get('host')}` : `http://localhost:${port}`);
+  return new URL(`/tickets/${token}`, origin).href;
+}
+
+function registrationQuestions(event) {
+  try {
+    const questions = JSON.parse(event.custom_questions || '[]');
+    return Array.isArray(questions)
+      ? questions.filter((question) => typeof question === 'string').slice(0, 5)
+      : [];
+  } catch (error) {
+    console.error(`Invalid custom registration questions for event ${event.id}:`, error);
+    return [];
+  }
 }
 
 function isValidDate(value) {
@@ -1242,8 +1273,8 @@ app.post('/events', requireAuth, (request, response) => {
   db.exec('BEGIN IMMEDIATE');
   try {
     const result = db.prepare(
-      'INSERT INTO events (user_id, title, event_date, event_type, venue, venue_notes) VALUES (?, ?, ?, ?, ?, ?)',
-    ).run(request.session.user.id, title, eventDate, eventType, venue, venueNotes);
+      'INSERT INTO events (user_id, title, event_date, event_type, venue, venue_notes, registration_token) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).run(request.session.user.id, title, eventDate, eventType, venue, venueNotes, crypto.randomBytes(32).toString('hex'));
     const eventId = Number(result.lastInsertRowid);
     createTemplateEntries(db, eventId, eventDate, eventType);
     db.exec('COMMIT');
@@ -1346,11 +1377,797 @@ app.get('/events/:id', requireAuth, (request, response) => {
 
 app.get('/events/:id/:toolPage', requireAuth, (request, response) => {
   const eventId = Number(request.params.id);
+  if (request.params.toolPage === 'reports.csv') return sendEventReport(request, response, eventId);
   const tools = { budget: 'budget', guests: 'guests', catering: 'catering' };
   const toolPage = tools[request.params.toolPage];
-  if (!toolPage) return response.sendStatus(404);
-  return renderPlannerEvent(request, response, eventId, toolPage);
+  if (toolPage) return renderPlannerEvent(request, response, eventId, toolPage);
+  if (['logistics', 'tickets', 'event-day', 'reports'].includes(request.params.toolPage)) {
+    return renderOperationsModule(request, response, eventId, request.params.toolPage);
+  }
+  return response.sendStatus(404);
 });
+
+app.get('/register/:token', (request, response) => {
+  const token = String(request.params.token || '');
+  if (!/^[a-f0-9]{64}$/.test(token)) return response.sendStatus(404);
+  const event = db.prepare(`
+    SELECT id, title, event_date, event_type, venue, venue_notes, budget_currency,
+      registration_token, custom_questions, registration_is_open
+    FROM events WHERE registration_token = ?
+  `).get(token);
+  if (!event) return response.sendStatus(404);
+  const ticketTypes = event.registration_is_open
+    ? db.prepare(`
+      SELECT ticket_types.*,
+        ticket_types.capacity - COALESCE(SUM(CASE WHEN registrations.status IN ('confirmed', 'awaiting_payment') THEN 1 ELSE 0 END), 0) AS remaining
+      FROM ticket_types LEFT JOIN registrations ON registrations.ticket_type_id = ticket_types.id
+      WHERE ticket_types.event_id = ?
+      GROUP BY ticket_types.id HAVING remaining > 0
+      ORDER BY ticket_types.price, ticket_types.id
+    `).all(event.id)
+    : [];
+  response.render('event-registration', {
+    event,
+    ticketTypes,
+    customQuestions: registrationQuestions(event),
+    error: event.registration_is_open ? null : 'Registration is currently closed.',
+  });
+});
+
+app.post('/register/:token', async (request, response, next) => {
+  const token = String(request.params.token || '');
+  if (!/^[a-f0-9]{64}$/.test(token)) return response.sendStatus(404);
+  const event = db.prepare(`
+    SELECT id, title, event_date, venue, budget_currency, registration_token, custom_questions, registration_is_open
+    FROM events WHERE registration_token = ?
+  `).get(token);
+  if (!event) return response.sendStatus(404);
+  const fullName = String(request.body.full_name || '').trim();
+  const email = String(request.body.email || '').trim().toLowerCase();
+  const phone = String(request.body.phone || '').trim();
+  const ticketTypeId = Number(request.body.ticket_type_id);
+  const paymentMethod = String(request.body.payment_method || '');
+  const paymentReference = String(request.body.payment_reference || '').trim();
+  const paymentMethods = new Set(['', 'M-Pesa', 'Bank transfer', 'Cash', 'Other']);
+  const questions = registrationQuestions(event);
+  const customAnswers = {};
+  questions.forEach((_question, index) => {
+    customAnswers[String(index)] = String(request.body[`answer_${index}`] || '').trim().slice(0, 300);
+  });
+  if (!event.registration_is_open) {
+    return response.status(410).render('message', {
+      title: 'Registration closed',
+      message: 'Registration for this event is closed.',
+      href: '/',
+      linkText: 'Home',
+      vendorView: false,
+    });
+  }
+  if (!fullName || fullName.length > 120 || !emailPattern.test(email) || email.length > 160
+    || phone.length > 24 || !Number.isSafeInteger(ticketTypeId) || !paymentMethods.has(paymentMethod)
+    || paymentReference.length > 100) {
+    return response.status(400).render('message', {
+      title: 'Registration not submitted',
+      message: 'Check the name, email, phone, ticket type, and payment details and try again.',
+      href: `/register/${token}`,
+      linkText: 'Return to registration',
+      vendorView: false,
+    });
+  }
+
+  db.exec('BEGIN IMMEDIATE');
+  let registration;
+  try {
+    const ticket = db.prepare('SELECT * FROM ticket_types WHERE id = ? AND event_id = ?')
+      .get(ticketTypeId, event.id);
+    if (!ticket) {
+      db.exec('ROLLBACK');
+      return response.status(400).render('message', {
+        title: 'Ticket unavailable',
+        message: 'That ticket type is no longer available.',
+        href: `/register/${token}`,
+        linkText: 'Choose another ticket',
+        vendorView: false,
+      });
+    }
+    if (Number(ticket.price) > 0 && !paymentMethod) {
+      db.exec('ROLLBACK');
+      return response.status(400).render('message', {
+        title: 'Choose a payment method',
+        message: 'Select the external payment method you plan to use. The organizer will verify payment before issuing a ticket.',
+        href: `/register/${token}`,
+        linkText: 'Return to registration',
+        vendorView: false,
+      });
+    }
+    const issued = db.prepare(`
+      SELECT COUNT(*) AS count FROM registrations
+      WHERE ticket_type_id = ? AND status IN ('confirmed', 'awaiting_payment')
+    `).get(ticketTypeId).count;
+    if (issued >= ticket.capacity) {
+      db.exec('ROLLBACK');
+      return response.status(409).render('message', {
+        title: 'Ticket sold out',
+        message: 'This ticket category has reached capacity. Return to registration to choose another category if one is available.',
+        href: `/register/${token}`,
+        linkText: 'Return to registration',
+        vendorView: false,
+      });
+    }
+    const qrToken = crypto.randomBytes(32).toString('hex');
+    const status = Number(ticket.price) > 0 ? 'awaiting_payment' : 'confirmed';
+    const result = db.prepare(`
+      INSERT INTO registrations
+        (event_id, ticket_type_id, full_name, email, phone, qr_token, status, payment_method, payment_reference, custom_answers)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      event.id,
+      ticketTypeId,
+      fullName,
+      email,
+      phone,
+      qrToken,
+      status,
+      Number(ticket.price) > 0 ? paymentMethod : '',
+      Number(ticket.price) > 0 ? paymentReference : '',
+      JSON.stringify(customAnswers),
+    );
+    registration = { id: Number(result.lastInsertRowid), qrToken, status, ticket };
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    return next(error);
+  }
+
+  const ticketUrl = ticketPageUrl(registration.qrToken, request);
+  await sendMail({
+    to: email,
+    subject: registration.status === 'confirmed' ? `Your ticket: ${event.title}` : `Registration received: ${event.title}`,
+    text: registration.status === 'confirmed'
+      ? `Hello ${fullName},\n\nYour ${registration.ticket.name} ticket for "${event.title}" is confirmed. Open your digital ticket and QR code here:\n${ticketUrl}\n\nKeep this link private.`
+      : `Hello ${fullName},\n\nYour registration for "${event.title}" is recorded, but payment verification is still pending. The organizer must verify your external payment before a ticket is issued. Do not send a PIN or password.`,
+  });
+  recordChange(event.id, `${registration.status === 'confirmed' ? 'A ticket was issued' : 'A ticket registration is awaiting payment'} for ${fullName}.`);
+  emitEventUpdate(event.id, registration.status === 'confirmed' ? 'A new ticket registration was confirmed.' : 'A ticket registration is awaiting payment verification.');
+  return response.redirect(ticketUrl);
+});
+
+app.get('/tickets/:token', (request, response) => {
+  const token = String(request.params.token || '');
+  if (!/^[a-f0-9]{64}$/.test(token)) return response.sendStatus(404);
+  const registration = db.prepare(`
+    SELECT registrations.*, ticket_types.name AS ticket_name,
+      events.id AS event_id, events.title AS event_title, events.event_date, events.venue
+    FROM registrations
+    JOIN ticket_types ON ticket_types.id = registrations.ticket_type_id
+    JOIN events ON events.id = registrations.event_id
+    WHERE registrations.qr_token = ?
+  `).get(token);
+  if (!registration) return response.sendStatus(404);
+  response.render('ticket', {
+    registration,
+    event: {
+      id: registration.event_id,
+      title: registration.event_title,
+      event_date: registration.event_date,
+      venue: registration.venue,
+    },
+    today: new Date().toISOString().slice(0, 10),
+  });
+});
+
+app.get('/tickets/:token/qr', async (request, response) => {
+  const token = String(request.params.token || '');
+  if (!/^[a-f0-9]{64}$/.test(token)) return response.sendStatus(404);
+  const registration = db.prepare('SELECT status FROM registrations WHERE qr_token = ?').get(token);
+  if (!registration) return response.sendStatus(404);
+  if (registration.status !== 'confirmed') return response.sendStatus(403);
+  const png = await QRCode.toBuffer(token, { type: 'png', width: 360, margin: 2 });
+  response.type('png').set('Cache-Control', 'private, no-store').send(png);
+});
+
+app.get('/tickets/:token/feedback', (request, response) => {
+  const token = String(request.params.token || '');
+  if (!/^[a-f0-9]{64}$/.test(token)) return response.sendStatus(404);
+  const registration = db.prepare(`
+    SELECT registrations.id, registrations.qr_token, registrations.status,
+      events.id AS event_id, events.title AS event_title, events.event_date
+    FROM registrations JOIN events ON events.id = registrations.event_id
+    WHERE registrations.qr_token = ?
+  `).get(token);
+  if (!registration || registration.status !== 'confirmed') return response.sendStatus(404);
+  if (registration.event_date > new Date().toISOString().slice(0, 10)) return response.sendStatus(403);
+  response.render('feedback', {
+    event: { id: registration.event_id, title: registration.event_title },
+    registration,
+    saved: Boolean(db.prepare('SELECT id FROM event_feedback WHERE registration_id = ?').get(registration.id)),
+  });
+});
+
+app.post('/tickets/:token/feedback', (request, response) => {
+  const token = String(request.params.token || '');
+  if (!/^[a-f0-9]{64}$/.test(token)) return response.sendStatus(404);
+  const registration = db.prepare(`
+    SELECT registrations.id, registrations.qr_token,
+      events.id AS event_id, events.title AS event_title, events.event_date
+    FROM registrations JOIN events ON events.id = registrations.event_id
+    WHERE registrations.qr_token = ? AND registrations.status = 'confirmed'
+  `).get(token);
+  if (!registration || registration.event_date > new Date().toISOString().slice(0, 10)) return response.sendStatus(404);
+  const ratingText = String(request.body.rating || '');
+  const rating = /^[1-5]$/.test(ratingText) ? Number(ratingText) : null;
+  const comments = String(request.body.comments || '').trim();
+  if (rating === null || comments.length > 1500) {
+    return response.status(400).render('message', {
+      title: 'Feedback not saved',
+      message: 'Choose a rating from 1 to 5 and keep comments under 1,500 characters.',
+      href: `/tickets/${token}/feedback`,
+      linkText: 'Return to feedback',
+      vendorView: false,
+    });
+  }
+  db.prepare(`
+    INSERT INTO event_feedback (event_id, registration_id, rating, comments)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(registration_id) DO UPDATE SET rating = excluded.rating, comments = excluded.comments
+  `).run(registration.event_id, registration.id, rating, comments);
+  recordChange(registration.event_id, 'An attendee submitted event feedback.');
+  response.render('feedback', {
+    event: { id: registration.event_id, title: registration.event_title },
+    registration,
+    saved: true,
+  });
+});
+
+app.post('/events/:id/tickets/check-in', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const token = String(request.body.qr_token || '');
+  if (!Number.isSafeInteger(eventId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  if (!/^[a-f0-9]{64}$/.test(token)) return response.status(400).json({ error: 'That ticket code is not valid.' });
+  const registration = db.prepare(`
+    SELECT id, full_name, status, checked_in_at FROM registrations
+    WHERE event_id = ? AND qr_token = ?
+  `).get(eventId, token);
+  if (!registration) return response.status(404).json({ error: 'That ticket does not belong to this event.' });
+  if (registration.status !== 'confirmed') return response.status(409).json({ error: 'This ticket is not confirmed for entry.' });
+  if (registration.checked_in_at) return response.status(409).json({ error: `${registration.full_name} has already checked in.` });
+  db.prepare("UPDATE registrations SET checked_in_at = datetime('now') WHERE id = ?").run(registration.id);
+  const message = `${registration.full_name} checked in with a ticket.`;
+  recordChange(eventId, message);
+  emitEventUpdate(eventId, message);
+  return response.json({ message });
+});
+
+function renderOperationsModule(request, response, eventId, module) {
+  const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.currentUser.id);
+  if (!event) return response.sendStatus(404);
+  const vendors = db.prepare(`
+    SELECT vendors.*,
+      vendor_contracts.id AS contract_id,
+      vendor_contracts.reference AS contract_reference,
+      vendor_contracts.terms AS contract_terms,
+      vendor_contracts.agreed_amount,
+      vendor_contracts.deposit_amount,
+      vendor_contracts.due_date AS contract_due_date,
+      vendor_contracts.status AS contract_status
+    FROM vendors LEFT JOIN vendor_contracts ON vendor_contracts.vendor_id = vendors.id
+    WHERE vendors.event_id = ? ORDER BY vendors.name
+  `).all(eventId);
+  const staff = db.prepare('SELECT * FROM event_staff WHERE event_id = ? ORDER BY name').all(eventId);
+  const zones = db.prepare('SELECT * FROM event_zones WHERE event_id = ? ORDER BY id').all(eventId);
+  const tasks = db.prepare(`
+    SELECT tasks.*, event_staff.name AS assignee_name
+    FROM tasks LEFT JOIN event_staff ON event_staff.id = tasks.assigned_staff_id
+    WHERE tasks.event_id = ? ORDER BY tasks.completed, tasks.start_time, tasks.id
+  `).all(eventId);
+  const expenses = db.prepare(`
+    SELECT expenses.*, vendors.name AS vendor_name
+    FROM expenses LEFT JOIN vendors ON vendors.id = expenses.vendor_id
+    WHERE expenses.event_id = ? ORDER BY expenses.expense_date, expenses.id DESC
+  `).all(eventId);
+  const expenseTotals = db.prepare(`
+    SELECT COALESCE(SUM(estimated_amount), 0) AS estimated,
+      COALESCE(SUM(actual_amount), 0) AS actual
+    FROM expenses WHERE event_id = ?
+  `).get(eventId);
+  const ticketTypes = db.prepare(`
+    SELECT ticket_types.*,
+      COALESCE(SUM(CASE WHEN registrations.status IN ('confirmed', 'awaiting_payment') THEN 1 ELSE 0 END), 0) AS issued,
+      COUNT(registrations.id) AS registration_count
+    FROM ticket_types LEFT JOIN registrations ON registrations.ticket_type_id = ticket_types.id
+    WHERE ticket_types.event_id = ?
+    GROUP BY ticket_types.id ORDER BY ticket_types.id
+  `).all(eventId).map((ticket) => ({ ...ticket, issued: Number(ticket.issued) }));
+  const customQuestions = registrationQuestions(event);
+  const registrations = db.prepare(`
+    SELECT registrations.*, ticket_types.name AS ticket_name, ticket_types.price
+    FROM registrations JOIN ticket_types ON ticket_types.id = registrations.ticket_type_id
+    WHERE registrations.event_id = ?
+    ORDER BY registrations.created_at DESC, registrations.id DESC
+  `).all(eventId).map((registration) => {
+    try {
+      const answers = JSON.parse(registration.custom_answers || '{}');
+      return {
+        ...registration,
+        answers: customQuestions.map((question, index) => ({
+          question,
+          answer: typeof answers[String(index)] === 'string' ? answers[String(index)] : '',
+        })).filter((item) => item.answer),
+      };
+    } catch (error) {
+      console.error(`Invalid registration answers for registration ${registration.id}:`, error);
+      return { ...registration, answers: [] };
+    }
+  });
+  const attendance = db.prepare(`
+    SELECT
+      COALESCE(SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END), 0) AS confirmed,
+      COALESCE(SUM(CASE WHEN status = 'awaiting_payment' THEN 1 ELSE 0 END), 0) AS pendingPayment,
+      COALESCE(SUM(CASE WHEN status = 'confirmed' AND checked_in_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS ticketCheckedIn
+    FROM registrations WHERE event_id = ?
+  `).get(eventId);
+  const guestCheckedIn = db.prepare(`
+    SELECT COALESCE(SUM(group_size), 0) AS count FROM guests
+    WHERE event_id = ? AND checked_in_at IS NOT NULL
+  `).get(eventId).count;
+  attendance.confirmed = Number(attendance.confirmed);
+  attendance.pendingPayment = Number(attendance.pendingPayment);
+  attendance.ticketCheckedIn = Number(attendance.ticketCheckedIn);
+  attendance.guestCheckedIn = Number(guestCheckedIn);
+  const incidents = db.prepare('SELECT * FROM event_incidents WHERE event_id = ? ORDER BY status, created_at DESC, id DESC').all(eventId);
+  const announcements = db.prepare('SELECT * FROM event_announcements WHERE event_id = ? ORDER BY created_at DESC, id DESC LIMIT 10').all(eventId);
+  const feedback = db.prepare(`
+    SELECT event_feedback.*, registrations.full_name AS attendee_name
+    FROM event_feedback JOIN registrations ON registrations.id = event_feedback.registration_id
+    WHERE event_feedback.event_id = ? ORDER BY event_feedback.created_at DESC, event_feedback.id DESC
+    LIMIT 100
+  `).all(eventId);
+  const feedbackSummary = db.prepare(`
+    SELECT COUNT(*) AS count, COALESCE(AVG(rating), 0) AS average
+    FROM event_feedback WHERE event_id = ?
+  `).get(eventId);
+  const guestAttendance = db.prepare(`
+    SELECT COALESCE(SUM(CASE WHEN rsvp_status = 'attending' THEN group_size ELSE 0 END), 0) AS confirmed
+    FROM guests WHERE event_id = ?
+  `).get(eventId).confirmed;
+  const catering = {
+    portions: Math.ceil(Number(guestAttendance) * (1 + event.catering_allowance_percent / 100)),
+  };
+  const report = {
+    registered: attendance.confirmed,
+    checkedIn: attendance.ticketCheckedIn,
+    attendanceRate: attendance.confirmed ? Math.round((attendance.ticketCheckedIn / attendance.confirmed) * 100) : 0,
+    noShowRate: attendance.confirmed ? Math.round(((attendance.confirmed - attendance.ticketCheckedIn) / attendance.confirmed) * 100) : 0,
+    ticketRevenue: db.prepare(`
+      SELECT COALESCE(SUM(ticket_types.price), 0) AS amount
+      FROM registrations JOIN ticket_types ON ticket_types.id = registrations.ticket_type_id
+      WHERE registrations.event_id = ? AND registrations.status = 'confirmed'
+    `).get(eventId).amount,
+    expensesActual: expenseTotals.actual,
+    invoicesPaid: db.prepare(`
+      SELECT COALESCE(SUM(invoices.amount), 0) AS amount
+      FROM invoices JOIN vendors ON vendors.id = invoices.vendor_id
+      WHERE vendors.event_id = ? AND invoices.status = 'paid'
+    `).get(eventId).amount,
+    feedbackCount: Number(feedbackSummary.count),
+    averageRating: Number(feedbackSummary.average),
+  };
+  response.render('operations', {
+    event,
+    module,
+    vendors,
+    staff,
+    zones,
+    tasks,
+    expenses,
+    expenseTotals,
+    ticketTypes,
+    registrations,
+    attendance,
+    incidents,
+    announcements,
+    feedback,
+    report,
+    catering,
+    customQuestions,
+  });
+}
+
+app.post('/events/:id/logistics/zones', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  if (!eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const label = String(request.body.label || '').trim();
+  const zoneType = String(request.body.zone_type || 'Other');
+  const positionXText = String(request.body.position_x || '').trim();
+  const positionYText = String(request.body.position_y || '').trim();
+  const positionX = /^\d{1,3}(?:\.\d{1,2})?$/.test(positionXText) ? Number(positionXText) : NaN;
+  const positionY = /^\d{1,3}(?:\.\d{1,2})?$/.test(positionYText) ? Number(positionYText) : NaN;
+  const notes = String(request.body.notes || '').trim();
+  const allowedTypes = new Set(['Stage', 'Entrance', 'Seating', 'Catering', 'Emergency exit', 'Registration', 'Other']);
+  if (!label || label.length > 80 || !allowedTypes.has(zoneType)
+    || !Number.isFinite(positionX) || positionX < 0 || positionX > 100
+    || !Number.isFinite(positionY) || positionY < 0 || positionY > 100 || notes.length > 240) {
+    setNotice(request, 'Enter a map label, valid area type, 0–100% map positions, and notes under 240 characters.');
+    return response.redirect(`/events/${eventId}/logistics`);
+  }
+  db.prepare('INSERT INTO event_zones (event_id, label, zone_type, position_x, position_y, notes) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(eventId, label, zoneType, positionX, positionY, notes);
+  recordChange(eventId, `Venue map area added: ${label}.`);
+  setNotice(request, 'Venue map area added.');
+  response.redirect(`/events/${eventId}/logistics`);
+});
+
+app.post('/events/:id/logistics/zones/:zoneId/delete', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const zoneId = Number(request.params.zoneId);
+  if (!Number.isSafeInteger(zoneId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const result = db.prepare('DELETE FROM event_zones WHERE id = ? AND event_id = ?').run(zoneId, eventId);
+  if (!result.changes) return response.sendStatus(404);
+  setNotice(request, 'Venue map area removed.');
+  response.redirect(`/events/${eventId}/logistics`);
+});
+
+app.post('/events/:id/logistics/staff', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  if (!eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const name = String(request.body.name || '').trim();
+  const email = String(request.body.email || '').trim().toLowerCase();
+  const role = String(request.body.role || '').trim();
+  if (!name || name.length > 80 || email.length > 160 || (email && !emailPattern.test(email))
+    || !role || role.length > 60) {
+    setNotice(request, 'Enter a team member name, valid optional email, and role.');
+    return response.redirect(`/events/${eventId}/logistics`);
+  }
+  db.prepare('INSERT INTO event_staff (event_id, name, email, role) VALUES (?, ?, ?, ?)')
+    .run(eventId, name, email, role);
+  recordChange(eventId, `${name} was added to the event team.`);
+  setNotice(request, 'Team member added.');
+  response.redirect(`/events/${eventId}/logistics`);
+});
+
+app.post('/events/:id/logistics/vendors/:vendorId/contract', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const vendorId = Number(request.params.vendorId);
+  if (!Number.isSafeInteger(vendorId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const vendor = db.prepare('SELECT id, name FROM vendors WHERE id = ? AND event_id = ?').get(vendorId, eventId);
+  if (!vendor) return response.sendStatus(404);
+  const reference = String(request.body.reference || '').trim();
+  const terms = String(request.body.terms || '').trim();
+  const agreedAmount = parseAmount(request.body.agreed_amount);
+  const depositAmount = parseAmount(request.body.deposit_amount);
+  const dueDate = String(request.body.due_date || '').trim();
+  const status = String(request.body.status || '');
+  if (reference.length > 100 || terms.length > 3000 || agreedAmount === null || depositAmount === null
+    || depositAmount > agreedAmount || (dueDate && !isValidDate(dueDate))
+    || !['draft', 'sent', 'signed', 'complete', 'cancelled'].includes(status)) {
+    setNotice(request, 'Check the contract reference, terms, amounts, due date, and status.');
+    return response.redirect(`/events/${eventId}/logistics`);
+  }
+  db.prepare(`
+    INSERT INTO vendor_contracts (event_id, vendor_id, reference, terms, agreed_amount, deposit_amount, due_date, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(vendor_id) DO UPDATE SET
+      reference = excluded.reference, terms = excluded.terms,
+      agreed_amount = excluded.agreed_amount, deposit_amount = excluded.deposit_amount,
+      due_date = excluded.due_date, status = excluded.status, reminder_sent_at = NULL
+  `).run(eventId, vendorId, reference, terms, agreedAmount, depositAmount, dueDate, status);
+  recordChange(eventId, `${vendor.name}'s contract record was updated (${status}).`);
+  setNotice(request, 'Contract record saved.');
+  response.redirect(`/events/${eventId}/logistics`);
+});
+
+app.post('/events/:id/logistics/expenses', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  if (!eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const category = String(request.body.category || '').trim();
+  const description = String(request.body.description || '').trim();
+  const estimatedAmount = parseAmount(request.body.estimated_amount);
+  const actualAmount = parseAmount(request.body.actual_amount);
+  const expenseDate = String(request.body.expense_date || '').trim();
+  const vendorId = request.body.vendor_id ? Number(request.body.vendor_id) : null;
+  const status = String(request.body.status || '');
+  const notes = String(request.body.notes || '').trim();
+  const vendor = vendorId && Number.isSafeInteger(vendorId)
+    ? db.prepare('SELECT id FROM vendors WHERE id = ? AND event_id = ?').get(vendorId, eventId)
+    : null;
+  if (!category || category.length > 80 || !description || description.length > 160
+    || estimatedAmount === null || actualAmount === null
+    || (expenseDate && !isValidDate(expenseDate)) || (vendorId && !vendor)
+    || !['planned', 'paid'].includes(status) || notes.length > 500) {
+    setNotice(request, 'Check the expense description, category, amounts, date, vendor, and status.');
+    return response.redirect(`/events/${eventId}/logistics`);
+  }
+  db.prepare(`
+    INSERT INTO expenses (event_id, vendor_id, category, description, estimated_amount, actual_amount, expense_date, status, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(eventId, vendorId, category, description, estimatedAmount, actualAmount, expenseDate, status, notes);
+  recordChange(eventId, `Expense recorded: ${description}.`);
+  emitEventUpdate(eventId, `An event expense was recorded: ${description}.`);
+  setNotice(request, 'Expense added.');
+  response.redirect(`/events/${eventId}/logistics`);
+});
+
+app.post('/events/:id/logistics/expenses/:expenseId/delete', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const expenseId = Number(request.params.expenseId);
+  if (!Number.isSafeInteger(expenseId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const result = db.prepare('DELETE FROM expenses WHERE id = ? AND event_id = ?').run(expenseId, eventId);
+  if (!result.changes) return response.sendStatus(404);
+  recordChange(eventId, 'An expense record was removed.');
+  setNotice(request, 'Expense removed.');
+  response.redirect(`/events/${eventId}/logistics`);
+});
+
+app.post('/events/:id/logistics/expenses/:expenseId/update', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const expenseId = Number(request.params.expenseId);
+  if (!Number.isSafeInteger(expenseId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const description = String(request.body.description || '').trim();
+  const estimatedAmount = parseAmount(request.body.estimated_amount);
+  const actualAmount = parseAmount(request.body.actual_amount);
+  const status = String(request.body.status || '');
+  if (!description || description.length > 160 || estimatedAmount === null || actualAmount === null
+    || !['planned', 'paid'].includes(status)) {
+    setNotice(request, 'Enter a description, valid estimate and actual amount, and an expense status.');
+    return response.redirect(`/events/${eventId}/logistics`);
+  }
+  const result = db.prepare(`
+    UPDATE expenses SET description = ?, estimated_amount = ?, actual_amount = ?, status = ?
+    WHERE id = ? AND event_id = ?
+  `).run(description, estimatedAmount, actualAmount, status, expenseId, eventId);
+  if (!result.changes) return response.sendStatus(404);
+  recordChange(eventId, `Expense updated: ${description}.`);
+  emitEventUpdate(eventId, 'An event expense was updated.');
+  setNotice(request, 'Expense updated.');
+  response.redirect(`/events/${eventId}/logistics`);
+});
+
+app.post('/events/:id/tickets/settings', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  if (!eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const rawQuestions = String(request.body.custom_questions || '').split(/\r?\n/);
+  const questions = [...new Set(rawQuestions.map((question) => question.trim()).filter(Boolean))];
+  if (questions.length > 5 || questions.some((question) => question.length > 120)) {
+    setNotice(request, 'Use up to 5 registration questions, each no longer than 120 characters.');
+    return response.redirect(`/events/${eventId}/tickets`);
+  }
+  const registrationIsOpen = request.body.registration_is_open === 'on' ? 1 : 0;
+  const hasTicketTypes = db.prepare('SELECT COUNT(*) AS count FROM ticket_types WHERE event_id = ?').get(eventId).count > 0;
+  if (registrationIsOpen && !hasTicketTypes) {
+    setNotice(request, 'Add at least one ticket category before opening registration.');
+    return response.redirect(`/events/${eventId}/tickets`);
+  }
+  db.prepare('UPDATE events SET custom_questions = ?, registration_is_open = ? WHERE id = ?')
+    .run(JSON.stringify(questions), registrationIsOpen, eventId);
+  recordChange(eventId, registrationIsOpen ? 'Public ticket registration was opened.' : 'Public ticket registration settings were updated.');
+  setNotice(request, registrationIsOpen ? 'Registration form saved and opened.' : 'Registration settings saved; public registration is closed.');
+  response.redirect(`/events/${eventId}/tickets`);
+});
+
+app.post('/events/:id/tickets/types', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  if (!eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const name = String(request.body.name || '').trim();
+  const price = parseAmount(request.body.price);
+  const capacityText = String(request.body.capacity || '');
+  const capacity = /^\d{1,6}$/.test(capacityText) ? Number(capacityText) : null;
+  if (!name || name.length > 60 || price === null || price > 9999999 || capacity === null || capacity < 1 || capacity > 100000) {
+    setNotice(request, 'Enter a ticket name, non-negative price, and capacity between 1 and 100,000.');
+    return response.redirect(`/events/${eventId}/tickets`);
+  }
+  try {
+    db.prepare('INSERT INTO ticket_types (event_id, name, price, capacity) VALUES (?, ?, ?, ?)')
+      .run(eventId, name, price, capacity);
+  } catch (error) {
+    if (error.errcode === 2067 || error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      setNotice(request, 'A ticket category with that name already exists.');
+      return response.redirect(`/events/${eventId}/tickets`);
+    }
+    throw error;
+  }
+  recordChange(eventId, `Ticket category added: ${name}.`);
+  setNotice(request, 'Ticket category added.');
+  response.redirect(`/events/${eventId}/tickets`);
+});
+
+app.post('/events/:id/tickets/types/:ticketTypeId/delete', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const ticketTypeId = Number(request.params.ticketTypeId);
+  if (!Number.isSafeInteger(ticketTypeId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const registrations = db.prepare('SELECT COUNT(*) AS count FROM registrations WHERE ticket_type_id = ?')
+    .get(ticketTypeId).count;
+  if (registrations) {
+    setNotice(request, 'Ticket categories with registrations cannot be removed.');
+    return response.redirect(`/events/${eventId}/tickets`);
+  }
+  const result = db.prepare('DELETE FROM ticket_types WHERE id = ? AND event_id = ?').run(ticketTypeId, eventId);
+  if (!result.changes) {
+    setNotice(request, 'Ticket categories with registrations cannot be removed.');
+    return response.redirect(`/events/${eventId}/tickets`);
+  }
+  setNotice(request, 'Ticket category removed.');
+  response.redirect(`/events/${eventId}/tickets`);
+});
+
+app.post('/events/:id/tickets/:registrationId/verify-payment', requireAuth, async (request, response) => {
+  const eventId = Number(request.params.id);
+  const registrationId = Number(request.params.registrationId);
+  if (!Number.isSafeInteger(registrationId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const reference = String(request.body.payment_reference || '').trim();
+  if (!reference || reference.length > 100) {
+    setNotice(request, 'Enter the receipt or transaction reference you have independently verified.');
+    return response.redirect(`/events/${eventId}/tickets`);
+  }
+  const registration = db.prepare(`
+    SELECT registrations.*, ticket_types.name AS ticket_name, events.title AS event_title
+    FROM registrations JOIN ticket_types ON ticket_types.id = registrations.ticket_type_id
+    JOIN events ON events.id = registrations.event_id
+    WHERE registrations.id = ? AND registrations.event_id = ?
+  `).get(registrationId, eventId);
+  if (!registration || registration.status !== 'awaiting_payment' || !registration.payment_method) return response.sendStatus(404);
+  db.prepare("UPDATE registrations SET status = 'confirmed', payment_reference = ? WHERE id = ?")
+    .run(reference, registrationId);
+  recordChange(eventId, `Payment for ${registration.full_name}'s ${registration.ticket_name} ticket was manually verified by the organizer.`);
+  emitEventUpdate(eventId, 'A ticket payment was verified and a ticket issued.');
+  const sent = await sendMail({
+    to: registration.email,
+    subject: `Payment verified: ${registration.event_title}`,
+    text: `Hello ${registration.full_name},\n\nYour payment was verified by the event organizer. Your ${registration.ticket_name} ticket is confirmed. Open your ticket and QR code here:\n${ticketPageUrl(registration.qr_token)}\n\nKeep this link private.`,
+  });
+  setNotice(request, sent
+    ? `Payment verified and ticket issued to ${registration.full_name}${demoEmailNote}.`
+    : `Payment was verified and the ticket is issued, but the confirmation email to ${registration.full_name} failed.`);
+  response.redirect(`/events/${eventId}/tickets`);
+});
+
+app.post('/events/:id/tickets/:registrationId/cancel', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const registrationId = Number(request.params.registrationId);
+  if (!Number.isSafeInteger(registrationId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const result = db.prepare("UPDATE registrations SET status = 'cancelled' WHERE id = ? AND event_id = ? AND status <> 'cancelled'")
+    .run(registrationId, eventId);
+  if (!result.changes) return response.sendStatus(404);
+  recordChange(eventId, 'A ticket registration was cancelled. Any external refund must be processed separately.');
+  emitEventUpdate(eventId, 'A ticket registration was cancelled.');
+  setNotice(request, 'Ticket registration cancelled. Process any applicable external refund separately.');
+  response.redirect(`/events/${eventId}/tickets`);
+});
+
+app.post('/events/:id/logistics/tasks/:taskId/toggle', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const taskId = Number(request.params.taskId);
+  if (!Number.isSafeInteger(taskId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const task = db.prepare('SELECT id, title, completed FROM tasks WHERE id = ? AND event_id = ?').get(taskId, eventId);
+  if (!task) return response.sendStatus(404);
+  const completed = task.completed ? 0 : 1;
+  db.prepare('UPDATE tasks SET completed = ? WHERE id = ? AND event_id = ?').run(completed, taskId, eventId);
+  recordChange(eventId, `Task "${task.title}" marked ${completed ? 'complete' : 'open'}.`);
+  setNotice(request, completed ? 'Task completed.' : 'Task reopened.');
+  response.redirect(`/events/${eventId}/logistics`);
+});
+
+app.post('/events/:id/event-day/vendors/:vendorId/arrival', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const vendorId = Number(request.params.vendorId);
+  const status = String(request.body.arrival_status || '');
+  if (!Number.isSafeInteger(vendorId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  if (!['not_arrived', 'arrived', 'setting_up', 'ready', 'delayed'].includes(status)) return response.sendStatus(400);
+  const result = db.prepare('UPDATE vendors SET arrival_status = ? WHERE id = ? AND event_id = ?').run(status, vendorId, eventId);
+  if (!result.changes) return response.sendStatus(404);
+  recordChange(eventId, `Vendor setup status changed to ${status.replace('_', ' ')}.`);
+  emitEventUpdate(eventId, 'A vendor arrival status was updated.');
+  response.redirect(`/events/${eventId}/event-day`);
+});
+
+app.post('/events/:id/event-day/meals', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  if (!eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const countText = String(request.body.meals_served_count || '');
+  const count = /^\d{1,6}$/.test(countText) ? Number(countText) : null;
+  if (count === null || count > 100000) {
+    setNotice(request, 'Enter a meal count between 0 and 100,000.');
+    return response.redirect(`/events/${eventId}/event-day`);
+  }
+  db.prepare('UPDATE events SET meals_served_count = ? WHERE id = ?').run(count, eventId);
+  recordChange(eventId, `Catering service count updated: ${count} meals served.`);
+  emitEventUpdate(eventId, 'The catering meal count was updated.');
+  response.redirect(`/events/${eventId}/event-day`);
+});
+
+app.post('/events/:id/event-day/incidents', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  if (!eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const reportedBy = String(request.body.reported_by || '').trim();
+  const title = String(request.body.title || '').trim();
+  const severity = String(request.body.severity || '');
+  const details = String(request.body.details || '').trim();
+  if (!reportedBy || reportedBy.length > 80 || !title || title.length > 120 || details.length > 1000
+    || !['low', 'normal', 'high'].includes(severity)) {
+    setNotice(request, 'Enter a reporter, issue, valid severity, and details under 1,000 characters.');
+    return response.redirect(`/events/${eventId}/event-day`);
+  }
+  db.prepare('INSERT INTO event_incidents (event_id, reported_by, title, details, severity) VALUES (?, ?, ?, ?, ?)')
+    .run(eventId, reportedBy, title, details, severity);
+  recordChange(eventId, `Incident reported: ${title} (${severity}).`);
+  emitEventUpdate(eventId, `An event incident was reported: ${title}.`);
+  response.redirect(`/events/${eventId}/event-day`);
+});
+
+app.post('/events/:id/event-day/incidents/:incidentId/resolve', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const incidentId = Number(request.params.incidentId);
+  if (!Number.isSafeInteger(incidentId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const result = db.prepare("UPDATE event_incidents SET status = 'resolved', resolved_at = datetime('now') WHERE id = ? AND event_id = ? AND status = 'open'")
+    .run(incidentId, eventId);
+  if (!result.changes) return response.sendStatus(404);
+  recordChange(eventId, 'An event incident was marked resolved.');
+  response.redirect(`/events/${eventId}/event-day`);
+});
+
+app.post('/events/:id/event-day/announcements', requireAuth, async (request, response) => {
+  const eventId = Number(request.params.id);
+  const event = eventForOwner(eventId, request.currentUser.id);
+  if (!event) return response.sendStatus(404);
+  const subject = String(request.body.subject || '').trim();
+  const message = String(request.body.message || '').trim();
+  if (!subject || subject.length > 120 || !message || message.length > 2000) {
+    setNotice(request, 'Enter an announcement subject and message within the character limits.');
+    return response.redirect(`/events/${eventId}/event-day`);
+  }
+  const attendees = db.prepare(`
+    SELECT email, full_name AS name FROM registrations
+    WHERE event_id = ? AND status = 'confirmed'
+    UNION
+    SELECT email, name FROM guests
+    WHERE event_id = ? AND rsvp_status = 'attending' AND email <> ''
+  `).all(eventId, eventId);
+  let sentCount = 0;
+  for (const attendee of attendees) {
+    const sent = await sendMail({
+      to: attendee.email,
+      subject: `${subject} · ${event.title}`,
+      text: `Hello ${attendee.name},\n\n${message}\n\nEvent: ${event.title} · ${event.event_date}${event.venue ? ` · ${event.venue}` : ''}`,
+    });
+    if (sent) sentCount += 1;
+  }
+  db.prepare('INSERT INTO event_announcements (event_id, subject, message, sent_count) VALUES (?, ?, ?, ?)')
+    .run(eventId, subject, message, sentCount);
+  recordChange(eventId, `Event announcement sent to ${sentCount} attendees: ${subject}.`);
+  setNotice(request, attendees.length
+    ? `Announcement sent to ${sentCount} of ${attendees.length} attendees${demoEmailNote}.`
+    : 'Announcement saved. There are no confirmed attendees with email addresses yet.');
+  response.redirect(`/events/${eventId}/event-day`);
+});
+
+function sendEventReport(request, response, eventId) {
+  const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.currentUser.id);
+  if (!event) return response.sendStatus(404);
+  const rows = [
+    ['Metric', 'Value'],
+    ['Event', event.title],
+    ['Event date', event.event_date],
+    ['Budget', event.budget_total],
+    ['Expected guests', event.expected_guests],
+    ['Confirmed tickets', db.prepare("SELECT COUNT(*) AS count FROM registrations WHERE event_id = ? AND status = 'confirmed'").get(eventId).count],
+    ['Checked-in tickets', db.prepare("SELECT COUNT(*) AS count FROM registrations WHERE event_id = ? AND status = 'confirmed' AND checked_in_at IS NOT NULL").get(eventId).count],
+    ['Awaiting payment', db.prepare("SELECT COUNT(*) AS count FROM registrations WHERE event_id = ? AND status = 'awaiting_payment'").get(eventId).count],
+    ['Ticket revenue (confirmed)', db.prepare(`
+      SELECT COALESCE(SUM(ticket_types.price), 0) AS amount FROM registrations
+      JOIN ticket_types ON ticket_types.id = registrations.ticket_type_id
+      WHERE registrations.event_id = ? AND registrations.status = 'confirmed'
+    `).get(eventId).amount],
+    ['Actual expenses', db.prepare('SELECT COALESCE(SUM(actual_amount), 0) AS amount FROM expenses WHERE event_id = ?').get(eventId).amount],
+    ['Paid vendor invoices', db.prepare(`
+      SELECT COALESCE(SUM(invoices.amount), 0) AS amount FROM invoices
+      JOIN vendors ON vendors.id = invoices.vendor_id WHERE vendors.event_id = ? AND invoices.status = 'paid'
+    `).get(eventId).amount],
+    ['Meals served', event.meals_served_count],
+    ['Average feedback rating', db.prepare('SELECT COALESCE(AVG(rating), 0) AS rating FROM event_feedback WHERE event_id = ?').get(eventId).rating],
+  ].map((row) => row.map(csvCell).join(','));
+  response.type('text/csv').set('Content-Disposition', `attachment; filename="event-${eventId}-report.csv"`)
+    .send(rows.join('\r\n'));
+}
+
 
 app.get('/events/:id/guests/:guestId/qr', requireAuth, async (request, response) => {
   const eventId = Number(request.params.id);
@@ -1962,17 +2779,23 @@ app.post('/events/:id/tasks', requireAuth, async (request, response) => {
   const notes = String(request.body.notes || '').trim();
   const vendorId = request.body.vendor_id ? Number(request.body.vendor_id) : null;
   const vendor = vendorId ? db.prepare('SELECT id FROM vendors WHERE id = ? AND event_id = ?').get(vendorId, eventId) : null;
+  const staffId = request.body.assigned_staff_id ? Number(request.body.assigned_staff_id) : null;
+  const assignee = staffId && Number.isSafeInteger(staffId)
+    ? db.prepare('SELECT id FROM event_staff WHERE id = ? AND event_id = ?').get(staffId, eventId)
+    : null;
+  const priority = String(request.body.priority || 'normal');
   if (!title || title.length > 160 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(startTime)
-    || notes.length > 1000 || (vendorId && !vendor)) {
+    || notes.length > 1000 || (vendorId && !vendor) || (staffId && !assignee)
+    || !['low', 'normal', 'high'].includes(priority)) {
     setNotice(request, 'Check the task title, date/time, notes, and vendor.');
     return response.redirect(`/events/${eventId}`);
   }
-  db.prepare('INSERT INTO tasks (event_id, vendor_id, title, start_time, notes) VALUES (?, ?, ?, ?, ?)')
-    .run(eventId, vendorId, title, startTime, notes);
+  db.prepare('INSERT INTO tasks (event_id, vendor_id, title, start_time, notes, assigned_staff_id, priority) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(eventId, vendorId, title, startTime, notes, staffId, priority);
   recordChange(eventId, `${title} was added to the timeline.`);
   emitEventUpdate(eventId, `A timeline task was added: ${title}.`);
   await emailEventChange(eventId, vendorId, `A timeline task was added: ${title} (${startTime.replace('T', ' ')}).`);
-  response.redirect(`/events/${eventId}`);
+  response.redirect(`/events/${eventId}/logistics`);
 });
 
 app.post('/events/:id/tasks/:taskId/time', requireAuth, async (request, response) => {
@@ -2190,14 +3013,58 @@ async function sendAutomaticReminders() {
         db.prepare('UPDATE vendors SET reminder_count = reminder_count + 1 WHERE id = ?').run(vendor.id);
       }
     }
+    const dueContracts = db.prepare(`
+      SELECT vendor_contracts.id, vendor_contracts.due_date, vendor_contracts.reference,
+        vendors.name AS vendor_name, vendors.email AS vendor_email,
+        events.id AS event_id, events.title AS event_title, events.event_date,
+        users.email AS planner_email
+      FROM vendor_contracts
+      JOIN vendors ON vendors.id = vendor_contracts.vendor_id
+      JOIN events ON events.id = vendor_contracts.event_id
+      JOIN users ON users.id = events.user_id
+      WHERE vendor_contracts.due_date <> ''
+        AND vendor_contracts.due_date <= date('now', '+3 days')
+        AND vendor_contracts.status NOT IN ('complete', 'cancelled')
+        AND (vendor_contracts.reminder_sent_at IS NULL
+          OR vendor_contracts.reminder_sent_at <= datetime('now', '-24 hours'))
+    `).all();
+    for (const contract of dueContracts) {
+      const recipients = [...new Set([contract.planner_email, contract.vendor_email].filter(Boolean))];
+      let allSent = recipients.length > 0;
+      for (const recipient of recipients) {
+        const sent = await sendMail({
+          to: recipient,
+          subject: `Contract deadline: ${contract.event_title}`,
+          text: [
+            `A vendor contract deadline is due ${contract.due_date <= new Date().toISOString().slice(0, 10) ? 'now or overdue' : 'within 3 days'}.`,
+            '',
+            `Event: ${contract.event_title} on ${contract.event_date}`,
+            `Vendor: ${contract.vendor_name}`,
+            `Deadline: ${contract.due_date}`,
+            contract.reference ? `Reference: ${contract.reference}` : '',
+          ].filter(Boolean).join('\n'),
+        });
+        allSent = allSent && sent;
+      }
+      if (allSent) {
+        db.prepare("UPDATE vendor_contracts SET reminder_sent_at = datetime('now') WHERE id = ?").run(contract.id);
+        recordChange(contract.event_id, `Contract deadline reminder sent for ${contract.vendor_name}.`);
+      }
+    }
   } finally {
     reminderCheckRunning = false;
   }
 }
 
+setTimeout(() => {
+  sendAutomaticReminders().catch((error) => {
+    console.error('Automatic event reminders failed:', error);
+  });
+}, 30_000).unref();
+
 setInterval(() => {
   sendAutomaticReminders().catch((error) => {
-    console.error('Automatic vendor reminders failed:', error);
+    console.error('Automatic event reminders failed:', error);
   });
 }, reminderCheckMinutes * 60 * 1000).unref();
 
