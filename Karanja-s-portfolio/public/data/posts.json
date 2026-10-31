@@ -1,0 +1,13 @@
+[
+  {
+    "slug": "building-vendor-management",
+    "title": "[How I built vendor management for my Event System]",
+    "date": "2026-11-01",
+    "summary": "[One or two sentences: what problem you solved and what you learned.]",
+    "body": [
+      "[Paragraph 1: the problem you were solving.]",
+      "[Paragraph 2: how you designed the database tables and routes.]",
+      "[Paragraph 3: what went wrong, how you fixed it, and what you would do differently.]"
+    ]
+  }
+]
