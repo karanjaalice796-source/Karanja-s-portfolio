@@ -21,12 +21,14 @@ Karanja-s-portfolio/
     ├── data/testimonials.json   Add real testimonials here
     ├── data/posts.json          Add blog posts here
     ├── images/alice.jpg      Profile photo
-    ├── resume.pdf            Starter CV (edit or replace)
+    ├── resume.html           Viewable resume
+    ├── resume.pdf            Downloadable resume
+    ├── portfolio-download.zip Downloadable portfolio source
     ├── favicon.svg, robots.txt, sitemap.xml
 ```
 
 ## Before you publish: your checklist
-1. Edit or replace `public/resume.pdf` with your real CV.
+1. Update `public/resume.html` whenever your resume details change, then regenerate `public/resume.pdf`.
 2. In `views/index.html`: replace every `[bracketed note]`, `you@example.com`, `your-username`, `your-profile`, and the `#` project links.
 3. In `public/js/script.js`: set `GITHUB_USER` to your GitHub username.
 4. Replace the placeholder entries in `public/data/testimonials.json` (real people, with permission) and `posts.json`, or delete them.
