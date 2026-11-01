@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17506b">
+  <meta name="description" content="Record assignments, track progress and keep upcoming deadlines in view.">
+  <title>Assignment Tracker</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <div>
+        <h1>Assignment Tracker</h1>
+        <p class="tagline">A simple place to keep your coursework on track.</p>
+      </div>
+      <div class="profile" aria-label="Student details">
+        <label for="studentName">Student name
+          <input id="studentName" type="text" placeholder="Your name" autocomplete="name">
+        </label>
+        <label for="studentId">Student ID
+          <input id="studentId" type="text" placeholder="Your ID" autocomplete="off">
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap layout">
+    <section class="panel form-panel" aria-labelledby="formHeading">
+      <h2 id="formHeading">Add an assignment</h2>
+      <form id="assignmentForm" novalidate>
+        <input id="editId" type="hidden">
+        <div class="field">
+          <label for="title">Assignment title</label>
+          <input id="title" type="text" maxlength="100" required autocomplete="off" aria-describedby="titleError">
+          <p class="error" id="titleError" hidden>Please enter an assignment title.</p>
+        </div>
+        <div class="field">
+          <label for="course">Course or subject</label>
+          <input id="course" type="text" maxlength="80" list="courseList" required autocomplete="off" aria-describedby="courseError">
+          <datalist id="courseList"></datalist>
+          <p class="error" id="courseError" hidden>Please enter a course or subject.</p>
+        </div>
+        <div class="field">
+          <label for="description">Notes <span class="optional">(optional)</span></label>
+          <textarea id="description" rows="3" maxlength="300"></textarea>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="issued">Date given</label>
+            <input id="issued" type="date">
+          </div>
+          <div class="field">
+            <label for="due">Due date</label>
+            <input id="due" type="date" required aria-describedby="dueError">
+            <p class="error" id="dueError" hidden>Please choose a due date.</p>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="status">Progress</label>
+            <select id="status">
+              <option>Not Started</option>
+              <option>In Progress</option>
+              <option>Completed</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="remindDays">Remind me</label>
+            <select id="remindDays">
+              <option value="0">On the due date</option>
+              <option value="1">1 day before</option>
+              <option value="2" selected>2 days before</option>
+              <option value="3">3 days before</option>
+              <option value="7">1 week before</option>
+              <option value="14">2 weeks before</option>
+            </select>
+          </div>
+        </div>
+        <div class="buttons">
+          <button id="saveBtn" class="btn primary" type="submit">Add assignment</button>
+          <button id="cancelBtn" class="btn" type="button" hidden>Cancel</button>
+        </div>
+      </form>
+    </section>
+
+    <section aria-label="Assignment overview">
+      <div id="reminderBanner" class="banner" hidden></div>
+      <p id="summary" class="summary" aria-live="polite"></p>
+      <div class="toolbar">
+        <div class="tabs" role="group" aria-label="Filter assignments">
+          <button class="tab active" type="button" data-filter="open" aria-pressed="true">Open</button>
+          <button class="tab" type="button" data-filter="overdue" aria-pressed="false">Overdue</button>
+          <button class="tab" type="button" data-filter="completed" aria-pressed="false">Completed</button>
+        </div>
+        <div class="controls">
+          <label class="visually-hidden" for="search">Search assignments</label>
+          <input id="search" type="search" placeholder="Search assignments">
+          <label class="visually-hidden" for="courseFilter">Filter by course</label>
+          <select id="courseFilter"><option value="">All courses</option></select>
+          <label class="visually-hidden" for="sortBy">Sort assignments</label>
+          <select id="sortBy">
+            <option value="due">Due date</option>
+            <option value="course">Course</option>
+            <option value="status">Progress</option>
+          </select>
+        </div>
+      </div>
+      <div id="list" class="list" aria-live="polite"></div>
+      <div class="footer-actions">
+        <button id="alertsBtn" class="btn small" type="button">Turn on browser alerts</button>
+        <button id="exportBtn" class="btn small" type="button">Download CSV</button>
+        <button id="printBtn" class="btn small" type="button">Print</button>
+        <button id="clearDoneBtn" class="btn small danger" type="button">Remove completed</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="wrap site-footer">
+    <p>Your assignments are saved in this browser on this device.</p>
+  </footer>
+</body>
+</html>

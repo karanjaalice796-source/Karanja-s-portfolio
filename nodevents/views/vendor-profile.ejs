@@ -1,0 +1,36 @@
+<%- include('partials/head', { title: `${vendor.business_name} · Vendor profile` }) %>
+<section class="panel public-vendor-profile">
+  <div class="directory-categories">
+    <% const profileCategories = vendor.service_categories
+      ? vendor.service_categories.split('|')
+      : [vendor.category]; %>
+    <% profileCategories.forEach((serviceCategory) => { %><span class="directory-category"><%= serviceCategory %></span><% }) %>
+  </div>
+  <h1><%= vendor.business_name %></h1>
+  <% if (vendor.location) { %><p class="intro"><%= vendor.location %></p><% } %>
+  <% if (vendor.description) { %><p><%= vendor.description %></p><% } %>
+  <% if (vendor.services) { %>
+    <h2>Services offered</h2>
+    <p><%= vendor.services %></p>
+  <% } %>
+  <% if (user && events.length) { %>
+    <form class="stack vendor-request-form" method="post" action="/vendors/<%= vendor.id %>/request">
+      <label>Invite this vendor to an event
+        <select name="event_id" required>
+          <option value="">Choose one of your events</option>
+          <% events.forEach((event) => { %><option value="<%= event.id %>"><%= event.title %> · <%= new Date(`${event.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'medium' }) %></option><% }) %>
+        </select>
+      </label>
+      <button class="primary" type="submit">Send event invitation</button>
+      <small>The vendor’s account email receives the invitation and can respond through its private event link.</small>
+    </form>
+  <% } else if (user) { %>
+    <p class="muted">Create an event before inviting this vendor.</p>
+    <a class="button primary" href="/dashboard#new">Create an event</a>
+  <% } else { %>
+    <p class="muted">Sign in as a planner to invite this vendor to one of your events.</p>
+    <a class="button primary" href="/auth">Planner sign in</a>
+  <% } %>
+  <p><a href="/vendors">← Back to Find Vendors</a></p>
+</section>
+<%- include('partials/foot') %>

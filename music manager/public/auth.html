@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#111212">
+  <meta name="description" content="Sign in or create your Riff music account.">
+  <title>Join Riff — Your music space</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/auth.js" defer></script>
+</head>
+<body class="auth-page">
+  <header class="auth-header">
+    <a class="brand" href="/" aria-label="Riff home"><span class="brand-mark"><i></i><i></i><i></i><i></i></span><span>riff<span class="brand-period">.</span></span></a>
+    <a href="/learn">Explore the learning room <span>↗</span></a>
+  </header>
+  <main class="auth-layout">
+    <section class="auth-story">
+      <div class="eyebrow"><span class="live-dot"></span> YOUR SOUND, YOUR SPACE</div>
+      <h1>A little more<br><span>you.</span></h1>
+      <p>Keep your favorite mixes close and your learning journey right where you left it.</p>
+      <div class="auth-story-art" aria-hidden="true"><div class="auth-sun"></div><div class="auth-orbit orbit-one"></div><div class="auth-orbit orbit-two"></div><span>✳</span></div>
+      <div class="auth-story-caption">MADE FOR THE WAY YOU FEEL.</div>
+    </section>
+    <section class="auth-card">
+      <div class="auth-tabs" role="tablist" aria-label="Account access">
+        <a id="login-tab" href="/login" role="tab">Log in</a>
+        <a id="signup-tab" href="/signup" role="tab">Create account</a>
+      </div>
+      <div class="auth-intro"><div class="eyebrow" id="auth-eyebrow">WELCOME BACK</div><h2 id="auth-title">Good to have you back.</h2><p id="auth-description">Log in to pick up right where you left off.</p></div>
+      <form id="auth-form" novalidate>
+        <label class="auth-field" id="name-field" hidden><span>Your name</span><input id="name-input" name="name" autocomplete="name" maxlength="50" placeholder="What should we call you?"></label>
+        <label class="auth-field"><span>Email address</span><input id="email-input" name="email" type="email" autocomplete="email" maxlength="254" required placeholder="you@example.com"></label>
+        <label class="auth-field"><span>Password</span><input id="password-input" name="password" type="password" autocomplete="current-password" minlength="8" maxlength="128" required placeholder="At least 8 characters"><span class="password-hint" id="password-hint">At least 8 characters</span></label>
+        <div class="auth-error" id="auth-error" role="alert" hidden></div>
+        <button class="auth-submit" id="auth-submit" type="submit">Log in <span>↗</span></button>
+      </form>
+      <p class="auth-switch" id="auth-switch">New to Riff? <a href="/signup">Create an account</a></p>
+      <p class="auth-privacy">Your account and learning progress are stored securely in this app.</p>
+    </section>
+  </main>
+  <footer class="auth-footer"><a href="/">← Back to Riff</a><span>Find your frequency.</span></footer>
+</body>
+</html>

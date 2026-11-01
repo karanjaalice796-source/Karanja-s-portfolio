@@ -1,0 +1,11 @@
+<%- include('../partials/header', { title: title }) %>
+<p class="breadcrumb"><a href="/student">My assignments</a> / Personal task</p>
+<section class="narrow-page"><p class="eyebrow">Personal coursework</p><h1><%= heading %></h1><% if (error) { %><p class="form-error" role="alert"><%= error %></p><% } %>
+<form class="form-panel stack-form" method="post" action="<%= action %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <label>Task title<input name="title" value="<%= task.title || '' %>" maxlength="80" required></label>
+  <label>Notes<textarea name="description" rows="4" maxlength="500"><%= task.description || '' %></textarea></label>
+  <div class="form-columns"><label>Date given<input type="date" name="issued_on" value="<%= String(task.issued_on || '').slice(0,10) %>" required></label><label>Due date<input type="date" name="due_on" value="<%= String(task.due_on || '').slice(0,10) %>" required></label></div>
+  <label>Progress<select name="status"><% statuses.forEach(function(status) { %><option <%= task.status === status ? 'selected' : '' %>><%= status %></option><% }) %></select></label>
+  <div class="actions"><button class="button primary" type="submit">Save task</button><a class="button secondary" href="/student">Cancel</a></div>
+</form></section>
+<%- include('../partials/footer') %>

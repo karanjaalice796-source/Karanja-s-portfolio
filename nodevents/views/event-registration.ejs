@@ -1,0 +1,27 @@
+<%- include('partials/head', { title: `Register · ${event.title}` }) %>
+<section class="panel public-registration">
+  <p class="eyebrow"><%= event.event_type %> · Registration</p>
+  <h1><%= event.title %></h1>
+  <p class="intro"><%= new Date(`${event.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'full' }) %><%= event.venue ? ` · ${event.venue}` : '' %></p>
+  <% if (event.venue_notes) { %><p><%= event.venue_notes %></p><% } %>
+  <h2>Available tickets</h2>
+  <ul class="plain ticket-type-list">
+    <% ticketTypes.forEach(ticket => { %><li><strong><%= ticket.name %></strong> · <%= ticket.price === 0 ? 'Free' : `${event.budget_currency} ${Number(ticket.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}` %> · <%= ticket.remaining %> remaining</li><% }) %>
+  </ul>
+  <% if (error) { %><p class="error" role="alert"><%= error %></p><% } %>
+  <% if (!ticketTypes.length) { %><p class="muted">Tickets are not available right now.</p>
+  <% } else { %>
+    <form class="stack" method="post" action="/register/<%= event.registration_token %>">
+      <label>Full name<input name="full_name" maxlength="120" autocomplete="name" required></label>
+      <label>Email<input type="email" name="email" maxlength="160" autocomplete="email" required></label>
+      <label>Phone <small>(optional)</small><input type="tel" name="phone" maxlength="24" autocomplete="tel"></label>
+      <label>Ticket type<select name="ticket_type_id" required><% ticketTypes.forEach(ticket => { %><option value="<%= ticket.id %>"><%= ticket.name %> · <%= ticket.price === 0 ? 'Free' : `${event.budget_currency} ${Number(ticket.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}` %> · <%= ticket.remaining %> available</option><% }) %></select></label>
+      <% customQuestions.forEach((question, index) => { %><label><%= question %><input name="answer_<%= index %>" maxlength="300"></label><% }) %>
+      <label>Payment method for paid tickets<select name="payment_method"><option value="">Not applicable / not selected</option><option value="M-Pesa">M-Pesa (pay organizer directly)</option><option value="Bank transfer">Bank transfer</option><option value="Cash">Cash</option><option value="Other">Other</option></select></label>
+      <label>Payment reference <small>Do not enter a PIN or password</small><input name="payment_reference" maxlength="100" placeholder="Optional receipt or transaction reference"></label>
+      <p class="muted">Free tickets are confirmed immediately. A paid ticket is reserved pending organizer verification; online payments are not processed on this page.</p>
+      <button class="primary" type="submit">Register</button>
+    </form>
+  <% } %>
+</section>
+<%- include('partials/foot') %>

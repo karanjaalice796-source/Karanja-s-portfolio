@@ -1,0 +1,20 @@
+<%- include('partials/head', { title: `RSVP · ${guest.event_title}` }) %>
+<section class="panel guest-rsvp-panel">
+  <p class="eyebrow">Guest invitation</p>
+  <h1><%= guest.event_title %></h1>
+  <p class="intro"><%= new Date(`${guest.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'full' }) %><%= guest.venue ? ` · ${guest.venue}` : '' %></p>
+  <p>Hello <strong><%= guest.name %></strong>. This invitation is for <strong><%= guest.group_size %> <%= guest.group_size === 1 ? 'person' : 'people' %></strong>.</p>
+  <% if (saved) { %>
+    <p class="flash" role="status">Thank you. Your RSVP has been saved as <strong><%= guest.rsvp_status === 'attending' ? 'Attending' : 'Declined' %></strong>.</p>
+  <% } else if (guest.checked_in_at) { %>
+    <p class="flash" role="status">Your group has already checked in. Your RSVP is confirmed.</p>
+  <% } else { %>
+    <p>Please let the planner know whether your group will attend.</p>
+    <form class="row guest-rsvp-actions" method="post" action="/guest/rsvp/<%= token %>">
+      <button class="primary" type="submit" name="rsvp_status" value="attending">We’ll attend</button>
+      <button type="submit" name="rsvp_status" value="declined">We can’t attend</button>
+    </form>
+  <% } %>
+  <p class="muted">Show the attached check-in QR code to the planner when you arrive. Keep this invitation private.</p>
+</section>
+<%- include('partials/foot') %>

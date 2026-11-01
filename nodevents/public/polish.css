@@ -1,0 +1,220 @@
+:root {
+  --bubble: #b64d2b;
+  --bubble-deep: #8f3a1f;
+  --bubble-ink: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bubble: #e08a63;
+    --bubble-deep: #f0a283;
+    --bubble-ink: #1b1410;
+  }
+}
+
+html[data-theme="light"] {
+  --bubble: #b64d2b;
+  --bubble-deep: #8f3a1f;
+  --bubble-ink: #ffffff;
+}
+
+html[data-theme="dark"] {
+  --bubble: #e08a63;
+  --bubble-deep: #f0a283;
+  --bubble-ink: #1b1410;
+}
+
+body {
+  font-family: "Bricolage Grotesque", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+h1, h2, .brand {
+  letter-spacing: -0.02em;
+}
+
+button, .button {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition: transform .35s cubic-bezier(.34, 1.56, .64, 1), color .3s, border-color .3s, box-shadow .3s;
+}
+
+button::before, .button::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: var(--x, 50%);
+  top: var(--y, 100%);
+  width: 900px;
+  height: 900px;
+  margin: -450px 0 0 -450px;
+  border-radius: 50%;
+  background: var(--bubble);
+  transform: scale(0);
+  transition: transform .6s cubic-bezier(.2, .8, .2, 1);
+  pointer-events: none;
+}
+
+button:hover::before, button:focus-visible::before,
+.button:hover::before, .button:focus-visible::before {
+  transform: scale(1);
+}
+
+button:hover, button:focus-visible, .button:hover, .button:focus-visible {
+  color: var(--bubble-ink);
+  border-color: var(--bubble);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px -12px var(--bubble);
+  filter: none;
+}
+
+button:active, .button:active {
+  transform: translateY(0) scale(.96);
+}
+
+button.primary, .button.primary {
+  background: var(--bubble);
+  border-color: var(--bubble);
+  color: var(--bubble-ink);
+}
+
+button.primary::before, .button.primary::before {
+  background: var(--bubble-deep);
+}
+
+button.primary:hover, .button.primary:hover {
+  border-color: var(--bubble-deep);
+  box-shadow: 0 10px 20px -10px var(--bubble-deep);
+}
+
+button:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+button:disabled::before, button:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+button.link, button.link:hover {
+  background: none;
+  box-shadow: none;
+  transform: none;
+  color: inherit;
+  border: 0;
+}
+
+button.link::before {
+  display: none;
+}
+
+.ripple {
+  position: absolute;
+  z-index: -1;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bubble-ink) 45%, transparent);
+  transform: scale(0);
+  animation: ripple .65s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes ripple {
+  to { transform: scale(1); opacity: 0; }
+}
+
+input, select, textarea {
+  transition: border-color .2s, box-shadow .2s;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--bubble);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bubble) 22%, transparent);
+}
+
+.badge.confirmed::before, .badge.approved::before, .badge.paid::before {
+  content: "\2713\00a0";
+}
+
+.badge.declined::before {
+  content: "\2715\00a0";
+}
+
+.badge.pending::before, .badge.sent::before, .badge.changes_requested::before {
+  content: "";
+  display: inline-block;
+  width: .5em;
+  height: .5em;
+  margin-right: .4em;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.badge.pending::before {
+  animation: waiting 1.8s ease-in-out infinite;
+}
+
+@keyframes waiting {
+  50% { opacity: .25; transform: scale(.7); }
+}
+
+.event-row, tbody tr {
+  transition: background-color .25s;
+}
+
+.event-row:hover, tbody tr:hover {
+  background: color-mix(in srgb, var(--bubble) 8%, transparent);
+}
+
+.timeline li {
+  animation: reveal .5s cubic-bezier(.2, .7, .2, 1) backwards;
+}
+
+.timeline li:nth-child(2) { animation-delay: .07s; }
+.timeline li:nth-child(3) { animation-delay: .14s; }
+.timeline li:nth-child(4) { animation-delay: .21s; }
+.timeline li:nth-child(5) { animation-delay: .28s; }
+.timeline li:nth-child(6) { animation-delay: .35s; }
+.timeline li:nth-child(7) { animation-delay: .42s; }
+.timeline li:nth-child(n+8) { animation-delay: .49s; }
+
+@keyframes reveal {
+  from { opacity: 0; transform: translateX(-12px); }
+}
+
+#live-banner {
+  animation: banner-in .45s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+@keyframes banner-in {
+  from { opacity: 0; transform: translate(-50%, 24px) scale(.92); }
+}
+
+.confetti {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.confetti i {
+  position: absolute;
+  top: -20px;
+  border-radius: 2px;
+  animation: confetti-fall linear forwards;
+}
+
+@keyframes confetti-fall {
+  to { transform: translate(var(--drift), 110vh) rotate(var(--spin)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+  .confetti { display: none; }
+}

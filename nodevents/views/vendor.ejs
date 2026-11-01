@@ -1,0 +1,90 @@
+<%- include('partials/head', { title: `${vendor.name} · Vendor details`, vendorView: true }) %>
+<div data-vendor-token="<%= vendor.token %>"></div>
+<% if (vendorUser) { %>
+  <p class="vendor-account-banner">Signed in as <strong><%= vendorUser.email %></strong> · <a href="/vendor/dashboard">My vendor events</a></p>
+<% } %>
+<section class="vendor-hero" id="vendor-content">
+  <p class="eyebrow">Your event briefing</p>
+  <h1><%= vendor.event_title %></h1>
+  <p class="intro">Hello, <%= vendor.name %>. Here are the details your planner shared with you.</p>
+  <div class="vendor-detail-grid">
+    <div class="vendor-detail">
+      <span>Event date</span>
+      <strong><%= new Date(`${vendor.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'full' }) %></strong>
+    </div>
+    <div class="vendor-detail">
+      <span>Venue</span>
+      <strong><%= vendor.venue || 'To be confirmed' %></strong>
+      <% if (mapsUrl) { %><a href="<%= mapsUrl %>" target="_blank" rel="noopener noreferrer">Open the venue in Maps</a><% } %>
+    </div>
+    <div class="vendor-detail">
+      <span>Your role</span>
+      <strong><%= vendor.category || 'Event vendor' %></strong>
+    </div>
+    <% if (vendor.services) { %>
+      <div class="vendor-detail">
+        <span>Services for this event</span>
+        <strong><%= vendor.services %></strong>
+      </div>
+    <% } %>
+    <% if (vendor.venue_notes) { %><p class="vendor-note"><strong>Arrival notes from your planner:</strong> <%= vendor.venue_notes %></p><% } %>
+  </div>
+  <div class="vendor-response-summary">
+    <span>Your response</span>
+    <span class="badge <%= vendor.status %>"><%= vendor.status.replace('_', ' ') %></span>
+  </div>
+  <% if (vendor.note) { %><p class="vendor-note"><strong>Your note to the planner:</strong> <%= vendor.note %></p><% } %>
+  <% if (vendor.email && vendorUser && vendor.email.trim().toLowerCase() === vendorUser.email) { %>
+    <% if (vendor.account_id === vendorUser.id) { %>
+      <p class="muted">This invitation is linked to your vendor account.</p>
+    <% } else { %>
+      <form method="post" action="/vendor/<%= vendor.token %>/claim">
+        <button type="submit">Add this event to my vendor account</button>
+      </form>
+    <% } %>
+  <% } else if (vendor.email && !vendorUser) { %>
+    <p class="vendor-account-actions">
+      <a href="/vendor/<%= vendor.token %>/register">Create a vendor account</a>
+      <span>Already registered? <a href="/vendor/login">Sign in</a></span>
+    </p>
+  <% } %>
+</section>
+<section class="panel">
+  <h2>Respond to the planner</h2>
+  <p class="muted">Let the planner know if you can take part or need a change.</p>
+  <form class="stack" method="post" action="/vendor/<%= vendor.token %>/status">
+    <label>Note or requested change <small>(optional)</small><textarea name="note" maxlength="500" placeholder="Add context or a change request"></textarea></label>
+    <div class="actions">
+      <button class="primary" name="status" value="confirmed" type="submit">Confirm</button>
+      <button name="status" value="changes_requested" type="submit">Need changes</button>
+      <button name="status" value="declined" type="submit">Decline</button>
+    </div>
+  </form>
+</section>
+<section class="panel">
+  <h2>Schedule shared by your planner</h2>
+  <p class="muted">This includes event-wide schedule items and tasks assigned to you.</p>
+  <% if (tasks.length) { %><ol class="timeline"><% tasks.forEach(task => { %>
+    <li>
+      <div class="when"><%= new Date(task.start_time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) %></div>
+      <div>
+        <span class="vendor-task-type"><%= task.vendor_id ? 'Assigned to you' : 'Shared event schedule' %></span>
+        <strong><%= task.title %></strong>
+        <% if (task.notes) { %><p class="muted"><%= task.notes %></p><% } %>
+      </div>
+    </li>
+  <% }) %></ol><% } else { %><p class="muted">The planner has not added any vendor tasks yet.</p><% } %>
+</section>
+<section class="panel">
+  <h2>Send an invoice</h2>
+  <p class="muted">Send your invoice to the planner as a PDF, JPG, or PNG (max 8 MB).</p>
+  <form class="row" method="post" action="/vendor/<%= vendor.token %>/invoices" enctype="multipart/form-data">
+    <label>Amount<input type="number" name="amount" min="0" max="100000000" step="0.01" required></label>
+    <label>Invoice file<input type="file" name="invoice" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required></label>
+    <button class="primary" type="submit">Send invoice</button>
+  </form>
+  <% if (invoices.length) { %><h3>Invoice status</h3><ul class="plain"><% invoices.forEach(invoice => { %>
+    <li><strong><%= invoice.original_name %></strong> · <%= Number(invoice.amount).toFixed(2) %> · <span class="badge <%= invoice.status %>"><%= invoice.status %></span></li>
+  <% }) %></ul><% } %>
+</section>
+<%- include('partials/foot') %>

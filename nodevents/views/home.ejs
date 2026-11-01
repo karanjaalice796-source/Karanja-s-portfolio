@@ -1,0 +1,33 @@
+<%- include('partials/head', { title: 'Nodevents · Event Planner' }) %>
+<section class="site-home-hero">
+  <p class="eyebrow">Plan together, without the loose ends</p>
+  <h1>Make every event easier to bring together.</h1>
+  <p class="intro">Explore event ideas, find participating vendors, and coordinate invitations, schedules, attendance, and budgets in one place.</p>
+  <div class="site-home-actions">
+    <a class="button primary" href="/browse-events">Browse event types</a>
+    <a class="button" href="/vendors">Find a vendor</a>
+    <a class="button" href="/auth">Start planning</a>
+  </div>
+</section>
+
+<section class="home-feature-grid" aria-label="Nodevents features">
+  <article class="panel">
+    <p class="eyebrow">Explore</p>
+    <h2>Start with your event</h2>
+    <p>Browse event categories and create an event with a matching starter checklist, vendors, and schedule.</p>
+    <a href="/browse-events">Browse event types</a>
+  </article>
+  <article class="panel">
+    <p class="eyebrow">Discover</p>
+    <h2>Find event services</h2>
+    <p>Search vendor profiles by category, offered services, business name, or location.</p>
+    <a href="/vendors">Search the vendor directory</a>
+  </article>
+  <article class="panel">
+    <p class="eyebrow">Coordinate</p>
+    <h2>Keep planning connected</h2>
+    <p>Manage guest RSVPs and check-in, calculate catering quantities, and track event costs.</p>
+    <a href="/dashboard">Open My Events</a>
+  </article>
+</section>
+<%- include('partials/foot') %>

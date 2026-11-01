@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#edf2e9">
+  <title>Assignment Tracker</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #19332d;
+      --muted: #66766d;
+      --line: #d9e2d7;
+      --paper: #fbfcf8;
+      --canvas: #edf2e9;
+      --forest: #285747;
+      --forest-dark: #1d4337;
+      --lime: #d3e46f;
+      --coral: #c44d37;
+      --shadow: 0 18px 48px rgba(32, 64, 49, .09);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      color: var(--ink);
+      background-color: var(--canvas);
+      background-image: repeating-linear-gradient(135deg, transparent 0 28px, rgba(62, 97, 68, .035) 28px 29px);
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    }
+
+    button, input { font: inherit; }
+
+    .topbar {
+      min-height: 76px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 0 clamp(20px, 6vw, 88px);
+      border-bottom: 1px solid rgba(41, 74, 55, .14);
+      background: rgba(251, 252, 248, .78);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: .02em;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      color: var(--forest-dark);
+      background: var(--lime);
+      font-family: Georgia, serif;
+      font-size: 20px;
+    }
+
+    .top-note {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    main {
+      width: min(1120px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: clamp(40px, 7vw, 82px) 0 72px;
+    }
+
+    .intro {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 34px;
+      animation: arrive .5s ease both;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: var(--forest);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 640px;
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(38px, 6vw, 64px);
+      font-weight: 500;
+      line-height: 1.03;
+    }
+
+    .intro-copy {
+      max-width: 270px;
+      margin: 0 0 4px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(250px, 340px) minmax(0, 1fr);
+      align-items: start;
+      gap: 26px;
+    }
+
+    .form-panel, .list-panel {
+      border: 1px solid rgba(57, 87, 62, .13);
+      border-radius: 8px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+      animation: arrive .55s ease both;
+    }
+
+    .form-panel { padding: 25px; animation-delay: .06s; }
+    .list-panel { min-height: 350px; padding: 25px; animation-delay: .12s; }
+
+    .panel-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+
+    h2 {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 23px;
+      font-weight: 500;
+    }
+
+    .task-count {
+      min-width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      color: var(--forest-dark);
+      background: #e8eedb;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .field { margin-bottom: 19px; }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: #344a3f;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    input {
+      width: 100%;
+      min-height: 46px;
+      padding: 0 13px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      outline: none;
+      color: var(--ink);
+      background: #fff;
+      transition: border-color .16s, box-shadow .16s;
+    }
+
+    input:focus {
+      border-color: var(--forest);
+      box-shadow: 0 0 0 3px rgba(40, 87, 71, .12);
+    }
+
+    input::placeholder { color: #9aa69d; }
+
+    .add-button {
+      width: 100%;
+      min-height: 47px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      border: 0;
+      border-radius: 5px;
+      color: #fff;
+      background: var(--forest);
+      cursor: pointer;
+      font-weight: 800;
+      transition: background .16s, transform .16s;
+    }
+
+    .add-button:hover { background: var(--forest-dark); }
+    .add-button:active { transform: translateY(1px); }
+    .add-button:focus-visible, .filter-button:focus-visible, .task-action:focus-visible { outline: 3px solid #a9bf4e; outline-offset: 2px; }
+    .plus { font-size: 20px; font-weight: 400; line-height: 1; }
+
+    .filters {
+      display: flex;
+      gap: 5px;
+      padding: 4px;
+      border: 1px solid #e4e9df;
+      border-radius: 6px;
+      background: #f1f4ed;
+    }
+
+    .filter-button {
+      min-height: 31px;
+      padding: 0 11px;
+      border: 0;
+      border-radius: 4px;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .filter-button[aria-pressed="true"] { color: var(--forest-dark); background: #fff; box-shadow: 0 1px 4px rgba(40, 60, 45, .12); }
+
+    .task-list { display: grid; gap: 11px; }
+
+    .task {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px 18px;
+      align-items: center;
+      padding: 17px 16px;
+      border: 1px solid #e4e9e1;
+      border-left: 3px solid var(--lime);
+      border-radius: 5px;
+      background: #fff;
+      animation: arrive .24s ease both;
+    }
+
+    .task.is-complete { border-left-color: #79a28b; }
+    .task-title { overflow-wrap: anywhere; font-size: 15px; font-weight: 800; }
+    .task.is-complete .task-title { color: #718078; text-decoration: line-through; }
+    .task-date { margin-top: 6px; color: var(--muted); font-size: 12px; }
+    .task-due { color: var(--coral); font-weight: 800; }
+    .task.is-complete .task-due { color: var(--muted); }
+
+    .task-actions { display: flex; align-items: center; gap: 8px; }
+
+    .task-action {
+      min-height: 34px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      color: var(--forest-dark);
+      background: #fff;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .task-action:hover { background: #f0f4ec; }
+    .task-action.delete { width: 34px; padding: 0; color: #8a5145; font-size: 17px; }
+
+    .empty-state {
+      min-height: 235px;
+      display: grid;
+      align-content: center;
+      justify-items: center;
+      padding: 24px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .empty-mark {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 14px;
+      border-radius: 50%;
+      color: var(--forest);
+      background: #eaf0df;
+      font-family: Georgia, serif;
+      font-size: 24px;
+    }
+
+    .empty-state strong { margin-bottom: 6px; color: var(--ink); font-size: 14px; }
+    .empty-state span { font-size: 12px; }
+    .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+    @keyframes arrive {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 720px) {
+      .top-note { display: none; }
+      .intro { display: block; }
+      .intro-copy { margin-top: 16px; }
+      .workspace { grid-template-columns: 1fr; }
+      .form-panel { order: 0; }
+      .list-panel { order: 1; }
+    }
+
+    @media (max-width: 480px) {
+      main { width: min(100% - 28px, 520px); padding-top: 36px; }
+      .topbar { padding: 0 16px; }
+      .form-panel, .list-panel { padding: 19px; }
+      .list-panel .panel-heading { align-items: flex-start; flex-direction: column; }
+      .task { grid-template-columns: 1fr; }
+      .task-actions { justify-content: flex-start; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">A</span><span>Assignment Tracker</span></div>
+    <span class="top-note">A clearer way to stay on top of your work</span>
+  </header>
+
+  <main>
+    <section class="intro" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">Your work, in good order</p>
+        <h1 id="page-title">Make room for<br>what's next.</h1>
+      </div>
+      <p class="intro-copy">Keep every deadline in view and move each assignment forward, one step at a time.</p>
+    </section>
+
+    <div class="workspace">
+      <section class="form-panel" aria-labelledby="form-heading">
+        <div class="panel-heading"><h2 id="form-heading">New assignment</h2></div>
+        <form id="assignment-form">
+          <div class="field">
+            <label for="assignment-title">Assignment title</label>
+            <input id="assignment-title" name="title" type="text" placeholder="e.g. HTML portfolio" maxlength="100" required autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="assignment-due">Due date</label>
+            <input id="assignment-due" name="dueDate" type="date" required>
+          </div>
+          <button class="add-button" type="submit"><span class="plus" aria-hidden="true">+</span> Add assignment</button>
+          <p id="form-message" class="visually-hidden" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="list-panel" aria-labelledby="list-heading">
+        <div class="panel-heading">
+          <div class="panel-heading" style="margin: 0; gap: 11px"><h2 id="list-heading">Your assignments</h2><span id="task-count" class="task-count" aria-label="0 assignments">0</span></div>
+          <div class="filters" role="group" aria-label="Filter assignments">
+            <button class="filter-button" type="button" data-filter="all" aria-pressed="true">All</button>
+            <button class="filter-button" type="button" data-filter="open" aria-pressed="false">To do</button>
+            <button class="filter-button" type="button" data-filter="done" aria-pressed="false">Done</button>
+          </div>
+        </div>
+        <div id="task-list" class="task-list" aria-live="polite"></div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const storageKey = "assignment-tracker-items";
+    const form = document.querySelector("#assignment-form");
+    const titleInput = document.querySelector("#assignment-title");
+    const dueInput = document.querySelector("#assignment-due");
+    const list = document.querySelector("#task-list");
+    const count = document.querySelector("#task-count");
+    const message = document.querySelector("#form-message");
+    const filterButtons = document.querySelectorAll(".filter-button");
+    let activeFilter = "all";
+    let assignments = loadAssignments();
+
+    function loadAssignments() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
+        return Array.isArray(saved) ? saved.filter((item) => item && typeof item.id === "string" && typeof item.title === "string" && typeof item.dueDate === "string") : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveAssignments() {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(assignments));
+        return true;
+      } catch {
+        message.textContent = "This browser could not save your assignments.";
+        return false;
+      }
+    }
+
+    function formatDate(dateString) {
+      const [year, month, day] = dateString.split("-").map(Number);
+      return new Intl.DateTimeFormat(undefined, { year: "numeric", month: "long", day: "numeric" }).format(new Date(year, month - 1, day));
+    }
+
+    function daysUntil(dateString) {
+      const [year, month, day] = dateString.split("-").map(Number);
+      const due = Date.UTC(year, month - 1, day);
+      const today = new Date();
+      const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+      return Math.round((due - todayUtc) / 86400000);
+    }
+
+    function deadlineLabel(dateString, completed) {
+      if (completed) return "Completed";
+      const remaining = daysUntil(dateString);
+      if (remaining < 0) return `${Math.abs(remaining)} ${Math.abs(remaining) === 1 ? "day" : "days"} overdue`;
+      if (remaining === 0) return "Due today";
+      if (remaining === 1) return "Due tomorrow";
+      return `${remaining} days left`;
+    }
+
+    function render() {
+      const visible = assignments
+        .filter((item) => activeFilter === "all" || (activeFilter === "done" ? item.completed : !item.completed))
+        .sort((first, second) => first.dueDate.localeCompare(second.dueDate));
+
+      count.textContent = String(assignments.length);
+      count.setAttribute("aria-label", `${assignments.length} ${assignments.length === 1 ? "assignment" : "assignments"}`);
+      list.replaceChildren();
+
+      if (visible.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "empty-state";
+        const mark = document.createElement("span");
+        mark.className = "empty-mark";
+        mark.setAttribute("aria-hidden", "true");
+        mark.textContent = activeFilter === "done" ? "✓" : "＋";
+        const heading = document.createElement("strong");
+        heading.textContent = activeFilter === "done" ? "Nothing completed yet" : activeFilter === "open" ? "You're all caught up" : "Your list starts here";
+        const detail = document.createElement("span");
+        detail.textContent = activeFilter === "done" ? "Completed assignments will appear here." : activeFilter === "open" ? "There are no assignments to do." : "Add an assignment to keep its deadline in sight.";
+        empty.append(mark, heading, detail);
+        list.append(empty);
+        return;
+      }
+
+      for (const item of visible) {
+        const article = document.createElement("article");
+        article.className = `task${item.completed ? " is-complete" : ""}`;
+
+        const details = document.createElement("div");
+        const title = document.createElement("div");
+        title.className = "task-title";
+        title.textContent = item.title;
+        const date = document.createElement("div");
+        date.className = "task-date";
+        date.append(document.createTextNode(`Due ${formatDate(item.dueDate)} · `));
+        const due = document.createElement("span");
+        due.className = "task-due";
+        due.textContent = deadlineLabel(item.dueDate, item.completed);
+        date.append(due);
+        details.append(title, date);
+
+        const actions = document.createElement("div");
+        actions.className = "task-actions";
+        const toggle = document.createElement("button");
+        toggle.className = "task-action";
+        toggle.type = "button";
+        toggle.dataset.action = "toggle";
+        toggle.dataset.id = item.id;
+        toggle.textContent = item.completed ? "Reopen" : "Mark done";
+        toggle.setAttribute("aria-label", `${item.completed ? "Reopen" : "Mark done"}: ${item.title}`);
+        const remove = document.createElement("button");
+        remove.className = "task-action delete";
+        remove.type = "button";
+        remove.dataset.action = "delete";
+        remove.dataset.id = item.id;
+        remove.textContent = "×";
+        remove.setAttribute("aria-label", `Delete ${item.title}`);
+        actions.append(toggle, remove);
+
+        article.append(details, actions);
+        list.append(article);
+      }
+    }
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const title = titleInput.value.trim();
+      if (!title || !dueInput.value) return;
+
+      assignments.push({
+        id: typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+        title,
+        dueDate: dueInput.value,
+        completed: false
+      });
+      saveAssignments();
+      activeFilter = "all";
+      filterButtons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.filter === activeFilter)));
+      form.reset();
+      message.textContent = `${title} added to your assignments.`;
+      render();
+      titleInput.focus();
+    });
+
+    list.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-action]");
+      if (!button) return;
+      const { action, id } = button.dataset;
+      if (action === "toggle") {
+        assignments = assignments.map((item) => item.id === id ? { ...item, completed: !item.completed } : item);
+      } else {
+        assignments = assignments.filter((item) => item.id !== id);
+      }
+      saveAssignments();
+      render();
+    });
+
+    filterButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        activeFilter = button.dataset.filter;
+        filterButtons.forEach((filter) => filter.setAttribute("aria-pressed", String(filter === button)));
+        render();
+      });
+    });
+
+    render();
+  </script>
+</body>
+</html>

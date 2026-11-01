@@ -1,0 +1,11 @@
+<%- include('partials/header', { title: 'Welcome' }) %>
+<section class="role-picker">
+  <h1>Assignment Tracker</h1>
+  <nav class="role-list" aria-label="Sign in by role">
+    <a class="role-link" href="/login?role=student"><strong>Student sign in</strong><b>→</b></a>
+    <a class="role-link" href="/login?role=teacher"><strong>Trainer sign in</strong><b>→</b></a>
+    <a class="role-link" href="/login?role=admin"><strong>Admin sign in</strong><b>→</b></a>
+  </nav>
+  <% if (allowRegistration) { %><p class="role-picker-signup"><a href="/register">Create a student account</a></p><% } %>
+</section>
+<%- include('partials/footer') %>

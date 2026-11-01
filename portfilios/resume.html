@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Alice Karanja — Resume</title>
+<style>
+  :root{
+    --navy:#1c5e8a;
+    --navy-dark:#164a6e;
+    --ink:#2b2b2b;
+    --muted:#5c5c5c;
+    --paper:#ffffff;
+    --rule:#c9d6de;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    padding:32px 12px;
+    background:#eef1f3;
+    font-family:'Segoe UI', Helvetica, Arial, sans-serif;
+    color:var(--ink);
+  }
+  .page{
+    max-width:860px;
+    margin:0 auto;
+    background:var(--paper);
+    box-shadow:0 6px 24px rgba(0,0,0,0.12);
+    overflow:hidden;
+  }
+  .header{
+    display:flex;
+    align-items:center;
+    gap:24px;
+    padding:36px 40px 28px 40px;
+  }
+  .avatar{
+    width:110px;
+    height:110px;
+    border-radius:50%;
+    background:linear-gradient(135deg,#dfe6ea,#c3ced4);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+    color:#8b98a1;
+    font-size:42px;
+    font-weight:600;
+    letter-spacing:1px;
+  }
+  .avatar img{
+    width:100%;
+    height:100%;
+    border-radius:50%;
+    object-fit:cover;
+  }
+  .avatar .avatar-fallback{display:none;}
+  .header h1{
+    margin:0;
+    font-size:34px;
+    color:var(--navy);
+    letter-spacing:0.5px;
+  }
+  .header p.role{
+    margin:6px 0 0 0;
+    font-size:16px;
+    color:var(--muted);
+  }
+  .layout{
+    display:flex;
+    align-items:stretch;
+  }
+  .sidebar{
+    background:var(--navy);
+    color:#eaf1f6;
+    width:34%;
+    padding:28px 26px 40px 26px;
+  }
+  .sidebar h2{
+    font-size:14px;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    border-bottom:1px solid rgba(255,255,255,0.35);
+    padding-bottom:8px;
+    margin:26px 0 12px 0;
+  }
+  .sidebar h2:first-child{margin-top:0;}
+  .sidebar .contact-line{
+    font-size:13px;
+    line-height:1.7;
+    word-break:break-word;
+  }
+  .sidebar .contact-line a{color:#eaf1f6;}
+  .sidebar ul{
+    margin:0;
+    padding-left:16px;
+    font-size:13px;
+    line-height:1.8;
+  }
+  .sidebar .edu-block{
+    margin-bottom:14px;
+    font-size:13px;
+    line-height:1.55;
+  }
+  .sidebar .edu-block .school{font-weight:700;}
+  .sidebar .edu-block .years{font-style:italic; opacity:0.85; font-size:12px;}
+  .sidebar .ref-name{font-weight:700; font-size:13px; margin-bottom:2px;}
+  .sidebar .ref-role{font-size:12.5px; opacity:0.85; margin-bottom:6px;}
+
+  .content{
+    width:66%;
+    padding:28px 36px 40px 36px;
+  }
+  .content h2{
+    font-size:15px;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    color:var(--navy);
+    border-bottom:2px solid var(--rule);
+    padding-bottom:8px;
+    margin:26px 0 12px 0;
+  }
+  .content h2:first-child{margin-top:0;}
+  .content p{
+    font-size:13.5px;
+    line-height:1.65;
+    color:var(--ink);
+    margin:0 0 8px 0;
+  }
+  .entry{margin-bottom:16px;}
+  .entry-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+  }
+  .entry-title{
+    font-size:14px;
+    font-weight:700;
+    color:var(--ink);
+  }
+  .entry-years{
+    font-size:12.5px;
+    color:var(--muted);
+    white-space:nowrap;
+  }
+  .entry-sub{
+    font-size:13px;
+    color:var(--muted);
+    font-style:italic;
+    margin-bottom:4px;
+  }
+  .entry ul{
+    margin:4px 0 0 0;
+    padding-left:18px;
+    font-size:13px;
+    line-height:1.6;
+  }
+  .tech-tag{
+    font-size:12.5px;
+    color:var(--navy);
+    font-weight:600;
+    margin-bottom:4px;
+  }
+
+  @media (max-width:600px){
+    .layout{flex-direction:column;}
+    .sidebar,.content{width:100%;}
+    .header{flex-direction:column; text-align:center;}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <div class="avatar">
+      <img id="profileImage" src="https://cdn.phototourl.com/free/2026-09-09-879548e8-5a9b-4747-a1af-0c92f599bf20.jpg" alt="Alice Karanja profile picture" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <span class="avatar-fallback">AK</span>
+    </div>
+    <div>
+      <h1>ALICE KARANJA</h1>
+      <p class="role">IT Student | Aspiring Web Developer</p>
+    </div>
+  </div>
+
+  <div class="layout">
+
+    <div class="sidebar">
+      <h2>Contact</h2>
+      <div class="contact-line">📍 Kenya</div>
+      <div class="contact-line">📞 0759936866</div>
+      <div class="contact-line">✉️ karanjaalice796@gmail.com</div>
+      <div class="contact-line">🔗 GitHub: github.com/karanjaalice796-source/FULL-STACK</div>
+      <div class="contact-line">🔗 Portfolio: [Your Portfolio Link]</div>
+
+      <h2>Education</h2>
+      <div class="edu-block">
+        <div class="school">Empower Hope</div>
+        <div>IT / Web Development Student</div>
+        <div class="years">2026</div>
+      </div>
+      <div class="edu-block">
+        <div class="school">KIST</div>
+        <div>Level 4 Electrical Installation</div>
+        <div class="years">2024 – 2025</div>
+      </div>
+      <div class="edu-block">
+        <div class="school">Starkid Secondary School</div>
+        <div>K.C.S.E Certificate</div>
+      </div>
+      <div class="edu-block">
+        <div class="school">Cheleta Primary School</div>
+        <div>K.C.P.E Certificate</div>
+      </div>
+
+      <h2>Technical Skills</h2>
+      <ul>
+        <li>HTML5</li>
+        <li>CSS3</li>
+        <li>JavaScript</li>
+        <li>Python</li>
+        <li>Git &amp; GitHub</li>
+        <li>Responsive Web Design</li>
+        <li>VS Code</li>
+        <li>Debugging &amp; Troubleshooting</li>
+      </ul>
+
+      <h2>Soft Skills</h2>
+      <ul>
+        <li>Creativity</li>
+        <li>Problem solving</li>
+        <li>Teamwork</li>
+        <li>Communication</li>
+        <li>Time management</li>
+        <li>Adaptability</li>
+        <li>Willingness to learn</li>
+        <li>Attention to detail</li>
+        <li>Self-motivation</li>
+      </ul>
+
+      <h2>References</h2>
+      <div class="ref-name">Available upon request</div>
+    </div>
+
+    <div class="content">
+      <h2>Professional Summary</h2>
+      <p>Motivated and creative IT student currently developing skills in web development and programming. Passionate about creating responsive, user-friendly and visually appealing websites and applications. Experienced in working with HTML, CSS, JavaScript and Python, with practical experience developing academic and personal projects.</p>
+      <p>A dedicated learner with strong problem-solving skills, creativity and a willingness to learn new technologies. Seeking opportunities to gain practical experience, contribute to real-world projects and grow as a professional web developer.</p>
+
+      <h2>Experience</h2>
+      <div class="entry">
+        <div class="entry-head">
+          <span class="entry-title">Student Projects &amp; Practical Training</span>
+          <span class="entry-years">2026</span>
+        </div>
+        <div class="entry-sub">Empower Hope</div>
+        <ul>
+          <li>Developed websites as part of practical learning.</li>
+          <li>Practiced programming using Python and JavaScript.</li>
+          <li>Used Git and GitHub to manage and upload projects.</li>
+          <li>Worked on individual coding assignments and web development projects.</li>
+          <li>Continuously improved coding and problem-solving skills.</li>
+        </ul>
+      </div>
+
+      <h2>Projects</h2>
+
+      <div class="entry">
+        <div class="entry-title">Kjayy's Bakery Website</div>
+        <div class="tech-tag">HTML, CSS</div>
+        <p>A bakery website project designed to showcase bakery products and provide information about the business.</p>
+        <ul>
+          <li>Homepage</li>
+          <li>About section</li>
+          <li>Product/service presentation</li>
+          <li>Creative website layout</li>
+          <li>CSS styling</li>
+        </ul>
+      </div>
+
+      <div class="entry">
+        <div class="entry-title">Tribute Page – Wangari Maathai</div>
+        <div class="tech-tag">HTML, CSS</div>
+        <p>Created a tribute webpage dedicated to Professor Wangari Maathai, demonstrating skills in webpage structure, content organization and styling.</p>
+      </div>
+
+      <div class="entry">
+        <div class="entry-title">Media Showcase Website</div>
+        <div class="tech-tag">HTML, CSS</div>
+        <p>Developed a webpage demonstrating how to embed and display multimedia content, including audio and video.</p>
+      </div>
+
+      <div class="entry">
+        <div class="entry-title">Programming Projects</div>
+        <div class="tech-tag">Python, JavaScript</div>
+        <p>Created various programming exercises while studying programming fundamentals, including:</p>
+        <ul>
+          <li>Variables and data types</li>
+          <li>Conditional statements</li>
+          <li>Loops</li>
+          <li>Functions</li>
+          <li>Lists</li>
+          <li>Dictionaries</li>
+          <li>Object-oriented programming</li>
+          <li>JavaScript exercises</li>
+        </ul>
+      </div>
+
+      <h2>Career Objective</h2>
+      <p>To build a successful career in web development and information technology, while gaining practical experience, improving my technical skills and contributing creatively to organizations through technology.</p>
+
+    </div>
+  </div>
+</div>
+</body>
+</html>

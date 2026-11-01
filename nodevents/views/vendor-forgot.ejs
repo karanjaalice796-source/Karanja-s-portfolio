@@ -1,0 +1,19 @@
+<%- include('partials/head', { title: 'Reset your vendor password', vendorView: true }) %>
+<section class="auth-container">
+  <p class="eyebrow">Vendor account access</p>
+  <h1 class="auth-heading">Forgot password?</h1>
+  <% if (sent) { %>
+    <p class="auth-intro" role="status">If a vendor account exists for that email, we have sent a one-time reset link. Check your inbox, or the server console in local demo mode.</p>
+    <p class="auth-recovery-link"><a href="/vendor/login">Return to vendor sign in</a></p>
+  <% } else { %>
+    <p class="auth-intro">Enter the email address on your vendor account and we’ll send a one-time password reset link.</p>
+    <form class="auth-form" method="post" action="/vendor/forgot">
+      <label class="auth-field">Email
+        <input class="auth-input" type="email" name="email" autocomplete="email" maxlength="160" placeholder="E-mail" required>
+      </label>
+      <button class="login-button" type="submit">Send reset link</button>
+    </form>
+    <p class="auth-recovery-link"><a href="/vendor/login">Return to vendor sign in</a></p>
+  <% } %>
+</section>
+<%- include('partials/foot') %>

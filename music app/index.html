@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>ReelTune</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="index.css">
+</head>
+<body>
+<div class="phone" id="phone">
+
+  <main id="views">
+    <section id="v-home" class="view"></section>
+    <section id="v-search" class="view" hidden></section>
+    <section id="v-downloads" class="view" hidden></section>
+    <section id="v-library" class="view" hidden></section>
+  </main>
+
+  <!-- mini player -->
+  <div id="mini" class="mini" hidden>
+    <button class="mini-main" data-act="open-np" aria-label="Open player">
+      <span class="mini-art" id="miniArt"></span>
+      <span class="mini-meta"><b id="miniTitle"></b><span id="miniArtist"></span></span>
+    </button>
+    <button class="ibtn" id="miniPlay" data-act="toggle" aria-label="Play"></button>
+    <i class="mini-bar"><i id="miniBar"></i></i>
+  </div>
+
+  <!-- bottom tabs -->
+  <nav class="tabs" aria-label="Main">
+    <button data-act="tab" data-tab="home" aria-current="page"><span data-ic="home"></span>Home</button>
+    <button data-act="tab" data-tab="search"><span data-ic="search"></span>Search</button>
+    <button data-act="tab" data-tab="downloads"><span data-ic="download"></span>Downloads</button>
+    <button data-act="tab" data-tab="library"><span data-ic="library"></span>Library</button>
+  </nav>
+
+  <!-- full-screen player: video on top of the audio -->
+  <div id="np" class="np" role="dialog" aria-label="Now playing" aria-hidden="true">
+    <div class="np-top">
+      <button class="ibtn" data-act="close-np" aria-label="Close player"><span data-ic="down"></span></button>
+      <span>Now playing</span>
+      <span class="np-gap"></span>
+    </div>
+    <div class="frame">
+      <video id="v" muted loop playsinline></video>
+      <canvas id="viz" aria-hidden="true"></canvas>
+      <span class="badge" id="npBadge"></span>
+    </div>
+    <div class="np-info">
+      <div class="np-text"><h2 id="npTitle"></h2><p id="npArtist"></p></div>
+      <button class="ibtn" id="npFav" data-act="fav-cur" aria-label="Favorite" aria-pressed="false"></button>
+    </div>
+    <div class="seek">
+      <input id="seek" type="range" min="0" max="1000" value="0" aria-label="Seek">
+      <div class="times"><span id="tCur">0:00</span><span id="tDur">0:00</span></div>
+    </div>
+    <div class="ctrls">
+      <button class="ibtn" id="loopBtn" data-act="loop" aria-pressed="false" aria-label="Repeat off"><span data-ic="repeat"></span></button>
+      <button class="ibtn" data-act="prev" aria-label="Previous"><span data-ic="prev"></span></button>
+      <button class="bigplay" id="npPlay" data-act="toggle" aria-label="Play"></button>
+      <button class="ibtn" data-act="next" aria-label="Next"><span data-ic="next"></span></button>
+      <button class="ibtn" data-act="dl-cur" id="npDl" aria-label="Save for offline"><span data-ic="download"></span></button>
+    </div>
+  </div>
+
+  <!-- create mix -->
+  <dialog id="create">
+    <form method="dialog" id="createForm">
+      <h2>New video mix</h2>
+      <p class="sub">Pick a video and the song to play over it. Both are saved on this device, so they play offline.</p>
+      <label>Title<input id="cTitle" maxlength="60" placeholder="Summer drive" autocomplete="off"></label>
+      <label>Video<input id="cVideo" type="file" accept="video/*"></label>
+      <label class="check"><input id="cOwn" type="checkbox"> Use the video's own sound instead of a separate song</label>
+      <label id="cAudioWrap">Song<input id="cAudio" type="file" accept="audio/*"></label>
+      <p class="err" id="cErr" role="alert" hidden></p>
+      <div class="row-btns">
+        <button type="button" class="btn ghost" id="cCancel">Cancel</button>
+        <button type="submit" class="btn" id="cSave">Save mix</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</div>
+<audio id="a" preload="metadata"></audio>
+<script src="app.js"></script>
+</body>
+</html>

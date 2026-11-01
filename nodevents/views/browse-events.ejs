@@ -1,0 +1,23 @@
+<%- include('partials/head', { title: 'Browse Events' }) %>
+<section class="site-home-hero browse-hero">
+  <p class="eyebrow">Browse Events</p>
+  <h1>Choose an event type to get started.</h1>
+  <p class="intro">Each category opens a starter event with suggested vendors and a timeline you can customize.</p>
+</section>
+<div class="event-category-grid">
+  <% Object.entries(templates).forEach(([key, template]) => { %>
+    <article class="panel event-category-card">
+      <p class="eyebrow"><%= template.vendors.length %> suggested vendor roles</p>
+      <h2><%= template.label %></h2>
+      <p class="muted"><%= template.vendors.map((entry) => entry[1]).filter((category, index, list) => list.indexOf(category) === index).join(' · ') %></p>
+      <a class="button primary" href="/dashboard?event_type=<%= encodeURIComponent(key) %>#new">Plan this event</a>
+    </article>
+  <% }) %>
+  <article class="panel event-category-card">
+    <p class="eyebrow">Start from scratch</p>
+    <h2>Other event</h2>
+    <p class="muted">Create a blank event and choose your own vendors and planning details.</p>
+    <a class="button" href="/dashboard?event_type=other#new">Create a blank event</a>
+  </article>
+</div>
+<%- include('partials/foot') %>

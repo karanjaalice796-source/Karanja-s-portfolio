@@ -1,0 +1,19 @@
+<%- include('partials/head', { title: 'Reset your password' }) %>
+<section class="auth-container">
+  <p class="eyebrow">Planner account access</p>
+  <h1 class="auth-heading">Forgot password?</h1>
+  <% if (sent) { %>
+    <p class="auth-intro" role="status">If an account exists for that email, we have sent a one-time reset link. Check your inbox, or the server console in local demo mode.</p>
+    <p class="auth-recovery-link"><a href="/auth">Return to sign in</a></p>
+  <% } else { %>
+    <p class="auth-intro">Enter your planner email and we’ll send a one-time password reset link.</p>
+    <form class="auth-form" method="post" action="/auth/forgot">
+      <label class="auth-field">Email
+        <input class="auth-input" type="email" name="email" autocomplete="email" maxlength="160" placeholder="E-mail" required>
+      </label>
+      <button class="login-button" type="submit">Send reset link</button>
+    </form>
+    <p class="auth-recovery-link"><a href="/auth">Return to sign in</a></p>
+  <% } %>
+</section>
+<%- include('partials/foot') %>

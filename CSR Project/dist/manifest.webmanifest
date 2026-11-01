@@ -1,0 +1,9 @@
+{
+  "name": "Empower Hope Learning Portal",
+  "short_name": "Empower Hope",
+  "description": "Learning resources and digital skills for every school.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fbfcfa",
+  "theme_color": "#315e4a"
+}
