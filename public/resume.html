@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Resume of Alice Karanja, aspiring web developer and IT student.">
+<title>Alice Karanja — Resume</title>
+<script>
+  try {
+    var savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light' || savedTheme === 'dark') document.documentElement.dataset.theme = savedTheme;
+  } catch (e) {}
+</script>
+<style>
+  :root {
+    color-scheme: dark;
+    --navy: #a4b2ff;
+    --navy-dark: #7de0d4;
+    --ink: #f2f5fb;
+    --muted: #9aa8bf;
+    --paper: #081126;
+    --surface: #101e3a;
+    --page-background: #081126;
+    --rule: rgba(179, 197, 225, .2);
+  }
+  [data-theme="light"] {
+    color-scheme: light;
+    --navy: #435bcd;
+    --navy-dark: #167f78;
+    --ink: #182238;
+    --muted: #5b6880;
+    --paper: #f2f6ff;
+    --surface: #fff;
+    --page-background: #e3edff;
+    --rule: rgba(32, 49, 80, .15);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px 12px;
+    background: radial-gradient(ellipse at 76% 5%, rgba(62, 105, 220, .16), transparent 38rem), linear-gradient(145deg, var(--page-background), var(--paper) 48rem);
+    color: var(--ink);
+    font: 14px/1.6 "Segoe UI", Helvetica, Arial, sans-serif;
+    transition: background .3s, color .3s;
+  }
+  a { color: inherit; text-underline-offset: .15em; }
+  .page {
+    max-width: 860px;
+    margin: 0 auto;
+    overflow: hidden;
+    background: var(--surface);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .12);
+  }
+  .resume-toolbar { display: flex; max-width: 860px; align-items: center; justify-content: space-between; gap: 1rem; margin: 0 auto .8rem; }
+  .top-link { color: var(--navy); font-weight: 600; }
+  .theme-toggle {
+    padding: .55rem .8rem;
+    border: 1px solid var(--rule);
+    border-radius: .55rem;
+    background: var(--surface);
+    color: var(--ink);
+    cursor: pointer;
+    font: inherit;
+    font-size: .85rem;
+    font-weight: 600;
+  }
+  .theme-toggle:hover { border-color: var(--navy-dark); color: var(--navy-dark); }
+  .header { display: flex; align-items: center; gap: 24px; padding: 36px 40px 28px; }
+  .avatar {
+    width: 110px;
+    height: 110px;
+    flex: 0 0 110px;
+    overflow: hidden;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #dfe6ea, #c3ced4);
+  }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; object-position: center 30%; }
+  .header h1 { margin: 0; color: var(--navy); font-size: 34px; letter-spacing: .5px; line-height: 1.2; }
+  .header .role { margin: 6px 0 0; color: var(--muted); font-size: 16px; }
+  .layout { display: flex; align-items: stretch; }
+  .sidebar { width: 34%; padding: 28px 26px 40px; background: linear-gradient(180deg, #102750 0%, #173c70 52%, #204986 100%); color: #f4f7ff; }
+  .sidebar h2, .content h2 { margin: 26px 0 12px; padding-bottom: 8px; font-size: 14px; letter-spacing: 1px; text-transform: uppercase; }
+  .sidebar h2 { border-bottom: 1px solid rgba(255, 255, 255, .35); }
+  .sidebar h2:first-child, .content h2:first-child { margin-top: 0; }
+  .contact-line { margin: 0 0 5px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+  .sidebar a { color: #eaf1f6; }
+  .sidebar ul { margin: 0; padding-left: 16px; font-size: 13px; line-height: 1.8; }
+  .edu-block { margin-bottom: 14px; font-size: 13px; line-height: 1.55; }
+  .school, .ref-name { font-weight: 700; }
+  .years { font-size: 12px; font-style: italic; opacity: .85; }
+  .content { width: 66%; padding: 28px 36px 40px; }
+  .content h2 { border-bottom: 2px solid var(--rule); color: var(--navy); font-size: 15px; }
+  .content p { margin: 0 0 8px; font-size: 13.5px; line-height: 1.65; }
+  .entry { margin-bottom: 16px; }
+  .entry-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .entry-title { color: var(--ink); font-size: 14px; font-weight: 700; }
+  .entry-years { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+  .entry-sub { margin-bottom: 4px; color: var(--muted); font-size: 13px; font-style: italic; }
+  .entry ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
+  .tech-tag { margin-bottom: 4px; color: var(--navy); font-size: 12.5px; font-weight: 600; }
+  @media (max-width: 600px) {
+    body { padding: 16px 10px; }
+    .resume-toolbar { padding: 0 4px; }
+    .header { flex-direction: column; padding: 28px 20px; text-align: center; }
+    .header h1 { font-size: 29px; }
+    .layout { flex-direction: column; }
+    .sidebar, .content { width: 100%; padding: 24px; }
+  }
+  @media print {
+    @page { margin: 12mm; }
+    :root {
+      color-scheme: light;
+      --navy: #435bcd;
+      --ink: #2b2b2b;
+      --muted: #5c5c5c;
+      --paper: #fff;
+      --surface: #fff;
+      --page-background: #fff;
+      --rule: #c9d6de;
+    }
+    body { padding: 0; background: #fff; color: #2b2b2b; }
+    .resume-toolbar { display: none; }
+    .page { max-width: none; background: #fff; color: #2b2b2b; box-shadow: none; }
+    .sidebar { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .header h1, .content h2, .tech-tag { color: #435bcd; }
+    .header .role, .entry-years, .entry-sub { color: #5c5c5c; }
+    .content p, .entry-title { color: #2b2b2b; }
+  }
+</style>
+</head>
+<body>
+<nav class="resume-toolbar" aria-label="Resume controls">
+  <a class="top-link" href="/">← Back to portfolio</a>
+  <button class="theme-toggle" id="resume-theme" type="button" aria-label="Switch color theme">Light mode</button>
+</nav>
+<main class="page">
+  <header class="header">
+    <div class="avatar"><img src="/images/alice.jpg" alt="Alice Karanja"></div>
+    <div>
+      <h1>ALICE KARANJA</h1>
+      <p class="role">IT Student | Aspiring Web Developer</p>
+    </div>
+  </header>
+  <div class="layout">
+    <aside class="sidebar">
+      <section>
+        <h2>Contact</h2>
+        <p class="contact-line">📍 Kenya</p>
+        <p class="contact-line">📞 <a href="tel:+254759936866">0759936866</a></p>
+        <p class="contact-line">✉️ <a href="mailto:karanjaalice796@gmail.com">karanjaalice796@gmail.com</a></p>
+        <p class="contact-line">🔗 <a href="https://github.com/karanjaalice796-source/FULL-STACK" target="_blank" rel="noopener noreferrer">GitHub: FULL-STACK</a></p>
+        <p class="contact-line">🔗 <a href="https://www.linkedin.com/in/alice-karanja-25b9b0364/" target="_blank" rel="noopener noreferrer">LinkedIn profile</a></p>
+        <p class="contact-line">🌐 <a href="/">Portfolio</a></p>
+      </section>
+      <section>
+        <h2>Education</h2>
+        <div class="edu-block"><div class="school">Empower Hope</div><div>IT / Web Development Student</div><div class="years">2026</div></div>
+        <div class="edu-block"><div class="school">KIST</div><div>Level 4 Electrical Installation</div><div class="years">2024 – 2025</div></div>
+        <div class="edu-block"><div class="school">Starkid Secondary School</div><div>K.C.S.E Certificate</div></div>
+        <div class="edu-block"><div class="school">Cheleta Primary School</div><div>K.C.P.E Certificate</div></div>
+      </section>
+      <section>
+        <h2>Technical Skills</h2>
+        <ul><li>HTML5</li><li>CSS3</li><li>JavaScript</li><li>Python</li><li>Git &amp; GitHub</li><li>Responsive Web Design</li><li>VS Code</li><li>Debugging &amp; Troubleshooting</li></ul>
+      </section>
+      <section>
+        <h2>Soft Skills</h2>
+        <ul><li>Creativity</li><li>Problem solving</li><li>Teamwork</li><li>Communication</li><li>Time management</li><li>Adaptability</li><li>Willingness to learn</li><li>Attention to detail</li><li>Self-motivation</li></ul>
+      </section>
+      <section>
+        <h2>References</h2>
+        <p class="ref-name">Available upon request</p>
+      </section>
+    </aside>
+    <div class="content">
+      <section>
+        <h2>Professional Summary</h2>
+        <p>Motivated and creative IT student currently developing skills in web development and programming. Passionate about creating responsive, user-friendly and visually appealing websites and applications. Experienced in working with HTML, CSS, JavaScript and Python, with practical experience developing academic and personal projects.</p>
+        <p>A dedicated learner with strong problem-solving skills, creativity and a willingness to learn new technologies. Seeking opportunities to gain practical experience, contribute to real-world projects and grow as a professional web developer.</p>
+      </section>
+      <section>
+        <h2>Experience</h2>
+        <div class="entry">
+          <div class="entry-head"><span class="entry-title">Student Projects &amp; Practical Training</span><span class="entry-years">2026</span></div>
+          <div class="entry-sub">Empower Hope</div>
+          <ul><li>Developed websites as part of practical learning.</li><li>Practiced programming using Python and JavaScript.</li><li>Used Git and GitHub to manage and upload projects.</li><li>Worked on individual coding assignments and web development projects.</li><li>Continuously improved coding and problem-solving skills.</li></ul>
+        </div>
+      </section>
+      <section>
+        <h2>Projects</h2>
+        <div class="entry"><div class="entry-title">Kjayy's Bakery Website</div><div class="tech-tag">HTML, CSS</div><p>A bakery website project designed to showcase bakery products and provide information about the business.</p><ul><li>Homepage</li><li>About section</li><li>Product/service presentation</li><li>Creative website layout</li><li>CSS styling</li></ul></div>
+        <div class="entry"><div class="entry-title">Tribute Page – Wangari Maathai</div><div class="tech-tag">HTML, CSS</div><p>Created a tribute webpage dedicated to Professor Wangari Maathai, demonstrating skills in webpage structure, content organization and styling.</p></div>
+        <div class="entry"><div class="entry-title">Media Showcase Website</div><div class="tech-tag">HTML, CSS</div><p>Developed a webpage demonstrating how to embed and display multimedia content, including audio and video.</p></div>
+        <div class="entry"><div class="entry-title">Programming Projects</div><div class="tech-tag">Python, JavaScript</div><p>Created various programming exercises while studying programming fundamentals, including:</p><ul><li>Variables and data types</li><li>Conditional statements</li><li>Loops</li><li>Functions</li><li>Lists and dictionaries</li><li>Object-oriented programming</li><li>JavaScript exercises</li></ul></div>
+      </section>
+      <section>
+        <h2>Career Objective</h2>
+        <p>To build a successful career in web development and information technology, while gaining practical experience, improving my technical skills and contributing creatively to organizations through technology.</p>
+      </section>
+    </div>
+  </div>
+</main>
+<script>
+  const resumeThemeButton = document.getElementById('resume-theme');
+  const updateResumeThemeButton = () => {
+    const nextTheme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+    resumeThemeButton.textContent = nextTheme === 'light' ? 'Light mode' : 'Dark mode';
+    resumeThemeButton.setAttribute('aria-label', `Switch to ${nextTheme} mode`);
+  };
+  updateResumeThemeButton();
+  resumeThemeButton.addEventListener('click', () => {
+    const nextTheme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = nextTheme;
+    updateResumeThemeButton();
+    try { localStorage.setItem('theme', nextTheme); } catch (e) {}
+  });
+</script>
+</body>
+</html>
