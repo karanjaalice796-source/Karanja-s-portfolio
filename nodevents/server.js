@@ -13,6 +13,7 @@ const QRCode = require('qrcode');
 const db = require('./db');
 const { sendMail, configured: mailConfigured } = require('./mailer');
 const { templates, isEventType, eventTypeLabel, createTemplateEntries } = require('./templates');
+const { createMpesaClient, normalizePhone } = require('./mpesa');
 
 const vendorServiceCategories = [
   'Catering',
@@ -37,6 +38,11 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 const port = Number(process.env.PORT) || 3100;
+const mpesa = createMpesaClient();
+if (process.env.NODE_ENV === 'production'
+  && (typeof process.env.SESSION_SECRET !== 'string' || process.env.SESSION_SECRET.length < 32)) {
+  throw new Error('Production requires a SESSION_SECRET with at least 32 characters.');
+}
 const reminderHours = Number(process.env.REMINDER_HOURS || 48);
 const maxReminders = Number(process.env.MAX_REMINDERS || 3);
 const reminderCheckMinutes = Number(process.env.REMINDER_CHECK_MINUTES || 60);
@@ -48,6 +54,7 @@ if (![reminderHours, maxReminders, reminderCheckMinutes].every(Number.isFinite)
 }
 const oauthConfigurations = new Map();
 const passwordResetAttempts = new Map();
+const loginAttempts = new Map();
 const uploadDirectory = path.join(__dirname, 'uploads');
 fs.mkdirSync(uploadDirectory, { recursive: true });
 
@@ -64,9 +71,63 @@ const invoiceUpload = multer({
   },
 });
 
+class SqliteSessionStore extends session.Store {
+  get(sid, callback) {
+    try {
+      const row = db.prepare('SELECT sess FROM web_sessions WHERE sid = ? AND expires_at > ?').get(sid, Date.now());
+      callback(null, row ? JSON.parse(row.sess) : null);
+    } catch (error) {
+      callback(error);
+    }
+  }
+
+  set(sid, sessionData, callback) {
+    try {
+      const expiresAt = sessionData.cookie?.expires
+        ? new Date(sessionData.cookie.expires).getTime()
+        : Date.now() + Number(sessionData.cookie?.maxAge || 0);
+      db.prepare(`
+        INSERT INTO web_sessions (sid, sess, expires_at) VALUES (?, ?, ?)
+        ON CONFLICT(sid) DO UPDATE SET sess = excluded.sess, expires_at = excluded.expires_at
+      `).run(sid, JSON.stringify(sessionData), expiresAt);
+      callback?.(null);
+    } catch (error) {
+      callback?.(error);
+    }
+  }
+
+  touch(sid, sessionData, callback) {
+    try {
+      const expiresAt = sessionData.cookie?.expires
+        ? new Date(sessionData.cookie.expires).getTime()
+        : Date.now() + Number(sessionData.cookie?.maxAge || 0);
+      db.prepare('UPDATE web_sessions SET expires_at = ? WHERE sid = ?').run(expiresAt, sid);
+      callback?.(null);
+    } catch (error) {
+      callback?.(error);
+    }
+  }
+
+  destroy(sid, callback) {
+    try {
+      db.prepare('DELETE FROM web_sessions WHERE sid = ?').run(sid);
+      callback?.(null);
+    } catch (error) {
+      callback?.(error);
+    }
+  }
+}
+
+db.prepare('DELETE FROM web_sessions WHERE expires_at <= ?').run(Date.now());
+const sessionCleanup = setInterval(() => {
+  db.prepare('DELETE FROM web_sessions WHERE expires_at <= ?').run(Date.now());
+}, 60 * 60 * 1000);
+sessionCleanup.unref();
+
 const sessionMiddleware = session({
   name: 'nodevents.sid',
   secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
+  store: new SqliteSessionStore(),
   resave: false,
   saveUninitialized: false,
   cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 8 * 60 * 60 * 1000 },
@@ -76,6 +137,7 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.locals.eventTypeLabel = eventTypeLabel;
 app.use(express.urlencoded({ extended: false, limit: '32kb' }));
+app.use(express.json({ limit: '16kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(sessionMiddleware);
 io.engine.use(sessionMiddleware);
@@ -89,6 +151,7 @@ app.use((request, response, next) => {
     }
   }
   response.locals.user = null;
+  response.locals.isClient = false;
   response.locals.isAdmin = false;
   response.locals.vendorUser = request.session.vendorUser || null;
   response.locals.vendorView = request.path.startsWith('/vendor');
@@ -96,7 +159,7 @@ app.use((request, response, next) => {
   delete request.session.notice;
   const sessionUserId = request.session.user?.id;
   if (!sessionUserId) return next();
-  const account = db.prepare('SELECT id, name, email, is_admin, is_suspended FROM users WHERE id = ?')
+  const account = db.prepare('SELECT id, name, email, role, phone, is_admin, is_suspended FROM users WHERE id = ?')
     .get(sessionUserId);
   if (!account || account.is_suspended) {
     return request.session.destroy((error) => {
@@ -106,7 +169,14 @@ app.use((request, response, next) => {
     });
   }
   request.currentUser = account;
-  response.locals.user = { id: account.id, name: account.name, email: account.email };
+  response.locals.user = {
+    id: account.id,
+    name: account.name,
+    email: account.email,
+    role: account.role,
+    phone: account.phone,
+  };
+  response.locals.isClient = account.role === 'client';
   response.locals.isAdmin = Boolean(account.is_admin);
   next();
 });
@@ -186,11 +256,13 @@ function oauthProviders() {
   };
 }
 
-function renderAuth(response, error = null, status = 200, authMode = 'login') {
+function renderAuth(response, error = null, status = 200, authMode = 'login', audience = 'planner') {
   return response.status(status).render('auth', {
+    title: 'Account sign in',
     error,
     authMode,
     loggedOut: false,
+    audience,
     oauthProviders: oauthProviders(),
   });
 }
@@ -283,7 +355,7 @@ async function completeOauthSignIn(request, response, next, provider, claims) {
   }
 
   let user = db.prepare(`
-    SELECT users.id, users.name, users.email, users.is_suspended
+    SELECT users.id, users.name, users.email, users.role, users.is_suspended
     FROM oauth_accounts JOIN users ON users.id = oauth_accounts.user_id
     WHERE oauth_accounts.provider = ? AND oauth_accounts.provider_subject = ?
   `).get(provider, claims.sub);
@@ -294,7 +366,7 @@ async function completeOauthSignIn(request, response, next, provider, claims) {
     db.exec('BEGIN');
     try {
       const concurrentlyLinkedUser = db.prepare(`
-        SELECT users.id, users.name, users.email, users.is_suspended
+        SELECT users.id, users.name, users.email, users.role, users.is_suspended
         FROM oauth_accounts JOIN users ON users.id = oauth_accounts.user_id
         WHERE oauth_accounts.provider = ? AND oauth_accounts.provider_subject = ?
       `).get(provider, claims.sub);
@@ -309,7 +381,7 @@ async function completeOauthSignIn(request, response, next, provider, claims) {
         const userId = Number(result.lastInsertRowid);
         db.prepare('INSERT INTO oauth_accounts (provider, provider_subject, user_id) VALUES (?, ?, ?)')
           .run(provider, claims.sub, userId);
-        user = { id: userId, name, email };
+        user = { id: userId, name, email, role: 'planner' };
       }
       db.exec('COMMIT');
     } catch (error) {
@@ -325,12 +397,19 @@ async function completeOauthSignIn(request, response, next, provider, claims) {
   request.session.regenerate((error) => {
     if (error) return next(error);
     request.session.user = { id: user.id, name: user.name, email: user.email };
-    response.redirect('/dashboard');
+    response.redirect(user.role === 'client' ? '/client/dashboard' : '/dashboard');
   });
 }
 
 function requireAuth(request, response, next) {
   if (!request.currentUser) return response.redirect('/auth');
+  if (request.currentUser.role !== 'planner') return response.sendStatus(403);
+  next();
+}
+
+function requireClientAuth(request, response, next) {
+  if (!request.currentUser) return response.redirect('/auth?audience=client');
+  if (request.currentUser.role !== 'client') return response.sendStatus(403);
   next();
 }
 
@@ -345,8 +424,46 @@ function requireVendorAuth(request, response, next) {
   next();
 }
 
+function loginAttemptsExceeded(ip) {
+  const attempt = loginAttempts.get(ip);
+  if (!attempt) return false;
+  if (Date.now() - attempt.startedAt >= 15 * 60 * 1000) {
+    loginAttempts.delete(ip);
+    return false;
+  }
+  return attempt.count >= 10;
+}
+
+function recordFailedLogin(ip) {
+  const now = Date.now();
+  const attempt = loginAttempts.get(ip);
+  if (!attempt || now - attempt.startedAt >= 15 * 60 * 1000) {
+    loginAttempts.set(ip, { count: 1, startedAt: now });
+  } else {
+    attempt.count += 1;
+  }
+  if (loginAttempts.size > 10000) loginAttempts.delete(loginAttempts.keys().next().value);
+}
+
 function eventForOwner(eventId, userId) {
   return db.prepare('SELECT * FROM events WHERE id = ? AND user_id = ?').get(eventId, userId);
+}
+
+function clientForOwner(clientId, userId) {
+  return db.prepare(`
+    SELECT clients.*, users.email AS account_email
+    FROM clients LEFT JOIN users ON users.id = clients.account_user_id
+    WHERE clients.id = ? AND clients.user_id = ?
+  `).get(clientId, userId);
+}
+
+function clientForAccount(clientId, accountUserId) {
+  return db.prepare(`
+    SELECT clients.id, clients.user_id, clients.name, clients.email, clients.phone, clients.organization,
+      planners.name AS planner_name, planners.email AS planner_email
+    FROM clients JOIN users AS planners ON planners.id = clients.user_id
+    WHERE clients.id = ? AND clients.account_user_id = ?
+  `).get(clientId, accountUserId);
 }
 
 function vendorByToken(token, vendorAccountId = null) {
@@ -385,6 +502,63 @@ function emitEventUpdate(eventId, message) {
   });
   db.prepare('SELECT token FROM vendors WHERE event_id = ?').all(eventId)
     .forEach(({ token }) => io.to(`vendor:${token}`).emit('update', { message }));
+}
+
+async function verifyMpesaPayment(transactionId) {
+  const transaction = db.prepare(`
+    SELECT payment_transactions.*, registrations.event_id, registrations.full_name,
+      registrations.email, registrations.qr_token, registrations.status AS registration_status,
+      ticket_types.name AS ticket_name, ticket_types.price AS ticket_price,
+      events.title AS event_title
+    FROM payment_transactions
+    JOIN registrations ON registrations.id = payment_transactions.registration_id
+    JOIN ticket_types ON ticket_types.id = registrations.ticket_type_id
+    JOIN events ON events.id = registrations.event_id
+    WHERE payment_transactions.id = ? AND payment_transactions.provider = 'mpesa'
+  `).get(transactionId);
+  if (!transaction || transaction.status !== 'pending' || !transaction.checkout_request_id) {
+    return { status: transaction?.status || 'missing' };
+  }
+  const result = await mpesa.queryStkPush(transaction.checkout_request_id);
+  const successful = String(result.ResponseCode) === '0'
+    && String(result.ResultCode) === '0'
+    && result.CheckoutRequestID === transaction.checkout_request_id
+    && Number(transaction.callback_amount) === Number(transaction.amount)
+    && Number(transaction.ticket_price) === Number(transaction.amount)
+    && /^[a-z0-9]{6,20}$/i.test(transaction.receipt_number || '');
+  if (!successful) return { status: 'pending' };
+
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const confirmed = db.prepare(`
+      UPDATE registrations SET status = 'confirmed', payment_reference = ?
+      WHERE id = ? AND status = 'awaiting_payment'
+    `).run(transaction.receipt_number, transaction.registration_id);
+    if (!confirmed.changes) {
+      db.exec('ROLLBACK');
+      return { status: 'cancelled' };
+    }
+    db.prepare(`
+      UPDATE payment_transactions SET status = 'paid', result_code = '0',
+        result_description = 'Verified by M-Pesa STK Push Query',
+        verified_at = datetime('now'), updated_at = datetime('now')
+      WHERE id = ? AND status = 'pending'
+    `).run(transactionId);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+
+  recordChange(transaction.event_id, `M-Pesa payment verified for ${transaction.full_name}'s ${transaction.ticket_name} ticket.`);
+  emitEventUpdate(transaction.event_id, 'An M-Pesa payment was verified and a ticket issued.');
+  const sent = await sendMail({
+    to: transaction.email,
+    subject: `Payment verified: ${transaction.event_title}`,
+    text: `Hello ${transaction.full_name},\n\nYour M-Pesa payment was verified. Your ${transaction.ticket_name} ticket is confirmed. Open your ticket and QR code here:\n${ticketPageUrl(transaction.qr_token)}\n\nKeep this link private.`,
+  });
+  if (!sent) console.error(`Could not send verified M-Pesa ticket email for registration ${transaction.registration_id}.`);
+  return { status: 'paid' };
 }
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -905,10 +1079,20 @@ app.get('/vendor/login', (request, response) => {
 });
 
 app.post('/vendor/login', async (request, response, next) => {
+  const ip = request.ip || request.socket.remoteAddress || 'unknown';
+  if (loginAttemptsExceeded(ip)) {
+    return response.status(429).render('vendor-auth', {
+      title: 'Vendor sign in',
+      mode: 'login',
+      error: 'Too many sign-in attempts. Wait 15 minutes and try again.',
+      vendor: null,
+    });
+  }
   const email = String(request.body.email || '').trim().toLowerCase();
   const password = String(request.body.password || '');
   const account = db.prepare('SELECT * FROM vendor_accounts WHERE email = ?').get(email);
   if (!account || !(await bcrypt.compare(password, account.password_hash))) {
+    recordFailedLogin(ip);
     return response.status(401).render('vendor-auth', {
       title: 'Vendor sign in',
       mode: 'login',
@@ -916,6 +1100,7 @@ app.post('/vendor/login', async (request, response, next) => {
       vendor: null,
     });
   }
+  loginAttempts.delete(ip);
   request.session.regenerate((error) => {
     if (error) return next(error);
     request.session.vendorUser = { id: account.id, name: account.name, email: account.email };
@@ -1058,11 +1243,16 @@ app.post('/vendor/:token/claim', requireVendorAuth, (request, response) => {
 });
 
 app.get('/auth', (request, response) => {
-  if (request.session.user) return response.redirect('/dashboard');
+  if (request.currentUser) {
+    return response.redirect(request.currentUser.role === 'client' ? '/client/dashboard' : '/dashboard');
+  }
+  const audience = request.query.audience === 'client' ? 'client' : 'planner';
   return response.render('auth', {
+    title: 'Account sign in',
     error: null,
     authMode: 'login',
     loggedOut: request.query.loggedOut === '1',
+    audience,
     oauthProviders: oauthProviders(),
   });
 });
@@ -1150,7 +1340,8 @@ app.post('/auth/register', async (request, response, next) => {
   }
   try {
     const hash = await bcrypt.hash(password, 12);
-    const result = db.prepare('INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)').run(name, email, hash);
+    const result = db.prepare("INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, 'planner')")
+      .run(name, email, hash);
     request.session.regenerate((error) => {
       if (error) return next(error);
       request.session.user = { id: Number(result.lastInsertRowid), name, email };
@@ -1165,19 +1356,26 @@ app.post('/auth/register', async (request, response, next) => {
 });
 
 app.post('/auth/login', async (request, response, next) => {
+  const audience = request.body.audience === 'client' ? 'client' : 'planner';
+  const ip = request.ip || request.socket.remoteAddress || 'unknown';
+  if (loginAttemptsExceeded(ip)) {
+    return renderAuth(response, 'Too many sign-in attempts. Wait 15 minutes and try again.', 429, 'login', audience);
+  }
   const email = String(request.body.email || '').trim().toLowerCase();
   const password = String(request.body.password || '');
   const account = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
   if (!account || !(await bcrypt.compare(password, account.password_hash))) {
-    return renderAuth(response, 'Email or password is incorrect.', 401);
+    recordFailedLogin(ip);
+    return renderAuth(response, 'Email or password is incorrect.', 401, 'login', audience);
   }
+  loginAttempts.delete(ip);
   if (account.is_suspended) {
-    return renderAuth(response, 'This account is suspended. Contact the site administrator for help.', 403);
+    return renderAuth(response, 'This account is suspended. Contact the site administrator for help.', 403, 'login', audience);
   }
   request.session.regenerate((error) => {
     if (error) return next(error);
     request.session.user = { id: account.id, name: account.name, email: account.email };
-    response.redirect('/dashboard');
+    response.redirect(account.role === 'client' ? '/client/dashboard' : '/dashboard');
   });
 });
 
@@ -1189,10 +1387,18 @@ app.post('/auth/logout', requireAuth, (request, response, next) => {
   });
 });
 
+app.post('/client/logout', requireClientAuth, (request, response, next) => {
+  request.session.destroy((error) => {
+    if (error) return next(error);
+    response.clearCookie('nodevents.sid');
+    response.redirect('/auth?audience=client&loggedOut=1');
+  });
+});
+
 app.get('/admin', requireAuth, requireAdmin, (request, response) => {
   const totals = {
-    planners: db.prepare('SELECT COUNT(*) AS count FROM users WHERE is_admin = 0 AND is_suspended = 0').get().count,
-    suspended: db.prepare('SELECT COUNT(*) AS count FROM users WHERE is_admin = 0 AND is_suspended = 1').get().count,
+    planners: db.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'planner' AND is_admin = 0 AND is_suspended = 0").get().count,
+    suspended: db.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'planner' AND is_admin = 0 AND is_suspended = 1").get().count,
     events: db.prepare('SELECT COUNT(*) AS count FROM events').get().count,
     vendors: db.prepare('SELECT COUNT(*) AS count FROM vendors').get().count,
   };
@@ -1200,7 +1406,7 @@ app.get('/admin', requireAuth, requireAdmin, (request, response) => {
     SELECT users.id, users.name, users.email, users.is_suspended, users.created_at,
       COUNT(events.id) AS event_count
     FROM users LEFT JOIN events ON events.user_id = users.id
-    WHERE users.is_admin = 0
+    WHERE users.is_admin = 0 AND users.role = 'planner'
     GROUP BY users.id
     ORDER BY users.created_at DESC, users.id DESC
   `).all();
@@ -1210,10 +1416,10 @@ app.get('/admin', requireAuth, requireAdmin, (request, response) => {
 app.post('/admin/users/:userId/suspend', requireAuth, requireAdmin, (request, response) => {
   const userId = Number(request.params.userId);
   if (!Number.isSafeInteger(userId) || userId <= 0) return response.sendStatus(404);
-  const target = db.prepare('SELECT id, name, is_admin FROM users WHERE id = ?').get(userId);
+  const target = db.prepare("SELECT id, name, role, is_admin FROM users WHERE id = ?").get(userId);
   if (!target) return response.sendStatus(404);
-  if (target.is_admin || target.id === request.currentUser.id) return response.sendStatus(403);
-  db.prepare('UPDATE users SET is_suspended = 1 WHERE id = ? AND is_admin = 0').run(userId);
+  if (target.role !== 'planner' || target.is_admin || target.id === request.currentUser.id) return response.sendStatus(403);
+  db.prepare("UPDATE users SET is_suspended = 1 WHERE id = ? AND is_admin = 0 AND role = 'planner'").run(userId);
   for (const socket of io.sockets.sockets.values()) {
     if (socket.request.session?.user?.id === userId) socket.disconnect(true);
   }
@@ -1224,12 +1430,649 @@ app.post('/admin/users/:userId/suspend', requireAuth, requireAdmin, (request, re
 app.post('/admin/users/:userId/restore', requireAuth, requireAdmin, (request, response) => {
   const userId = Number(request.params.userId);
   if (!Number.isSafeInteger(userId) || userId <= 0) return response.sendStatus(404);
-  const target = db.prepare('SELECT id, name, is_admin FROM users WHERE id = ?').get(userId);
+  const target = db.prepare("SELECT id, name, role, is_admin FROM users WHERE id = ?").get(userId);
   if (!target) return response.sendStatus(404);
-  if (target.is_admin) return response.sendStatus(403);
-  db.prepare('UPDATE users SET is_suspended = 0 WHERE id = ? AND is_admin = 0').run(userId);
+  if (target.role !== 'planner' || target.is_admin) return response.sendStatus(403);
+  db.prepare("UPDATE users SET is_suspended = 0 WHERE id = ? AND is_admin = 0 AND role = 'planner'").run(userId);
   setNotice(request, `${target.name}'s planner account was restored.`);
   response.redirect('/admin');
+});
+
+app.get('/clients', requireAuth, (request, response) => {
+  const clients = db.prepare(`
+    SELECT clients.*,
+      (SELECT COUNT(*) FROM events WHERE events.client_id = clients.id AND events.user_id = clients.user_id) AS event_count,
+      (SELECT COUNT(*) FROM event_requests WHERE event_requests.client_id = clients.id AND event_requests.user_id = clients.user_id AND event_requests.status = 'pending') AS pending_request_count,
+      (SELECT COALESCE(SUM(amount), 0) FROM client_payments WHERE client_payments.client_id = clients.id AND client_payments.user_id = clients.user_id AND client_payments.status = 'paid') AS paid_total
+    FROM clients
+    WHERE clients.user_id = ?
+    ORDER BY clients.name COLLATE NOCASE, clients.id DESC
+  `).all(request.currentUser.id);
+  response.render('clients', { title: 'Clients', activeTool: 'clients', clients });
+});
+
+app.post('/clients', requireAuth, (request, response) => {
+  const name = String(request.body.name || '').trim();
+  const email = String(request.body.email || '').trim().toLowerCase();
+  const phone = String(request.body.phone || '').trim();
+  const organization = String(request.body.organization || '').trim();
+  const notes = String(request.body.notes || '').trim();
+  if (!name || name.length > 120 || email.length > 254
+    || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    || phone.length > 40 || organization.length > 120 || notes.length > 2000) {
+    setNotice(request, 'Enter a valid client name, email, phone, organization, and notes.');
+    return response.redirect('/clients');
+  }
+  if (email && db.prepare('SELECT id FROM clients WHERE user_id = ? AND lower(email) = ?').get(request.currentUser.id, email)) {
+    setNotice(request, 'A client with that email address already exists in your workspace.');
+    return response.redirect('/clients');
+  }
+  const result = db.prepare(`
+    INSERT INTO clients (user_id, name, email, phone, organization, notes)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(request.currentUser.id, name, email, phone, organization, notes);
+  setNotice(request, 'Client added to your workspace.');
+  return response.redirect(`/clients/${Number(result.lastInsertRowid)}`);
+});
+
+app.get('/clients/:id', requireAuth, (request, response) => {
+  const clientId = Number(request.params.id);
+  const client = Number.isSafeInteger(clientId) && clientForOwner(clientId, request.currentUser.id);
+  if (!client) return response.sendStatus(404);
+  const events = db.prepare(`
+    SELECT events.*,
+      (SELECT COUNT(*) FROM tasks WHERE tasks.event_id = events.id) AS task_count,
+      (SELECT COALESCE(SUM(completed), 0) FROM tasks WHERE tasks.event_id = events.id) AS completed_task_count,
+      (SELECT COUNT(*) FROM vendors WHERE vendors.event_id = events.id) AS vendor_count,
+      (SELECT COALESCE(SUM(CASE WHEN vendors.status = 'confirmed' THEN 1 ELSE 0 END), 0) FROM vendors WHERE vendors.event_id = events.id) AS confirmed_vendor_count
+    FROM events
+    WHERE events.client_id = ? AND events.user_id = ?
+    ORDER BY events.event_date DESC, events.id DESC
+  `).all(clientId, request.currentUser.id);
+  const bookings = db.prepare(`
+    SELECT vendors.*, events.title AS event_title, events.event_date
+    FROM vendors JOIN events ON events.id = vendors.event_id
+    WHERE events.client_id = ? AND events.user_id = ?
+    ORDER BY events.event_date DESC, vendors.name COLLATE NOCASE
+  `).all(clientId, request.currentUser.id);
+  const availableEvents = db.prepare(`
+    SELECT id, title, event_date FROM events
+    WHERE user_id = ? AND (client_id IS NULL OR client_id = ?)
+    ORDER BY event_date DESC, id DESC
+  `).all(request.currentUser.id, clientId);
+  const requests = db.prepare(`
+    SELECT event_requests.*, events.title AS linked_event_title
+    FROM event_requests LEFT JOIN events
+      ON events.id = event_requests.event_id AND events.user_id = event_requests.user_id
+    WHERE event_requests.client_id = ? AND event_requests.user_id = ?
+    ORDER BY event_requests.created_at DESC, event_requests.id DESC
+  `).all(clientId, request.currentUser.id);
+  const payments = db.prepare(`
+    SELECT client_payments.*, events.title AS event_title
+    FROM client_payments LEFT JOIN events
+      ON events.id = client_payments.event_id AND events.user_id = client_payments.user_id
+    WHERE client_payments.client_id = ? AND client_payments.user_id = ?
+    ORDER BY client_payments.created_at DESC, client_payments.id DESC
+  `).all(clientId, request.currentUser.id);
+  const messages = db.prepare(`
+    SELECT client_messages.*, events.title AS event_title
+    FROM client_messages LEFT JOIN events
+      ON events.id = client_messages.event_id AND events.user_id = client_messages.user_id
+    WHERE client_messages.client_id = ? AND client_messages.user_id = ?
+    ORDER BY client_messages.created_at DESC, client_messages.id DESC
+  `).all(clientId, request.currentUser.id);
+  const portalMessages = db.prepare(`
+    SELECT client_portal_messages.*, events.title AS event_title
+    FROM client_portal_messages LEFT JOIN events
+      ON events.id = client_portal_messages.event_id AND events.user_id = client_portal_messages.user_id
+    WHERE client_portal_messages.client_id = ? AND client_portal_messages.user_id = ?
+    ORDER BY client_portal_messages.created_at DESC, client_portal_messages.id DESC
+  `).all(clientId, request.currentUser.id);
+  const allEvents = db.prepare(`
+    SELECT id, title, event_date FROM events WHERE user_id = ? AND client_id = ?
+    ORDER BY event_date DESC, id DESC
+  `).all(request.currentUser.id, clientId);
+  const paymentTotals = payments.reduce((totals, payment) => {
+    totals[payment.status] += Number(payment.amount);
+    return totals;
+  }, { paid: 0, pending: 0 });
+  return response.render('client-profile', {
+    title: `${client.name} · Client Profile`,
+    activeTool: 'clients',
+    clientRecord: client,
+    events,
+    bookings,
+    availableEvents,
+    allEvents,
+    requests,
+    payments,
+    messages,
+    portalMessages,
+    paymentTotals,
+    mailConfigured,
+    templates,
+  });
+});
+
+app.post('/clients/:id/invite', requireAuth, async (request, response) => {
+  const clientId = Number(request.params.id);
+  const client = Number.isSafeInteger(clientId) && clientForOwner(clientId, request.currentUser.id);
+  if (!client) return response.sendStatus(404);
+  if (!client.email) {
+    setNotice(request, 'Add a client email address before creating a portal invitation.');
+    return response.redirect(`/clients/${clientId}`);
+  }
+  if (client.account_user_id) {
+    setNotice(request, 'This client already has a portal account. Ask them to sign in at /auth?audience=client.');
+    return response.redirect(`/clients/${clientId}`);
+  }
+
+  const existingAccount = db.prepare('SELECT id, role FROM users WHERE lower(email) = ?')
+    .get(client.email.toLowerCase());
+  if (existingAccount && existingAccount.role !== 'client') {
+    setNotice(request, 'This email is already used by a planner account and cannot be linked as a client account.');
+    return response.redirect(`/clients/${clientId}`);
+  }
+  if (existingAccount) {
+    db.prepare(`
+      UPDATE clients SET account_user_id = ?, invite_token_hash = NULL, invite_expires_at = NULL
+      WHERE id = ? AND user_id = ? AND account_user_id IS NULL
+    `).run(existingAccount.id, clientId, request.currentUser.id);
+    setNotice(request, 'Existing client account linked. They can sign in to view this planner workspace.');
+    return response.redirect(`/clients/${clientId}`);
+  }
+
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  db.prepare(`
+    UPDATE clients SET invite_token_hash = ?, invite_expires_at = ?
+    WHERE id = ? AND user_id = ? AND account_user_id IS NULL
+  `).run(tokenHash, expiresAt, clientId, request.currentUser.id);
+  const baseUrl = new URL(process.env.APP_BASE_URL || `http://localhost:${port}`);
+  if (baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash
+    || baseUrl.pathname !== '/'
+    || (process.env.NODE_ENV === 'production' && baseUrl.protocol !== 'https:')) {
+    throw new Error('APP_BASE_URL must be an HTTPS origin in production and cannot include a path, query, or fragment.');
+  }
+  const inviteUrl = new URL(`/client/invite/${token}`, baseUrl).href;
+  const sent = await sendMail({
+    to: client.email,
+    subject: 'Your Nodevents client portal invitation',
+    text: `Hello ${client.name},\n\n${request.currentUser.name} invited you to access your event planning details on Nodevents. Create your client account within 7 days:\n\n${inviteUrl}\n\nIf you were not expecting this invitation, you can ignore this email.`,
+  });
+  if (!mailConfigured) {
+    setNotice(request, `Email is in demo mode. Share this one-time invitation link privately (expires in 7 days): ${inviteUrl}`);
+  } else {
+    setNotice(request, sent
+      ? 'Client portal invitation email sent. The link expires in 7 days.'
+      : 'Could not deliver the invitation email. Check SMTP settings and try again.');
+  }
+  return response.redirect(`/clients/${clientId}`);
+});
+
+app.get('/client/invite/:token', (request, response) => {
+  const token = String(request.params.token || '');
+  if (!/^[a-f0-9]{64}$/.test(token)) return response.sendStatus(404);
+  const client = db.prepare(`
+    SELECT clients.id, clients.name, clients.email, clients.phone, planners.name AS planner_name
+    FROM clients JOIN users AS planners ON planners.id = clients.user_id
+    WHERE clients.invite_token_hash = ? AND datetime(clients.invite_expires_at) > datetime('now')
+      AND clients.account_user_id IS NULL
+  `).get(crypto.createHash('sha256').update(token).digest('hex'));
+  if (!client) {
+    return response.status(410).render('message', {
+      title: 'Invitation unavailable',
+      message: 'This client portal invitation is invalid, expired, or already used. Ask your planner to send a new one.',
+      href: '/auth?audience=client',
+      linkText: 'Client sign in',
+      vendorView: false,
+    });
+  }
+  return response.render('client-invite', {
+    title: 'Client account invitation',
+    clientRecord: client,
+    token,
+    error: null,
+  });
+});
+
+app.post('/client/invite/:token', async (request, response, next) => {
+  const token = String(request.params.token || '');
+  if (!/^[a-f0-9]{64}$/.test(token)) return response.sendStatus(404);
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const client = db.prepare(`
+    SELECT clients.id, clients.user_id, clients.name, clients.email, clients.phone, planners.name AS planner_name
+    FROM clients JOIN users AS planners ON planners.id = clients.user_id
+    WHERE clients.invite_token_hash = ? AND datetime(clients.invite_expires_at) > datetime('now')
+      AND clients.account_user_id IS NULL
+  `).get(tokenHash);
+  if (!client) return response.sendStatus(410);
+  const password = String(request.body.password || '');
+  const confirmPassword = String(request.body.confirm_password || '');
+  if (password.length < 8 || password.length > 128 || password !== confirmPassword) {
+    return response.status(400).render('client-invite', {
+      title: 'Client account invitation',
+      clientRecord: client,
+      token,
+      error: 'Use a matching password between 8 and 128 characters.',
+    });
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  db.exec('BEGIN IMMEDIATE');
+  let accountId;
+  try {
+    const account = db.prepare(`
+      INSERT INTO users (name, email, password_hash, role, phone)
+      VALUES (?, ?, ?, 'client', ?)
+    `).run(client.name, client.email, passwordHash, client.phone);
+    accountId = Number(account.lastInsertRowid);
+    const linked = db.prepare(`
+      UPDATE clients SET account_user_id = ?, invite_token_hash = NULL, invite_expires_at = NULL
+      WHERE id = ? AND user_id = ? AND account_user_id IS NULL AND invite_token_hash = ?
+        AND datetime(invite_expires_at) > datetime('now')
+    `).run(accountId, client.id, client.user_id, tokenHash);
+    if (!linked.changes) {
+      db.exec('ROLLBACK');
+      return response.sendStatus(410);
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    if (error.errcode === 2067 || error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return response.status(409).render('message', {
+        title: 'Account already exists',
+        message: 'A Nodevents account already uses this email. Sign in with that account, or ask your planner to link it.',
+        href: '/auth?audience=client',
+        linkText: 'Client sign in',
+        vendorView: false,
+      });
+    }
+    return next(error);
+  }
+  request.session.regenerate((error) => {
+    if (error) return next(error);
+    request.session.user = { id: accountId, name: client.name, email: client.email };
+    response.redirect('/client/dashboard');
+  });
+});
+
+app.get('/client/dashboard', requireClientAuth, (request, response) => {
+  const clients = db.prepare(`
+    SELECT clients.id, clients.user_id, clients.name, clients.email, clients.phone, clients.organization,
+      planners.name AS planner_name, planners.email AS planner_email
+    FROM clients JOIN users AS planners ON planners.id = clients.user_id
+    WHERE clients.account_user_id = ?
+    ORDER BY planners.name COLLATE NOCASE, clients.name COLLATE NOCASE
+  `).all(request.currentUser.id);
+  const events = db.prepare(`
+    SELECT events.*, clients.name AS client_name, clients.user_id AS planner_id,
+      (SELECT COUNT(*) FROM tasks WHERE tasks.event_id = events.id) AS task_count,
+      (SELECT COALESCE(SUM(completed), 0) FROM tasks WHERE tasks.event_id = events.id) AS completed_task_count,
+      (SELECT COUNT(*) FROM vendors WHERE vendors.event_id = events.id) AS vendor_count,
+      (SELECT COALESCE(SUM(CASE WHEN vendors.status = 'confirmed' THEN 1 ELSE 0 END), 0) FROM vendors WHERE vendors.event_id = events.id) AS confirmed_vendor_count
+    FROM events JOIN clients ON clients.id = events.client_id
+    WHERE clients.account_user_id = ? AND events.user_id = clients.user_id
+    ORDER BY events.event_date DESC, events.id DESC
+  `).all(request.currentUser.id);
+  const requests = db.prepare(`
+    SELECT event_requests.*, clients.name AS client_name, clients.user_id AS planner_id,
+      events.title AS linked_event_title
+    FROM event_requests JOIN clients ON clients.id = event_requests.client_id
+    LEFT JOIN events ON events.id = event_requests.event_id AND events.user_id = event_requests.user_id
+    WHERE clients.account_user_id = ? AND event_requests.user_id = clients.user_id
+    ORDER BY event_requests.created_at DESC, event_requests.id DESC
+  `).all(request.currentUser.id);
+  const bookings = db.prepare(`
+    SELECT clients.id AS client_id, vendors.name AS vendor_name, vendors.category, vendors.services, vendors.status,
+      events.id AS event_id, events.title AS event_title, events.event_date
+    FROM vendors JOIN events ON events.id = vendors.event_id
+    JOIN clients ON clients.id = events.client_id
+    WHERE clients.account_user_id = ? AND events.user_id = clients.user_id
+    ORDER BY events.event_date DESC, vendors.name COLLATE NOCASE
+  `).all(request.currentUser.id);
+  const payments = db.prepare(`
+    SELECT client_payments.*, events.title AS event_title, clients.name AS client_name
+    FROM client_payments JOIN clients ON clients.id = client_payments.client_id
+    LEFT JOIN events ON events.id = client_payments.event_id AND events.user_id = client_payments.user_id
+    WHERE clients.account_user_id = ? AND client_payments.user_id = clients.user_id
+    ORDER BY client_payments.created_at DESC, client_payments.id DESC
+  `).all(request.currentUser.id);
+  const messages = db.prepare(`
+    SELECT client_portal_messages.*, events.title AS event_title, clients.name AS client_name,
+      clients.user_id AS planner_id
+    FROM client_portal_messages JOIN clients ON clients.id = client_portal_messages.client_id
+    LEFT JOIN events ON events.id = client_portal_messages.event_id AND events.user_id = clients.user_id
+    WHERE clients.account_user_id = ? AND client_portal_messages.user_id = clients.user_id
+    ORDER BY client_portal_messages.created_at DESC, client_portal_messages.id DESC
+  `).all(request.currentUser.id);
+  const emails = db.prepare(`
+    SELECT client_messages.*, clients.id AS client_id, clients.name AS client_name
+    FROM client_messages JOIN clients ON clients.id = client_messages.client_id
+    WHERE clients.account_user_id = ? AND client_messages.user_id = clients.user_id
+    ORDER BY client_messages.created_at DESC, client_messages.id DESC
+  `).all(request.currentUser.id);
+  return response.render('client-dashboard', {
+    title: 'Client portal',
+    activeTool: 'client-portal',
+    clients,
+    events,
+    requests,
+    bookings,
+    payments,
+    messages,
+    emails,
+    templates,
+  });
+});
+
+app.post('/client/profile', requireClientAuth, (request, response) => {
+  const name = String(request.body.name || '').trim();
+  const phone = String(request.body.phone || '').trim();
+  if (!name || name.length > 80 || phone.length > 40) {
+    setNotice(request, 'Enter a valid name and phone number.');
+    return response.redirect('/client/dashboard#profile');
+  }
+  db.prepare('UPDATE users SET name = ?, phone = ? WHERE id = ? AND role = \'client\'')
+    .run(name, phone, request.currentUser.id);
+  db.prepare('UPDATE clients SET name = ?, phone = ?, updated_at = datetime(\'now\') WHERE account_user_id = ?')
+    .run(name, phone, request.currentUser.id);
+  request.session.user.name = name;
+  setNotice(request, 'Client profile updated.');
+  return response.redirect('/client/dashboard#profile');
+});
+
+app.post('/client/requests', requireClientAuth, (request, response) => {
+  const clientId = Number(request.body.client_id);
+  const client = Number.isSafeInteger(clientId) && clientForAccount(clientId, request.currentUser.id);
+  if (!client) return response.sendStatus(404);
+  const title = String(request.body.title || '').trim();
+  const eventType = String(request.body.event_type || 'other').trim();
+  const desiredDate = String(request.body.desired_date || '').trim();
+  const venue = String(request.body.venue || '').trim();
+  const details = String(request.body.details || '').trim();
+  const budgetText = String(request.body.estimated_budget || '').trim();
+  const budget = budgetText ? Number(budgetText) : 0;
+  if (!title || title.length > 120 || !isEventType(eventType)
+    || (desiredDate && !isValidDate(desiredDate)) || venue.length > 160 || details.length > 2000
+    || !Number.isFinite(budget) || budget < 0 || budget > 1000000000) {
+    setNotice(request, 'Enter a valid event request, date, venue, details, and estimated budget.');
+    return response.redirect('/client/dashboard#requests');
+  }
+  db.prepare(`
+    INSERT INTO event_requests (user_id, client_id, title, event_type, desired_date, venue, details, estimated_budget)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(client.user_id, client.id, title, eventType, desiredDate, venue, details, budget);
+  setNotice(request, `Your event request was sent to ${client.planner_name}.`);
+  return response.redirect('/client/dashboard#requests');
+});
+
+app.post('/client/messages', requireClientAuth, async (request, response) => {
+  const clientId = Number(request.body.client_id);
+  const client = Number.isSafeInteger(clientId) && clientForAccount(clientId, request.currentUser.id);
+  if (!client) return response.sendStatus(404);
+  const message = String(request.body.message || '').trim();
+  const eventId = request.body.event_id ? Number(request.body.event_id) : null;
+  const event = eventId === null ? null : Number.isSafeInteger(eventId) && eventForOwner(eventId, client.user_id);
+  if (!message || message.length > 5000 || (eventId !== null && (!event || event.client_id !== client.id))) {
+    setNotice(request, 'Enter a message and choose one of your linked events.');
+    return response.redirect('/client/dashboard#messages');
+  }
+  db.prepare(`
+    INSERT INTO client_portal_messages (user_id, client_id, event_id, sender_role, message, delivery_status)
+    VALUES (?, ?, ?, 'client', ?, 'received')
+  `).run(client.user_id, client.id, eventId, message);
+  const notificationSent = await sendMail({
+    to: client.planner_email,
+    subject: `New Nodevents client message from ${client.name}`,
+    text: `${client.name} sent a message${event ? ` about ${event.title}` : ''} in the client portal:\n\n${message}`,
+  });
+  setNotice(request, notificationSent
+    ? (mailConfigured ? 'Message sent to your planner.' : 'Message saved in the portal; demo mode did not send an email notification.')
+    : 'Your message is saved in the portal, but the planner email notification could not be delivered.');
+  return response.redirect('/client/dashboard#messages');
+});
+
+app.post('/clients/:id/update', requireAuth, (request, response) => {
+  const clientId = Number(request.params.id);
+  const client = Number.isSafeInteger(clientId) && clientForOwner(clientId, request.currentUser.id);
+  if (!client) return response.sendStatus(404);
+  const name = String(request.body.name || '').trim();
+  const email = String(request.body.email || '').trim().toLowerCase();
+  const phone = String(request.body.phone || '').trim();
+  const organization = String(request.body.organization || '').trim();
+  const notes = String(request.body.notes || '').trim();
+  if (!name || name.length > 120 || email.length > 254
+    || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    || phone.length > 40 || organization.length > 120 || notes.length > 2000) {
+    setNotice(request, 'Enter a valid client name, email, phone, organization, and notes.');
+    return response.redirect(`/clients/${clientId}`);
+  }
+  if (email && db.prepare('SELECT id FROM clients WHERE user_id = ? AND lower(email) = ? AND id <> ?')
+    .get(request.currentUser.id, email, clientId)) {
+    setNotice(request, 'Another client in your workspace already uses that email address.');
+    return response.redirect(`/clients/${clientId}`);
+  }
+  if (client.account_user_id && email !== client.account_email) {
+    setNotice(request, 'This client has an account. Their login email cannot be changed from the planner profile.');
+    return response.redirect(`/clients/${clientId}`);
+  }
+  db.prepare(`
+    UPDATE clients SET name = ?, email = ?, phone = ?, organization = ?, notes = ?, updated_at = datetime('now')
+    WHERE id = ? AND user_id = ?
+  `).run(name, email, phone, organization, notes, clientId, request.currentUser.id);
+  if (client.account_user_id) {
+    db.prepare('UPDATE users SET name = ?, phone = ? WHERE id = ? AND role = \'client\'')
+      .run(name, phone, client.account_user_id);
+    db.prepare('UPDATE clients SET name = ?, phone = ?, updated_at = datetime(\'now\') WHERE account_user_id = ?')
+      .run(name, phone, client.account_user_id);
+  }
+  setNotice(request, 'Client profile updated.');
+  return response.redirect(`/clients/${clientId}`);
+});
+
+app.post('/clients/:id/requests', requireAuth, (request, response) => {
+  const clientId = Number(request.params.id);
+  const client = Number.isSafeInteger(clientId) && clientForOwner(clientId, request.currentUser.id);
+  if (!client) return response.sendStatus(404);
+  const title = String(request.body.title || '').trim();
+  const eventType = String(request.body.event_type || 'other').trim();
+  const desiredDate = String(request.body.desired_date || '').trim();
+  const venue = String(request.body.venue || '').trim();
+  const details = String(request.body.details || '').trim();
+  const budgetText = String(request.body.estimated_budget || '').trim();
+  const budget = budgetText ? Number(budgetText) : 0;
+  if (!title || title.length > 120 || !isEventType(eventType)
+    || (desiredDate && !isValidDate(desiredDate)) || venue.length > 160 || details.length > 2000
+    || !Number.isFinite(budget) || budget < 0 || budget > 1000000000) {
+    setNotice(request, 'Enter a valid event request, date, venue, details, and estimated budget.');
+    return response.redirect(`/clients/${clientId}`);
+  }
+  db.prepare(`
+    INSERT INTO event_requests (user_id, client_id, title, event_type, desired_date, venue, details, estimated_budget)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(request.currentUser.id, clientId, title, eventType, desiredDate, venue, details, budget);
+  setNotice(request, 'Event request recorded.');
+  return response.redirect(`/clients/${clientId}`);
+});
+
+app.post('/clients/:id/requests/:requestId/convert', requireAuth, (request, response) => {
+  const clientId = Number(request.params.id);
+  const requestId = Number(request.params.requestId);
+  const client = Number.isSafeInteger(clientId) && clientForOwner(clientId, request.currentUser.id);
+  const eventRequest = Number.isSafeInteger(requestId) && db.prepare(`
+    SELECT * FROM event_requests WHERE id = ? AND client_id = ? AND user_id = ? AND status = 'pending'
+  `).get(requestId, clientId, request.currentUser.id);
+  if (!client || !eventRequest) return response.sendStatus(404);
+  const eventDate = String(request.body.event_date || eventRequest.desired_date || '').trim();
+  if (!isValidDate(eventDate)) {
+    setNotice(request, 'Choose a valid date before creating an event from this request.');
+    return response.redirect(`/clients/${clientId}`);
+  }
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const result = db.prepare(`
+      INSERT INTO events (user_id, client_id, title, event_date, event_type, venue, venue_notes, budget_total, registration_token)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      request.currentUser.id,
+      clientId,
+      eventRequest.title,
+      eventDate,
+      eventRequest.event_type,
+      eventRequest.venue,
+      eventRequest.details,
+      eventRequest.estimated_budget,
+      crypto.randomBytes(32).toString('hex'),
+    );
+    const eventId = Number(result.lastInsertRowid);
+    createTemplateEntries(db, eventId, eventDate, eventRequest.event_type);
+    db.prepare(`
+      UPDATE event_requests SET status = 'converted', event_id = ?, updated_at = datetime('now')
+      WHERE id = ? AND client_id = ? AND user_id = ? AND status = 'pending'
+    `).run(eventId, requestId, clientId, request.currentUser.id);
+    db.exec('COMMIT');
+    setNotice(request, 'Event created and linked to this client.');
+    return response.redirect(`/events/${eventId}`);
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+});
+
+app.post('/clients/:id/requests/:requestId/decline', requireAuth, (request, response) => {
+  const clientId = Number(request.params.id);
+  const requestId = Number(request.params.requestId);
+  const client = Number.isSafeInteger(clientId) && clientForOwner(clientId, request.currentUser.id);
+  if (!client) return response.sendStatus(404);
+  const result = db.prepare(`
+    UPDATE event_requests SET status = 'declined', updated_at = datetime('now')
+    WHERE id = ? AND client_id = ? AND user_id = ? AND status = 'pending'
+  `).run(requestId, clientId, request.currentUser.id);
+  if (!result.changes) return response.sendStatus(404);
+  setNotice(request, 'Event request marked as declined.');
+  return response.redirect(`/clients/${clientId}`);
+});
+
+app.post('/clients/:id/events/link', requireAuth, (request, response) => {
+  const clientId = Number(request.params.id);
+  const eventId = Number(request.body.event_id);
+  const client = Number.isSafeInteger(clientId) && clientForOwner(clientId, request.currentUser.id);
+  const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.currentUser.id);
+  if (!client || !event) return response.sendStatus(404);
+  if (event.client_id && event.client_id !== clientId) {
+    setNotice(request, 'This event is already linked to another client.');
+    return response.redirect(`/clients/${clientId}`);
+  }
+  db.prepare('UPDATE events SET client_id = ? WHERE id = ? AND user_id = ?')
+    .run(clientId, eventId, request.currentUser.id);
+  setNotice(request, 'Event linked to this client.');
+  return response.redirect(`/clients/${clientId}`);
+});
+
+app.post('/clients/:id/messages', requireAuth, async (request, response) => {
+  const clientId = Number(request.params.id);
+  const client = Number.isSafeInteger(clientId) && clientForOwner(clientId, request.currentUser.id);
+  if (!client) return response.sendStatus(404);
+  const subject = String(request.body.subject || '').trim();
+  const message = String(request.body.message || '').trim();
+  const eventId = request.body.event_id ? Number(request.body.event_id) : null;
+  const event = eventId === null ? null : Number.isSafeInteger(eventId) && eventForOwner(eventId, request.currentUser.id);
+  if (!client.email || !subject || subject.length > 160 || !message || message.length > 5000
+    || (eventId !== null && (!event || event.client_id !== clientId))) {
+    setNotice(request, 'A valid client email, subject, message, and linked event are required.');
+    return response.redirect(`/clients/${clientId}`);
+  }
+  const sent = await sendMail({ to: client.email, subject, text: message });
+  db.prepare(`
+    INSERT INTO client_messages (user_id, client_id, event_id, subject, message, status)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(request.currentUser.id, clientId, eventId, subject, message, sent ? 'sent' : 'failed');
+  setNotice(request, sent
+    ? (mailConfigured ? 'Email sent and added to communication history.' : 'Email logged in demo mode; configure SMTP to deliver it.')
+    : 'Email delivery failed. The failed attempt was saved to communication history.');
+  return response.redirect(`/clients/${clientId}`);
+});
+
+app.post('/clients/:id/conversation', requireAuth, async (request, response) => {
+  const clientId = Number(request.params.id);
+  const client = Number.isSafeInteger(clientId) && clientForOwner(clientId, request.currentUser.id);
+  if (!client) return response.sendStatus(404);
+  const message = String(request.body.message || '').trim();
+  const eventId = request.body.event_id ? Number(request.body.event_id) : null;
+  const event = eventId === null ? null : Number.isSafeInteger(eventId) && eventForOwner(eventId, request.currentUser.id);
+  if (!message || message.length > 5000
+    || (eventId !== null && (!event || event.client_id !== clientId))) {
+    setNotice(request, 'Enter a message and choose one of this client’s linked events.');
+    return response.redirect(`/clients/${clientId}`);
+  }
+  const deliveryStatus = client.email
+    ? (await sendMail({
+      to: client.email,
+      subject: `Message from ${request.currentUser.name} on Nodevents`,
+      text: message,
+    }) ? 'sent' : 'failed')
+    : 'failed';
+  db.prepare(`
+    INSERT INTO client_portal_messages (user_id, client_id, event_id, sender_role, message, delivery_status)
+    VALUES (?, ?, ?, 'planner', ?, ?)
+  `).run(request.currentUser.id, clientId, eventId, message, deliveryStatus);
+  setNotice(request, deliveryStatus === 'sent'
+    ? (mailConfigured ? 'Reply sent and saved in the client portal.' : 'Reply saved in the portal; demo mode did not deliver an email.')
+    : 'Reply saved in the portal, but the client email could not be delivered.');
+  return response.redirect(`/clients/${clientId}`);
+});
+
+app.post('/clients/:id/payments', requireAuth, (request, response) => {
+  const clientId = Number(request.params.id);
+  const eventId = Number(request.body.event_id);
+  const client = Number.isSafeInteger(clientId) && clientForOwner(clientId, request.currentUser.id);
+  const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.currentUser.id);
+  const description = String(request.body.description || '').trim();
+  const amount = Number(request.body.amount);
+  const paymentMethod = String(request.body.payment_method || '').trim();
+  const reference = String(request.body.reference || '').trim();
+  const status = String(request.body.status || 'pending').trim();
+  const paymentMethods = new Set(['Cash', 'Bank transfer', 'M-Pesa', 'Card', 'Other']);
+  if (!client || !event || event.client_id !== clientId || !description || description.length > 160
+    || !Number.isFinite(amount) || amount <= 0 || amount > 1000000000
+    || !paymentMethods.has(paymentMethod) || reference.length > 100
+    || !['pending', 'paid'].includes(status) || (status === 'paid' && !reference)) {
+    setNotice(request, 'Enter a valid linked event, payment description, amount, method, and reference for received payments.');
+    return response.redirect(`/clients/${clientId}`);
+  }
+  db.prepare(`
+    INSERT INTO client_payments (user_id, client_id, event_id, description, amount, payment_method, reference, status, paid_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'paid' THEN datetime('now') ELSE NULL END)
+  `).run(request.currentUser.id, clientId, eventId, description, amount, paymentMethod, reference, status, status);
+  setNotice(request, 'Client payment record added. Payment status is planner-entered, not gateway-verified.');
+  return response.redirect(`/clients/${clientId}`);
+});
+
+app.post('/clients/:id/payments/:paymentId/status', requireAuth, (request, response) => {
+  const clientId = Number(request.params.id);
+  const paymentId = Number(request.params.paymentId);
+  const client = Number.isSafeInteger(clientId) && clientForOwner(clientId, request.currentUser.id);
+  const payment = Number.isSafeInteger(paymentId) && db.prepare(`
+    SELECT * FROM client_payments WHERE id = ? AND client_id = ? AND user_id = ?
+  `).get(paymentId, clientId, request.currentUser.id);
+  if (!client || !payment) return response.sendStatus(404);
+  const status = String(request.body.status || '').trim();
+  const reference = String(request.body.reference || payment.reference || '').trim();
+  if (!['pending', 'paid'].includes(status) || reference.length > 100 || (status === 'paid' && !reference)) {
+    setNotice(request, 'A received payment needs a reference; choose a valid payment status.');
+    return response.redirect(`/clients/${clientId}`);
+  }
+  db.prepare(`
+    UPDATE client_payments SET status = ?, reference = ?,
+      paid_at = CASE WHEN ? = 'paid' THEN COALESCE(paid_at, datetime('now')) ELSE NULL END
+    WHERE id = ? AND client_id = ? AND user_id = ?
+  `).run(status, reference, status, paymentId, clientId, request.currentUser.id);
+  setNotice(request, status === 'paid'
+    ? 'Payment marked received; this is a planner-entered record, not gateway verification.'
+    : 'Payment marked pending.');
+  return response.redirect(`/clients/${clientId}`);
 });
 
 app.get('/dashboard', requireAuth, (request, response) => {
@@ -1283,6 +2126,67 @@ app.post('/events', requireAuth, (request, response) => {
     db.exec('ROLLBACK');
     throw error;
   }
+});
+
+app.post('/events/:id/update', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.currentUser.id);
+  if (!event) return response.sendStatus(404);
+  const title = String(request.body.title || '').trim();
+  const eventDate = String(request.body.event_date || '').trim();
+  const eventType = String(request.body.event_type || '').trim();
+  const venue = String(request.body.venue || '').trim();
+  const venueNotes = String(request.body.venue_notes || '').trim();
+  if (!title || title.length > 120 || !isValidDate(eventDate) || !isEventType(eventType)
+    || venue.length > 160 || venueNotes.length > 1000) {
+    setNotice(request, 'Enter a valid event name, date, event type, venue, and venue notes.');
+    return response.redirect(`/events/${eventId}`);
+  }
+  db.prepare(`
+    UPDATE events SET title = ?, event_date = ?, event_type = ?, venue = ?, venue_notes = ?
+    WHERE id = ? AND user_id = ?
+  `).run(title, eventDate, eventType, venue, venueNotes, eventId, request.currentUser.id);
+  recordChange(eventId, 'Event details were updated.');
+  emitEventUpdate(eventId, 'Event details were updated.');
+  setNotice(request, 'Event details updated.');
+  return response.redirect(`/events/${eventId}`);
+});
+
+app.post('/events/:id/delete', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.currentUser.id);
+  if (!event) return response.sendStatus(404);
+  if (String(request.body.confirm_title || '').trim() !== event.title) {
+    setNotice(request, 'Type the event name exactly to confirm deletion.');
+    return response.redirect(`/events/${eventId}`);
+  }
+  const invoiceFiles = db.prepare(`
+    SELECT invoices.filename FROM invoices
+    JOIN vendors ON vendors.id = invoices.vendor_id
+    WHERE vendors.event_id = ?
+  `).all(eventId);
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const result = db.prepare('DELETE FROM events WHERE id = ? AND user_id = ?')
+      .run(eventId, request.currentUser.id);
+    if (!result.changes) {
+      db.exec('ROLLBACK');
+      return response.sendStatus(404);
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+  for (const { filename } of invoiceFiles) {
+    try {
+      fs.unlinkSync(path.join(uploadDirectory, filename));
+    } catch (error) {
+      if (error.code !== 'ENOENT') console.error('Could not remove deleted event invoice:', error);
+    }
+  }
+  setNotice(request, 'Event and its associated records were deleted.');
+  return response.redirect('/dashboard');
 });
 
 function renderPlannerEvent(request, response, eventId, toolPage = 'overview') {
@@ -1349,6 +2253,7 @@ function renderPlannerEvent(request, response, eventId, toolPage = 'overview') {
   const changes = db.prepare('SELECT * FROM changes WHERE event_id = ? ORDER BY id DESC LIMIT 12').all(eventId);
   response.render('event', {
     event,
+    templates,
     toolPage,
     activeTool: toolPage,
     vendors,
@@ -1387,6 +2292,71 @@ app.get('/events/:id/:toolPage', requireAuth, (request, response) => {
   return response.sendStatus(404);
 });
 
+app.post('/payments/mpesa/callback/:callbackToken', async (request, response) => {
+  if (!mpesa.callbackTokenMatches(request.params.callbackToken)) return response.sendStatus(404);
+  const callback = request.body?.Body?.stkCallback;
+  const checkoutRequestId = callback?.CheckoutRequestID;
+  if (typeof checkoutRequestId !== 'string' || checkoutRequestId.length > 100) {
+    return response.status(400).json({ ResultCode: 1, ResultDesc: 'Invalid callback.' });
+  }
+  const transaction = db.prepare(`
+    SELECT payment_transactions.id, payment_transactions.registration_id,
+      registrations.event_id, payment_transactions.status
+    FROM payment_transactions
+    JOIN registrations ON registrations.id = payment_transactions.registration_id
+    WHERE checkout_request_id = ? AND provider = 'mpesa'
+  `).get(checkoutRequestId);
+  if (!transaction) return response.status(404).json({ ResultCode: 1, ResultDesc: 'Payment request not found.' });
+  if (transaction.status !== 'pending') return response.json({ ResultCode: 0, ResultDesc: 'Callback already processed.' });
+
+  const resultCode = String(callback.ResultCode ?? '');
+  const resultDescription = String(callback.ResultDesc || '').slice(0, 300);
+  const items = Array.isArray(callback.CallbackMetadata?.Item) ? callback.CallbackMetadata.Item : [];
+  const amount = items.find((item) => item?.Name === 'Amount')?.Value;
+  const receipt = items.find((item) => item?.Name === 'MpesaReceiptNumber')?.Value;
+  db.prepare(`
+    UPDATE payment_transactions SET result_code = ?, result_description = ?,
+      callback_amount = ?, receipt_number = ?, callback_received_at = datetime('now'),
+      updated_at = datetime('now')
+    WHERE id = ? AND status = 'pending'
+  `).run(
+    resultCode,
+    resultDescription,
+    Number.isSafeInteger(Number(amount)) ? Number(amount) : null,
+    typeof receipt === 'string' && /^[a-z0-9]{6,20}$/i.test(receipt) ? receipt : null,
+    transaction.id,
+  );
+
+  if (resultCode !== '0') {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.prepare(`
+        UPDATE payment_transactions SET status = 'failed', updated_at = datetime('now')
+        WHERE id = ? AND status = 'pending'
+      `).run(transaction.id);
+      db.prepare(`
+        UPDATE registrations SET status = 'cancelled'
+        WHERE id = ? AND status = 'awaiting_payment'
+      `).run(transaction.registration_id);
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      console.error('Could not record an unsuccessful M-Pesa callback:', error);
+      return response.status(500).json({ ResultCode: 1, ResultDesc: 'Callback could not be recorded.' });
+    }
+    recordChange(transaction.event_id, 'An M-Pesa ticket payment did not complete; its reservation was released.');
+    emitEventUpdate(transaction.event_id, 'An M-Pesa ticket payment did not complete.');
+    return response.json({ ResultCode: 0, ResultDesc: 'Callback received.' });
+  }
+
+  try {
+    await verifyMpesaPayment(transaction.id);
+  } catch (error) {
+    console.error('M-Pesa STK Push verification failed; payment remains unconfirmed:', error.message);
+  }
+  return response.json({ ResultCode: 0, ResultDesc: 'Callback received.' });
+});
+
 app.get('/register/:token', (request, response) => {
   const token = String(request.params.token || '');
   if (!/^[a-f0-9]{64}$/.test(token)) return response.sendStatus(404);
@@ -1410,6 +2380,7 @@ app.get('/register/:token', (request, response) => {
     event,
     ticketTypes,
     customQuestions: registrationQuestions(event),
+    mpesaEnabled: mpesa.isConfigured() && event.budget_currency === 'KES',
     error: event.registration_is_open ? null : 'Registration is currently closed.',
   });
 });
@@ -1428,7 +2399,8 @@ app.post('/register/:token', async (request, response, next) => {
   const ticketTypeId = Number(request.body.ticket_type_id);
   const paymentMethod = String(request.body.payment_method || '');
   const paymentReference = String(request.body.payment_reference || '').trim();
-  const paymentMethods = new Set(['', 'M-Pesa', 'Bank transfer', 'Cash', 'Other']);
+  const paymentMethods = new Set(['', 'M-Pesa', 'M-Pesa STK Push', 'Bank transfer', 'Cash', 'Other']);
+  const wantsMpesaPush = paymentMethod === 'M-Pesa STK Push';
   const questions = registrationQuestions(event);
   const customAnswers = {};
   questions.forEach((_question, index) => {
@@ -1449,6 +2421,18 @@ app.post('/register/:token', async (request, response, next) => {
     return response.status(400).render('message', {
       title: 'Registration not submitted',
       message: 'Check the name, email, phone, ticket type, and payment details and try again.',
+      href: `/register/${token}`,
+      linkText: 'Return to registration',
+      vendorView: false,
+    });
+  }
+  const mpesaAvailable = mpesa.isConfigured() && event.budget_currency === 'KES';
+  if (wantsMpesaPush && (!mpesaAvailable || !normalizePhone(phone))) {
+    return response.status(400).render('message', {
+      title: 'M-Pesa payment unavailable',
+      message: !mpesaAvailable
+        ? 'M-Pesa checkout is not configured for this event. Choose another payment method or contact the organizer.'
+        : 'Enter a valid Kenyan mobile number to receive the M-Pesa payment prompt.',
       href: `/register/${token}`,
       linkText: 'Return to registration',
       vendorView: false,
@@ -1475,6 +2459,16 @@ app.post('/register/:token', async (request, response, next) => {
       return response.status(400).render('message', {
         title: 'Choose a payment method',
         message: 'Select the external payment method you plan to use. The organizer will verify payment before issuing a ticket.',
+        href: `/register/${token}`,
+        linkText: 'Return to registration',
+        vendorView: false,
+      });
+    }
+    if (wantsMpesaPush && (!Number.isSafeInteger(Number(ticket.price)) || Number(ticket.price) < 1)) {
+      db.exec('ROLLBACK');
+      return response.status(400).render('message', {
+        title: 'M-Pesa amount unavailable',
+        message: 'M-Pesa Sandbox ticket prices must be whole KES amounts greater than zero.',
         href: `/register/${token}`,
         linkText: 'Return to registration',
         vendorView: false,
@@ -1508,15 +2502,67 @@ app.post('/register/:token', async (request, response, next) => {
       phone,
       qrToken,
       status,
-      Number(ticket.price) > 0 ? paymentMethod : '',
+      Number(ticket.price) > 0 ? (wantsMpesaPush ? 'M-Pesa' : paymentMethod) : '',
       Number(ticket.price) > 0 ? paymentReference : '',
       JSON.stringify(customAnswers),
     );
-    registration = { id: Number(result.lastInsertRowid), qrToken, status, ticket };
+    const registrationId = Number(result.lastInsertRowid);
+    if (wantsMpesaPush) {
+      db.prepare(`
+        INSERT INTO payment_transactions (registration_id, provider, phone, amount)
+        VALUES (?, 'mpesa', ?, ?)
+      `).run(registrationId, normalizePhone(phone), Number(ticket.price));
+    }
+    registration = { id: registrationId, qrToken, status, ticket, wantsMpesaPush };
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
     return next(error);
+  }
+
+  let stkPushStarted = false;
+  if (registration.wantsMpesaPush) {
+    try {
+      const push = await mpesa.initiateStkPush({
+        phone,
+        amount: Number(registration.ticket.price),
+        accountReference: `EV${registration.id}`,
+        description: `Ticket ${registration.id}`,
+      });
+      db.prepare(`
+        UPDATE payment_transactions SET merchant_request_id = ?,
+          checkout_request_id = ?, updated_at = datetime('now')
+        WHERE registration_id = ? AND status = 'pending'
+      `).run(push.merchantRequestId, push.checkoutRequestId, registration.id);
+      stkPushStarted = true;
+    } catch (error) {
+      console.error('M-Pesa STK Push could not be started:', error.message);
+      if (error.code === 'MPESA_REJECTED') {
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          db.prepare(`
+            UPDATE payment_transactions SET status = 'failed',
+              result_description = ?, updated_at = datetime('now')
+            WHERE registration_id = ? AND status = 'pending'
+          `).run(error.message, registration.id);
+          db.prepare("UPDATE registrations SET status = 'cancelled' WHERE id = ? AND status = 'awaiting_payment'")
+            .run(registration.id);
+          db.exec('COMMIT');
+        } catch (databaseError) {
+          db.exec('ROLLBACK');
+          return next(databaseError);
+        }
+      }
+      return response.status(502).render('message', {
+        title: 'M-Pesa prompt could not be confirmed',
+        message: error.code === 'MPESA_REJECTED'
+          ? 'M-Pesa rejected the request, so the ticket reservation was released. Check your phone before trying again.'
+          : 'The payment request may still be processing. Check your phone before trying again, and contact the event organizer if you received a payment prompt.',
+        href: ticketPageUrl(registration.qrToken, request),
+        linkText: 'View registration status',
+        vendorView: false,
+      });
+    }
   }
 
   const ticketUrl = ticketPageUrl(registration.qrToken, request);
@@ -1525,7 +2571,9 @@ app.post('/register/:token', async (request, response, next) => {
     subject: registration.status === 'confirmed' ? `Your ticket: ${event.title}` : `Registration received: ${event.title}`,
     text: registration.status === 'confirmed'
       ? `Hello ${fullName},\n\nYour ${registration.ticket.name} ticket for "${event.title}" is confirmed. Open your digital ticket and QR code here:\n${ticketUrl}\n\nKeep this link private.`
-      : `Hello ${fullName},\n\nYour registration for "${event.title}" is recorded, but payment verification is still pending. The organizer must verify your external payment before a ticket is issued. Do not send a PIN or password.`,
+      : stkPushStarted
+        ? `Hello ${fullName},\n\nYour registration for "${event.title}" is recorded. An M-Pesa payment prompt was sent to ${normalizePhone(phone)}. Your ticket will be confirmed only after the payment is verified by M-Pesa. Open your private registration page to check its status:\n${ticketUrl}\n\nDo not share your PIN or password.`
+        : `Hello ${fullName},\n\nYour registration for "${event.title}" is recorded, but payment verification is still pending. The organizer must verify your external payment before a ticket is issued. Do not send a PIN or password.`,
   });
   recordChange(event.id, `${registration.status === 'confirmed' ? 'A ticket was issued' : 'A ticket registration is awaiting payment'} for ${fullName}.`);
   emitEventUpdate(event.id, registration.status === 'confirmed' ? 'A new ticket registration was confirmed.' : 'A ticket registration is awaiting payment verification.');
@@ -1537,10 +2585,12 @@ app.get('/tickets/:token', (request, response) => {
   if (!/^[a-f0-9]{64}$/.test(token)) return response.sendStatus(404);
   const registration = db.prepare(`
     SELECT registrations.*, ticket_types.name AS ticket_name,
+      payment_transactions.status AS mpesa_status,
       events.id AS event_id, events.title AS event_title, events.event_date, events.venue
     FROM registrations
     JOIN ticket_types ON ticket_types.id = registrations.ticket_type_id
     JOIN events ON events.id = registrations.event_id
+    LEFT JOIN payment_transactions ON payment_transactions.registration_id = registrations.id
     WHERE registrations.qr_token = ?
   `).get(token);
   if (!registration) return response.sendStatus(404);
@@ -1680,8 +2730,12 @@ function renderOperationsModule(request, response, eventId, module) {
   `).all(eventId).map((ticket) => ({ ...ticket, issued: Number(ticket.issued) }));
   const customQuestions = registrationQuestions(event);
   const registrations = db.prepare(`
-    SELECT registrations.*, ticket_types.name AS ticket_name, ticket_types.price
+    SELECT registrations.*, ticket_types.name AS ticket_name, ticket_types.price,
+      payment_transactions.id AS payment_transaction_id,
+      payment_transactions.status AS mpesa_status,
+      payment_transactions.checkout_request_id AS mpesa_checkout_request_id
     FROM registrations JOIN ticket_types ON ticket_types.id = registrations.ticket_type_id
+    LEFT JOIN payment_transactions ON payment_transactions.registration_id = registrations.id
     WHERE registrations.event_id = ?
     ORDER BY registrations.created_at DESC, registrations.id DESC
   `).all(eventId).map((registration) => {
@@ -2018,6 +3072,32 @@ app.post('/events/:id/tickets/:registrationId/verify-payment', requireAuth, asyn
     ? `Payment verified and ticket issued to ${registration.full_name}${demoEmailNote}.`
     : `Payment was verified and the ticket is issued, but the confirmation email to ${registration.full_name} failed.`);
   response.redirect(`/events/${eventId}/tickets`);
+});
+
+app.post('/events/:id/tickets/:registrationId/check-mpesa', requireAuth, async (request, response, next) => {
+  const eventId = Number(request.params.id);
+  const registrationId = Number(request.params.registrationId);
+  if (!Number.isSafeInteger(registrationId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const transaction = db.prepare(`
+    SELECT payment_transactions.id, payment_transactions.status
+    FROM payment_transactions
+    JOIN registrations ON registrations.id = payment_transactions.registration_id
+    WHERE registrations.id = ? AND registrations.event_id = ? AND payment_transactions.provider = 'mpesa'
+  `).get(registrationId, eventId);
+  if (!transaction) return response.sendStatus(404);
+  if (transaction.status !== 'pending') {
+    setNotice(request, transaction.status === 'paid' ? 'M-Pesa payment is already verified.' : 'This M-Pesa payment is no longer pending.');
+    return response.redirect(`/events/${eventId}/tickets`);
+  }
+  try {
+    const result = await verifyMpesaPayment(transaction.id);
+    setNotice(request, result.status === 'paid'
+      ? 'M-Pesa confirmed the payment and the ticket was issued.'
+      : 'M-Pesa has not confirmed this payment yet. It remains pending; do not issue a ticket manually.');
+  } catch (error) {
+    return next(error);
+  }
+  return response.redirect(`/events/${eventId}/tickets`);
 });
 
 app.post('/events/:id/tickets/:registrationId/cancel', requireAuth, (request, response) => {

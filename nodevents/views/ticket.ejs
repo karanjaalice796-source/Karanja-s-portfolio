@@ -7,6 +7,7 @@
   <% if (registration.status === 'awaiting_payment') { %>
     <p class="budget-warning">Payment verification is pending. Your ticket is not confirmed and this registration QR cannot be used for entry.</p>
     <p>Payment method: <%= registration.payment_method || 'Not specified' %><%= registration.payment_reference ? ` · Reference: ${registration.payment_reference}` : '' %></p>
+    <% if (registration.payment_method === 'M-Pesa' && registration.mpesa_status === 'pending') { %><p>Complete the payment prompt on your phone, then refresh this page to see whether it was verified.</p><a class="button" href="/tickets/<%= registration.qr_token %>">Refresh payment status</a><% } %>
     <p class="muted">Contact the event organizer with your payment receipt. Do not send your PIN or password.</p>
   <% } else if (registration.status === 'cancelled') { %>
     <p class="error">This registration has been cancelled.</p>

@@ -41,6 +41,27 @@
   <a href="/events/<%= event.id %>/reports">Reports</a>
   <a href="/vendors">Find vendors</a>
 </nav>
+<% if (toolPage === 'overview') { %>
+<details class="panel planning-panel">
+  <summary>Edit or delete this event</summary>
+  <form class="row budget-form" method="post" action="/events/<%= event.id %>/update">
+    <label>Event name<input name="title" maxlength="120" value="<%= event.title %>" required></label>
+    <label>Date<input type="date" name="event_date" value="<%= event.event_date %>" required></label>
+    <label>Event type<select name="event_type"><% Object.entries(templates).forEach(([key, template]) => { %><option value="<%= key %>" <%= event.event_type === key ? 'selected' : '' %>><%= template.label %></option><% }) %></select></label>
+    <label>Venue<input name="venue" maxlength="160" value="<%= event.venue %>"></label>
+    <label class="wide-field">Venue and arrival notes<textarea name="venue_notes" maxlength="1000"><%= event.venue_notes %></textarea></label>
+    <button class="primary" type="submit">Save event details</button>
+  </form>
+  <details>
+    <summary>Delete event permanently</summary>
+    <p class="error">This permanently deletes the event, its planning records, registrations, and uploaded invoices.</p>
+    <form class="row" method="post" action="/events/<%= event.id %>/delete">
+      <label>Type <strong><%= event.title %></strong> to confirm<input name="confirm_title" autocomplete="off" required></label>
+      <button type="submit">Delete event</button>
+    </form>
+  </details>
+</details>
+<% } %>
 <% if (toolPage === 'overview' || toolPage === 'budget') { %>
 <section class="panel planning-panel" id="budget-management">
   <div class="section-heading">

@@ -19,17 +19,20 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap">
   <link rel="stylesheet" href="/polish.css">
   <link rel="stylesheet" href="/auth-fit.css">
-  <% if (title === 'Planner dashboard' || title === 'My vendor events' || title === 'Vendor directory') { %><link rel="stylesheet" href="/dashboard.css"><% } %>
+  <% if (title === 'Planner dashboard' || title === 'Client portal' || title === 'Clients' || title.endsWith('· Client Profile') || title === 'My vendor events' || title === 'Vendor directory') { %><link rel="stylesheet" href="/dashboard.css"><% } %>
   <% if (title === 'Admin dashboard') { %><link rel="stylesheet" href="/admin.css"><% } %>
   <% if (typeof event !== 'undefined' || title.startsWith('RSVP ·')) { %><link rel="stylesheet" href="/planning.css"><% } %>
   <link rel="stylesheet" href="/navigation.css">
 </head>
 <body id="top">
 <%
-  const isAuthPage = title === 'Planner sign in' || title === 'Vendor sign in' || title === 'Create vendor account';
+  const isAuthPage = title === 'Planner sign in' || title === 'Account sign in'
+    || title === 'Client account invitation' || title === 'Vendor sign in' || title === 'Create vendor account';
   const isPublicVendorProfile = title.endsWith('· Vendor profile');
-  const showPlannerSidebar = Boolean(user && (
+  const showPlannerSidebar = Boolean(user && user.role === 'planner' && (
     title === 'Planner dashboard'
+    || title === 'Clients'
+    || title.endsWith('· Client Profile')
     || title === 'Vendor directory'
     || isPublicVendorProfile
     || (typeof event !== 'undefined' && event && event.id)
@@ -50,20 +53,30 @@
     <a class="brand" href="/">Nodevents<small>EVENT COORDINATION</small></a>
     <% if (!isAuthPage && vendorView) { %>
       <nav class="bar-nav" aria-label="Main navigation">
+        <a class="<%= title === 'How Nodevents works' ? 'active' : '' %>" href="/learn">Learning</a>
         <% if (vendorUser) { %><a href="/vendor/dashboard">My events</a><% } else { %><a href="/vendor/login">Vendor sign in</a><% } %>
         <% if (vendorUser) { %><a href="/vendor/profile">Vendor profile</a><% } %>
       </nav>
+    <% } else if (!isAuthPage && user && user.role === 'client') { %>
+      <nav class="bar-nav" aria-label="Client navigation">
+        <a class="<%= title === 'Client portal' ? 'active' : '' %>" href="/client/dashboard">My portal</a>
+        <a href="/learn">Learning</a>
+      </nav>
     <% } else if (!isAuthPage && user) { %>
       <nav class="bar-nav" aria-label="Main navigation">
+        <a class="<%= title === 'How Nodevents works' ? 'active' : '' %>" href="/learn">Learning</a>
         <a href="/dashboard">Dashboard</a>
+        <a class="<%= selectedTool === 'clients' ? 'active' : '' %>" href="/clients">Clients</a>
         <a href="/dashboard#new">New event</a>
         <% if (isAdmin) { %><a href="/admin">Admin</a><% } %>
       </nav>
     <% } else if (!isAuthPage) { %>
       <nav class="bar-nav" aria-label="Main navigation">
+        <a class="<%= title === 'How Nodevents works' ? 'active' : '' %>" href="/learn">Learning</a>
         <a href="/browse-events">Browse Events</a>
         <a href="/vendors">Find Vendors</a>
         <a href="/auth">Planner sign in</a>
+        <a href="/auth?audience=client">Client sign in</a>
       </nav>
     <% } %>
     <button class="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false">
@@ -86,7 +99,7 @@
     <% if (user && !vendorView) { %>
       <div class="bar-actions">
         <span class="muted">Hi, <%= user.name %></span>
-        <form method="post" action="/auth/logout">
+        <form method="post" action="<%= user.role === 'client' ? '/client/logout' : '/auth/logout' %>">
           <button class="account-action" type="submit">Log out</button>
         </form>
       </div>
@@ -99,9 +112,11 @@
       <p class="side-nav-title">Explore Nodevents</p>
       <nav aria-label="Primary">
         <a class="<%= title === 'Nodevents · Event Planner' ? 'active' : '' %>" href="/">Home</a>
+        <a class="<%= title === 'How Nodevents works' ? 'active' : '' %>" href="/learn">Learning</a>
         <a class="<%= title === 'Browse Events' ? 'active' : '' %>" href="/browse-events">Browse Events</a>
         <a class="<%= isVendorDiscovery ? 'active' : '' %>" href="/vendors">Find Vendors</a>
         <a class="<%= title === 'Planner dashboard' ? 'active' : '' %>" href="<%= user ? '/dashboard' : vendorUser ? '/vendor/dashboard' : '/auth' %>"><%= vendorUser && !user ? 'My Vendor Events' : 'My Events' %></a>
+        <% if (user) { %><a class="<%= selectedTool === 'clients' ? 'active' : '' %>" href="/clients">Clients</a><% } %>
         <span class="side-nav-divider" role="presentation"></span>
         <p class="side-nav-title">Planning tools</p>
         <a class="<%= selectedTool === 'guests' ? 'active' : '' %>" href="<%= plannerToolHref('guests') %>">Guest Management</a>

@@ -5,11 +5,19 @@ const { DatabaseSync } = require('node:sqlite');
 const db = new DatabaseSync(path.join(__dirname, 'data.db'));
 db.exec('PRAGMA foreign_keys = ON');
 db.exec(`
+  CREATE TABLE IF NOT EXISTS web_sessions (
+    sid TEXT PRIMARY KEY,
+    sess TEXT NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_web_sessions_expiry ON web_sessions(expires_at);
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'planner' CHECK (role IN ('planner', 'client')),
+    phone TEXT NOT NULL DEFAULT '',
     is_admin INTEGER NOT NULL DEFAULT 0 CHECK (is_admin IN (0, 1)),
     is_suspended INTEGER NOT NULL DEFAULT 0 CHECK (is_suspended IN (0, 1)),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -48,9 +56,73 @@ db.exec(`
     used_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS clients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL DEFAULT '',
+    phone TEXT NOT NULL DEFAULT '',
+    organization TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    account_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    invite_token_hash TEXT,
+    invite_expires_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS event_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    event_type TEXT NOT NULL DEFAULT 'other',
+    desired_date TEXT NOT NULL DEFAULT '',
+    venue TEXT NOT NULL DEFAULT '',
+    details TEXT NOT NULL DEFAULT '',
+    estimated_budget REAL NOT NULL DEFAULT 0 CHECK (estimated_budget >= 0),
+    status TEXT NOT NULL DEFAULT 'pending'
+      CHECK (status IN ('pending', 'converted', 'declined')),
+    event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS client_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,
+    subject TEXT NOT NULL,
+    message TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('sent', 'failed')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS client_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,
+    description TEXT NOT NULL,
+    amount REAL NOT NULL CHECK (amount > 0),
+    payment_method TEXT NOT NULL,
+    reference TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid')),
+    paid_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS client_portal_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,
+    sender_role TEXT NOT NULL CHECK (sender_role IN ('planner', 'client')),
+    message TEXT NOT NULL,
+    delivery_status TEXT NOT NULL CHECK (delivery_status IN ('received', 'sent', 'failed')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
   CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
     title TEXT NOT NULL,
     event_date TEXT NOT NULL,
     event_type TEXT NOT NULL DEFAULT 'other',
@@ -196,6 +268,25 @@ db.exec(`
     checked_in_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS payment_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    registration_id INTEGER NOT NULL UNIQUE REFERENCES registrations(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL CHECK (provider IN ('mpesa')),
+    merchant_request_id TEXT,
+    checkout_request_id TEXT UNIQUE,
+    phone TEXT NOT NULL,
+    amount INTEGER NOT NULL CHECK (amount > 0),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'failed')),
+    result_code TEXT,
+    result_description TEXT NOT NULL DEFAULT '',
+    receipt_number TEXT,
+    callback_amount INTEGER,
+    verified_at TEXT,
+    callback_received_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_payment_transactions_status ON payment_transactions(status, updated_at);
   CREATE TABLE IF NOT EXISTS event_incidents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
@@ -238,6 +329,13 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_events_user ON events(user_id);
+  CREATE INDEX IF NOT EXISTS idx_clients_user ON clients(user_id, name);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_clients_user_email
+    ON clients(user_id, lower(email)) WHERE email <> '';
+  CREATE INDEX IF NOT EXISTS idx_event_requests_client ON event_requests(client_id, status, created_at);
+  CREATE INDEX IF NOT EXISTS idx_client_messages_client ON client_messages(client_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_client_payments_client ON client_payments(client_id, status, created_at);
+  CREATE INDEX IF NOT EXISTS idx_client_portal_messages_client ON client_portal_messages(client_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_guests_event ON guests(event_id, id);
   CREATE INDEX IF NOT EXISTS idx_catering_items_event ON catering_items(event_id, id);
   CREATE INDEX IF NOT EXISTS idx_oauth_accounts_user ON oauth_accounts(user_id);
@@ -258,6 +356,12 @@ db.exec(`
 `);
 
 const userColumns = db.prepare('PRAGMA table_info(users)').all();
+if (!userColumns.some((column) => column.name === 'role')) {
+  db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'planner' CHECK (role IN ('planner', 'client'))");
+}
+if (!userColumns.some((column) => column.name === 'phone')) {
+  db.exec("ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT ''");
+}
 if (!userColumns.some((column) => column.name === 'is_admin')) {
   db.exec('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0 CHECK (is_admin IN (0, 1))');
 }
@@ -265,9 +369,24 @@ if (!userColumns.some((column) => column.name === 'is_suspended')) {
   db.exec('ALTER TABLE users ADD COLUMN is_suspended INTEGER NOT NULL DEFAULT 0 CHECK (is_suspended IN (0, 1))');
 }
 
+const clientColumns = db.prepare('PRAGMA table_info(clients)').all();
+if (!clientColumns.some((column) => column.name === 'account_user_id')) {
+  db.exec('ALTER TABLE clients ADD COLUMN account_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL');
+}
+if (!clientColumns.some((column) => column.name === 'invite_token_hash')) {
+  db.exec('ALTER TABLE clients ADD COLUMN invite_token_hash TEXT');
+}
+if (!clientColumns.some((column) => column.name === 'invite_expires_at')) {
+  db.exec('ALTER TABLE clients ADD COLUMN invite_expires_at TEXT');
+}
+db.exec('CREATE INDEX IF NOT EXISTS idx_clients_account_user ON clients(account_user_id, user_id)');
+
 const eventColumns = db.prepare('PRAGMA table_info(events)').all();
 if (!eventColumns.some((column) => column.name === 'event_type')) {
   db.exec("ALTER TABLE events ADD COLUMN event_type TEXT NOT NULL DEFAULT 'other'");
+}
+if (!eventColumns.some((column) => column.name === 'client_id')) {
+  db.exec('ALTER TABLE events ADD COLUMN client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL');
 }
 if (!eventColumns.some((column) => column.name === 'venue_notes')) {
   db.exec("ALTER TABLE events ADD COLUMN venue_notes TEXT NOT NULL DEFAULT ''");

@@ -1,0 +1,151 @@
+<%- include('partials/head', { title, activeTool }) %>
+<section class="panel client-portal-hero">
+  <p class="eyebrow">Private client portal</p>
+  <h1>Welcome, <%= user.name %></h1>
+  <p class="muted">Review event plans, request new events, follow service bookings, message your planner, and view payment records.</p>
+  <p>Connected planner<%= clients.length === 1 ? '' : 's' %>: <strong><%= clients.map((client) => client.planner_name).join(', ') || 'None' %></strong></p>
+</section>
+
+<section class="panel" id="profile">
+  <h2>Profile</h2>
+  <form method="post" action="/client/profile" class="form-grid">
+    <label>Name<input name="name" maxlength="80" value="<%= user.name %>" required></label>
+    <label>Email<input type="email" value="<%= user.email %>" readonly></label>
+    <label>Phone<input name="phone" type="tel" maxlength="40" value="<%= user.phone || '' %>"></label>
+    <button class="primary" type="submit">Save profile</button>
+  </form>
+</section>
+
+<section class="panel" id="requests">
+  <h2>Request an event</h2>
+  <% if (clients.length) { %>
+    <div class="client-portal-cards">
+      <% clients.forEach((client) => { %>
+        <form method="post" action="/client/requests" class="client-portal-card">
+          <h3>Request from <%= client.planner_name %></h3>
+          <input type="hidden" name="client_id" value="<%= client.id %>">
+          <label>Event name<input name="title" maxlength="120" required></label>
+          <label>Event type<select name="event_type" required><% Object.entries(templates).forEach(([key, template]) => { %><option value="<%= key %>"><%= template.label %></option><% }) %></select></label>
+          <label>Preferred date<input type="date" name="desired_date"></label>
+          <label>Venue<input name="venue" maxlength="160"></label>
+          <label>Estimated budget (KES)<input type="number" name="estimated_budget" min="0" max="1000000000" step="0.01"></label>
+          <label>Details<textarea name="details" maxlength="2000" rows="3"></textarea></label>
+          <button class="primary" type="submit">Send event request</button>
+        </form>
+      <% }) %>
+    </div>
+  <% } else { %><p class="muted">Your portal is not connected to a planner yet. Ask your planner to send you an invitation.</p><% } %>
+  <% if (requests.length) { %>
+    <h3>Your requests</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Request</th><th>Planner</th><th>Preferred date</th><th>Estimate</th><th>Status</th></tr></thead>
+        <tbody><% requests.forEach((item) => { %>
+          <tr>
+            <td><strong><%= item.title %></strong><br><span class="muted"><%= templates[item.event_type]?.label || 'Other' %><%= item.venue ? ` · ${item.venue}` : '' %></span><% if (item.details) { %><br><span><%= item.details %></span><% } %></td>
+            <td><%= clients.find((client) => client.id === item.client_id)?.planner_name || 'Planner' %></td>
+            <td><%= item.desired_date || 'To be confirmed' %></td>
+            <td>KES <%= Number(item.estimated_budget).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+            <td><%= item.status %><% if (item.linked_event_title) { %><br><span class="muted">Event: <%= item.linked_event_title %></span><% } %></td>
+          </tr>
+        <% }) %></tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+
+<section class="panel" id="events">
+  <h2>My events and progress</h2>
+  <% if (events.length) { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Event</th><th>Planner</th><th>Planning tasks</th><th>Services confirmed</th><th>Progress</th></tr></thead>
+        <tbody><% events.forEach((event) => {
+          const taskProgress = event.task_count ? Math.round((Number(event.completed_task_count) / Number(event.task_count)) * 100) : 0;
+          const vendorProgress = event.vendor_count ? Math.round((Number(event.confirmed_vendor_count) / Number(event.vendor_count)) * 100) : 0;
+        %>
+          <tr>
+            <td><strong><%= event.title %></strong><br><span class="muted"><%= event.event_date %> · <%= event.venue || 'Venue to be confirmed' %></span></td>
+            <td><%= clients.find((client) => client.id === event.client_id)?.planner_name || 'Planner' %></td>
+            <td><%= event.completed_task_count %> of <%= event.task_count %> complete</td>
+            <td><%= event.confirmed_vendor_count %> of <%= event.vendor_count %> confirmed</td>
+            <td>Tasks <%= taskProgress %>% · services <%= vendorProgress %>%</td>
+          </tr>
+        <% }) %></tbody>
+      </table>
+    </div>
+  <% } else { %><p class="muted">Your planner has not linked an event to your portal yet.</p><% } %>
+</section>
+
+<section class="panel" id="bookings">
+  <h2>Service bookings</h2>
+  <p class="muted">Follow vendor and service booking responses for your linked events.</p>
+  <% if (bookings.length) { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Event</th><th>Planner</th><th>Vendor / service</th><th>Details</th><th>Status</th></tr></thead>
+        <tbody><% bookings.forEach((booking) => { %>
+          <tr>
+            <td><%= booking.event_title %><br><span class="muted"><%= booking.event_date %></span></td>
+            <td><%= clients.find((client) => client.id === booking.client_id)?.planner_name || 'Planner' %></td>
+            <td><strong><%= booking.vendor_name %></strong><%= booking.category ? ` · ${booking.category}` : '' %></td>
+            <td><%= booking.services || 'Service details to be confirmed' %></td>
+            <td><%= booking.status.replace('_', ' ') %></td>
+          </tr>
+        <% }) %></tbody>
+      </table>
+    </div>
+  <% } else { %><p class="muted">No service bookings have been added to your events yet.</p><% } %>
+</section>
+
+<section class="panel" id="messages">
+  <h2>Messages</h2>
+  <% const communication = messages.concat(emails.map((email) => ({
+    ...email,
+    sender_role: 'planner',
+    delivery_status: email.status,
+    event_title: email.subject,
+  }))).sort((left, right) => left.created_at.localeCompare(right.created_at) || left.id - right.id); %>
+  <% clients.forEach((client) => { %>
+    <form method="post" action="/client/messages" class="form-grid">
+      <h3 class="wide-field">Message <%= client.planner_name %></h3>
+      <input type="hidden" name="client_id" value="<%= client.id %>">
+      <label>Related event<select name="event_id"><option value="">General message</option><% events.filter((event) => event.client_id === client.id).forEach((event) => { %><option value="<%= event.id %>"><%= event.title %></option><% }) %></select></label>
+      <label class="wide-field">Message<textarea name="message" maxlength="5000" rows="3" required></textarea></label>
+      <button class="primary" type="submit">Send message</button>
+    </form>
+  <% }) %>
+  <% if (communication.length) { %>
+    <ol class="timeline">
+      <% communication.forEach((message) => { %>
+        <li>
+          <div class="when"><%= message.sender_role === 'client' ? 'You' : clients.find((client) => client.id === message.client_id)?.planner_name || 'Planner' %><br><span class="muted"><%= message.created_at %></span></div>
+          <div><strong><%= message.event_title || 'General message' %></strong><p><%= message.message %></p><span class="muted"><%= message.sender_role === 'planner' && message.delivery_status === 'failed' ? 'Email delivery failed; saved in the portal' : message.delivery_status === 'received' ? 'Delivered in the portal' : message.sender_role === 'client' ? 'Delivered in the portal' : 'Sent or logged by Nodevents' %></span></div>
+        </li>
+      <% }) %>
+    </ol>
+  <% } else { %><p class="muted">No messages yet.</p><% } %>
+</section>
+
+<section class="panel" id="payments">
+  <h2>Payments</h2>
+  <p class="muted">These are planner-recorded payment entries for event bookkeeping. They are not processed or independently verified by Nodevents.</p>
+  <% if (payments.length) { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Date</th><th>Event</th><th>Description</th><th>Amount</th><th>Method / reference</th><th>Status</th></tr></thead>
+        <tbody><% payments.forEach((payment) => { %>
+          <tr>
+            <td><%= payment.created_at %></td>
+            <td><%= payment.event_title || 'Event removed' %></td>
+            <td><%= payment.description %></td>
+            <td>KES <%= Number(payment.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+            <td><%= payment.payment_method %><br><span class="muted"><%= payment.reference || 'No reference' %></span></td>
+            <td><%= payment.status === 'paid' ? 'Recorded as received' : 'Pending' %></td>
+          </tr>
+        <% }) %></tbody>
+      </table>
+    </div>
+  <% } else { %><p class="muted">No payment records yet.</p><% } %>
+</section>
+<%- include('partials/foot') %>

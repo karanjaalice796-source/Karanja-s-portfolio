@@ -1,16 +1,19 @@
-<%- include('partials/head', { title: 'Planner sign in' }) %>
+<%- include('partials/head', { title }) %>
 <section class="auth-container">
-  <p class="eyebrow">Nodevents planner access</p>
-  <h1 class="auth-heading"><%= authMode === 'register' ? 'Create your account' : 'Log in' %></h1>
-  <p class="auth-intro">Stop chasing vendors. Keep every detail in one place.</p>
+  <p class="eyebrow"><%= audience === 'client' ? 'Nodevents client portal' : 'Nodevents account access' %></p>
+  <h1 class="auth-heading"><%= authMode === 'register' ? 'Create your planner account' : 'Log in' %></h1>
+  <p class="auth-intro"><%= audience === 'client' ? 'Sign in to review your event requests, planning progress, bookings, messages, and payment records.' : 'Organize events and keep every planning detail in one place.' %></p>
   <% if (loggedOut) { %><p class="flash auth-logout-notice" role="status">You've been logged out.</p><% } %>
   <% if (error) { %><p class="error" role="alert"><%= error %></p><% } %>
+  <% if (audience === 'planner') { %>
   <div class="auth-tabs" role="tablist" aria-label="Planner account options">
     <button class="auth-tab" id="login-tab" type="button" role="tab" aria-controls="login-panel" aria-selected="<%= authMode !== 'register' %>" data-auth-tab="login">Log in</button>
     <button class="auth-tab" id="register-tab" type="button" role="tab" aria-controls="register-panel" aria-selected="<%= authMode === 'register' %>" data-auth-tab="register">Create account</button>
   </div>
+  <% } %>
   <div id="login-panel" role="tabpanel" aria-labelledby="login-tab" data-auth-panel="login" <%= authMode === 'register' ? 'hidden' : '' %>>
     <form class="auth-form" method="post" action="/auth/login">
+      <input type="hidden" name="audience" value="<%= audience %>">
       <label class="auth-field">Email
         <input class="auth-input" type="email" name="email" autocomplete="email" maxlength="160" placeholder="E-mail" autofocus required>
       </label>
@@ -23,7 +26,8 @@
       <button class="login-button" type="submit" data-auth-submit data-loading-label="Logging in...">Log in</button>
     </form>
     <p class="auth-recovery-link"><a href="/auth/forgot">Forgot password?</a></p>
-    <% if (oauthProviders.apple) { %>
+    <% if (audience === 'planner') { %><p class="auth-recovery-link"><a href="/auth?audience=client">Client portal sign in</a></p><% } else { %><p class="auth-recovery-link">Client accounts are created from invitations sent by your planner.</p><% } %>
+    <% if (audience === 'planner' && oauthProviders.apple) { %>
     <div class="social-account-container">
       <span class="social-title">Or sign in with</span>
       <div class="social-accounts" aria-label="Social sign-in options">
@@ -60,5 +64,5 @@
     </form>
   </div>
 </section>
-<p class="vendor-signin-link">Are you a vendor? <a href="/vendor/login">Sign in to your vendor account</a>.</p>
+<% if (audience === 'planner') { %><p class="vendor-signin-link">Are you a vendor? <a href="/vendor/login">Sign in to your vendor account</a>.</p><% } %>
 <%- include('partials/foot') %>

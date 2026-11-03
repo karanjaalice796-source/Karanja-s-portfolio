@@ -17,9 +17,9 @@
       <label>Phone <small>(optional)</small><input type="tel" name="phone" maxlength="24" autocomplete="tel"></label>
       <label>Ticket type<select name="ticket_type_id" required><% ticketTypes.forEach(ticket => { %><option value="<%= ticket.id %>"><%= ticket.name %> · <%= ticket.price === 0 ? 'Free' : `${event.budget_currency} ${Number(ticket.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}` %> · <%= ticket.remaining %> available</option><% }) %></select></label>
       <% customQuestions.forEach((question, index) => { %><label><%= question %><input name="answer_<%= index %>" maxlength="300"></label><% }) %>
-      <label>Payment method for paid tickets<select name="payment_method"><option value="">Not applicable / not selected</option><option value="M-Pesa">M-Pesa (pay organizer directly)</option><option value="Bank transfer">Bank transfer</option><option value="Cash">Cash</option><option value="Other">Other</option></select></label>
+      <label>Payment method for paid tickets<select name="payment_method"><option value="">Not applicable / not selected</option><% if (mpesaEnabled) { %><option value="M-Pesa STK Push">M-Pesa STK Push (Sandbox)</option><% } else { %><option value="M-Pesa">M-Pesa (pay organizer directly)</option><% } %><option value="Bank transfer">Bank transfer</option><option value="Cash">Cash</option><option value="Other">Other</option></select></label>
       <label>Payment reference <small>Do not enter a PIN or password</small><input name="payment_reference" maxlength="100" placeholder="Optional receipt or transaction reference"></label>
-      <p class="muted">Free tickets are confirmed immediately. A paid ticket is reserved pending organizer verification; online payments are not processed on this page.</p>
+      <p class="muted"><% if (mpesaEnabled) { %>Free tickets are confirmed immediately. For a paid ticket, an M-Pesa prompt is sent to the phone number above; the ticket is issued only after M-Pesa verifies payment.<% } else { %>Free tickets are confirmed immediately. Paid tickets stay reserved until the organizer verifies payment. Online payments are not configured on this page.<% } %></p>
       <button class="primary" type="submit">Register</button>
     </form>
   <% } %>
