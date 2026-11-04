@@ -3,10 +3,10 @@
 <section class="panel">
   <p class="eyebrow">Client workspace</p>
   <h1><%= clientRecord.name %></h1>
-  <p class="muted"><%= clientRecord.organization || 'Individual client' %> · Planner-managed record with an optional secure client portal account</p>
+  <p class="muted"><%= clientRecord.organization || 'Individual client' %> · Planner-managed contact and event record</p>
   <div class="d-stats" aria-label="Client summary">
     <div class="d-stat"><strong><%= events.length %></strong><span>Linked events</span></div>
-    <div class="d-stat"><strong><%= requests.filter((item) => item.status === 'pending').length %></strong><span>Open requests</span></div>
+    <div class="d-stat"><strong><%= requests.filter((item) => ['pending', 'changes_requested'].includes(item.status)).length %></strong><span>Open requests</span></div>
     <div class="d-stat"><strong>KES <%= Number(paymentTotals.paid).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></strong><span>Recorded as received</span></div>
     <div class="d-stat"><strong>KES <%= Number(paymentTotals.pending).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></strong><span>Pending records</span></div>
   </div>
@@ -14,18 +14,10 @@
 
 <section class="panel">
   <h2>Client profile</h2>
-  <% if (clientRecord.account_user_id) { %>
-    <p class="profile-published-note">Client portal account linked: <strong><%= clientRecord.account_email %></strong>. The client can sign in at <a href="/auth?audience=client">the client portal</a>.</p>
-  <% } else { %>
-    <p class="muted">Invite this client to a private portal account to review planning progress, requests, bookings, messages, and payment records.</p>
-    <form method="post" action="/clients/<%= clientRecord.id %>/invite">
-      <button class="button primary" type="submit"><%= clientRecord.invite_token_hash ? 'Resend portal invitation' : 'Invite to client portal' %></button>
-      <% if (clientRecord.invite_token_hash) { %><span class="muted">Invitation pending; it expires after 7 days.</span><% } %>
-    </form>
-  <% } %>
+  <p class="muted">Clients can create an account to track their requests, approved events, messages, bookings, and payment records. Event-specific private links are available separately from each event workspace.</p>
   <form method="post" action="/clients/<%= clientRecord.id %>/update" class="form-grid">
     <label>Name<input name="name" maxlength="120" value="<%= clientRecord.name %>" required></label>
-    <label>Email<input name="email" type="email" maxlength="254" value="<%= clientRecord.email %>" <%= clientRecord.account_user_id ? 'readonly' : '' %>></label>
+    <label>Email<input name="email" type="email" maxlength="254" value="<%= clientRecord.email %>"></label>
     <label>Phone<input name="phone" type="tel" maxlength="40" value="<%= clientRecord.phone %>"></label>
     <label>Organization<input name="organization" maxlength="120" value="<%= clientRecord.organization %>"></label>
     <label class="wide-field">Notes<textarea name="notes" maxlength="2000" rows="3"><%= clientRecord.notes %></textarea></label>
@@ -58,18 +50,11 @@
               <td><strong><%= item.title %></strong><br><span class="muted"><%= templates[item.event_type]?.label || 'Other' %></span><% if (item.details) { %><br><span class="muted"><%= item.details %></span><% } %></td>
               <td><%= item.desired_date || 'Date to be confirmed' %><br><span class="muted"><%= item.venue || 'Venue to be confirmed' %></span></td>
               <td>KES <%= Number(item.estimated_budget).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
-              <td><%= item.status %><% if (item.linked_event_title) { %><br><a href="/events/<%= item.event_id %>"><%= item.linked_event_title %></a><% } %></td>
-              <td>
-                <% if (item.status === 'pending') { %>
-                  <form method="post" action="/clients/<%= clientRecord.id %>/requests/<%= item.id %>/convert" class="inline-form">
-                    <label>Event date<input type="date" name="event_date" value="<%= item.desired_date %>" required></label>
-                    <button class="primary" type="submit">Create event</button>
-                  </form>
-                  <form method="post" action="/clients/<%= clientRecord.id %>/requests/<%= item.id %>/decline">
-                    <button class="button" type="submit">Decline request</button>
-                  </form>
-                <% } else { %>—<% } %>
+              <td><%= item.status.replace('_', ' ') %>
+                <% if (item.decision_reason) { %><br><span class="muted"><%= item.decision_reason %></span><% } %>
+                <% if (item.linked_event_title) { %><br><a href="/events/<%= item.event_id %>"><%= item.linked_event_title %></a><% } %>
               </td>
+              <td><% if (item.status === 'pending') { %><a href="/dashboard#client-event-requests">Review in Client Event Requests</a><% } else { %>—<% } %></td>
             </tr>
           <% }) %>
         </tbody>
@@ -167,7 +152,7 @@
   <% } else { %><p class="muted">No client payment records yet.</p><% } %>
 </section>
 
-<section class="panel">
+<section class="panel" id="messages">
   <h2>Communication</h2>
   <p class="muted"><%= mailConfigured ? 'Emails are sent through the configured mail service.' : 'Demo mode: emails are logged locally but not delivered. Configure SMTP to send them.' %></p>
   <% if (clientRecord.email) { %>

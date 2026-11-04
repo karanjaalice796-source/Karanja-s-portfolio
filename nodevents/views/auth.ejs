@@ -1,8 +1,8 @@
 <%- include('partials/head', { title }) %>
 <section class="auth-container">
-  <p class="eyebrow"><%= audience === 'client' ? 'Nodevents client portal' : 'Nodevents account access' %></p>
+  <p class="eyebrow">Nodevents account access</p>
   <h1 class="auth-heading"><%= authMode === 'register' ? 'Create your planner account' : 'Log in' %></h1>
-  <p class="auth-intro"><%= audience === 'client' ? 'Sign in to review your event requests, planning progress, bookings, messages, and payment records.' : 'Organize events and keep every planning detail in one place.' %></p>
+  <p class="auth-intro">Organize events and keep every planning detail in one place.</p>
   <% if (loggedOut) { %><p class="flash auth-logout-notice" role="status">You've been logged out.</p><% } %>
   <% if (error) { %><p class="error" role="alert"><%= error %></p><% } %>
   <% if (audience === 'planner') { %>
@@ -26,7 +26,7 @@
       <button class="login-button" type="submit" data-auth-submit data-loading-label="Logging in...">Log in</button>
     </form>
     <p class="auth-recovery-link"><a href="/auth/forgot">Forgot password?</a></p>
-    <% if (audience === 'planner') { %><p class="auth-recovery-link"><a href="/auth?audience=client">Client portal sign in</a></p><% } else { %><p class="auth-recovery-link">Client accounts are created from invitations sent by your planner.</p><% } %>
+    <p class="auth-recovery-link"><a href="/client/access">Have a client event link?</a></p>
     <% if (audience === 'planner' && oauthProviders.apple) { %>
     <div class="social-account-container">
       <span class="social-title">Or sign in with</span>

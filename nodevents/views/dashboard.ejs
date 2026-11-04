@@ -1,5 +1,6 @@
 <%- include('partials/head', { title: 'Planner dashboard' }) %>
 <%
+  const money = (amount) => `KES ${Number(amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const tones = {
     wedding: 'coral',
     birthday: 'saffron',
@@ -26,7 +27,7 @@
   const attentionEvents = upcomingEvents.filter((event) => Number(event.pending_count) > 0).slice(0, 4);
 %>
 <div class="dash">
-  <section class="d-hero">
+  <section class="d-hero" id="overview">
     <div>
       <p class="eyebrow">Planner dashboard</p>
       <h1>Your events, all in one place</h1>
@@ -34,6 +35,21 @@
     </div>
     <a class="button primary" href="#new">＋ New event</a>
   </section>
+
+  <nav class="planner-portal-links panel" aria-label="Planner dashboard sections">
+    <a href="#overview">Overview and analytics</a>
+    <a href="#client-event-requests">Client Event Requests</a>
+    <a href="#my-events">My Events</a>
+    <a href="/clients">Client Management</a>
+    <a href="<%= events.length ? `/events/${events[0].id}/logistics` : '/vendors' %>">Vendor Management</a>
+    <a href="#bookings">Bookings</a>
+    <a href="<%= events.length ? `/events/${events[0].id}/budget` : '#new' %>">Budget and Expenses</a>
+    <a href="<%= events.length ? `/events/${events[0].id}#invoices` : '#new' %>">Payments and Invoices</a>
+    <a href="<%= events.length ? `/events/${events[0].id}/logistics` : '#new' %>">Tasks and Schedules</a>
+    <a href="<%= events.length ? `/events/${events[0].id}/reports` : '#new' %>">Reports</a>
+    <a href="#messages">Messages</a>
+    <a href="#settings">Settings</a>
+  </nav>
 
   <details class="d-new" id="new">
     <summary><span class="plus" aria-hidden="true">+</span>Create an event<span class="d-hint">Add the date, venue, and event type</span></summary>
@@ -51,6 +67,117 @@
       <button class="primary" type="submit">Create event</button>
     </form>
   </details>
+
+  <section class="panel" id="client-event-requests">
+    <h2>Client Event Requests</h2>
+    <p class="muted">Review new requests separately from events that are already approved and being planned.</p>
+    <% if (clientRequests.length) { %>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Client and request</th><th>Preferred date</th><th>Estimated budget</th><th>Status</th><th>Review actions</th></tr></thead>
+          <tbody>
+            <% clientRequests.forEach((item) => { %>
+              <tr>
+                <td>
+                  <strong><%= item.title %></strong><br>
+                  <span class="muted"><%= item.client_name %><%= item.client_organization ? ` · ${item.client_organization}` : '' %></span><br>
+                  <span class="muted"><%= templates[item.event_type]?.label || 'Other' %><%= item.venue ? ` · ${item.venue}` : '' %></span>
+                  <% if (item.details) { %><br><span><%= item.details %></span><% } %>
+                </td>
+                <td><%= item.desired_date || 'To be confirmed' %></td>
+                <td>KES <%= Number(item.estimated_budget).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                <td><%= item.status.replace('_', ' ') %><% if (item.decision_reason) { %><br><span class="muted"><%= item.decision_reason %></span><% } %></td>
+                <td>
+                  <% if (item.status === 'pending') { %>
+                    <form method="post" action="/client-requests/<%= item.id %>/decision" class="form-grid">
+                      <input type="hidden" name="decision" value="approve">
+                      <label>Event date<input type="date" name="event_date" value="<%= item.desired_date %>" required></label>
+                      <button class="primary" type="submit">Approve and create event</button>
+                    </form>
+                    <details>
+                      <summary>Reject request</summary>
+                      <form method="post" action="/client-requests/<%= item.id %>/decision">
+                        <input type="hidden" name="decision" value="reject">
+                        <label>Reason<textarea name="reason" maxlength="2000" rows="2" required></textarea></label>
+                        <button class="button" type="submit">Reject with reason</button>
+                      </form>
+                    </details>
+                    <details>
+                      <summary>Request changes</summary>
+                      <form method="post" action="/client-requests/<%= item.id %>/decision">
+                        <input type="hidden" name="decision" value="request_changes">
+                        <label>What should the client change?<textarea name="reason" maxlength="2000" rows="2" required></textarea></label>
+                        <button class="button" type="submit">Ask for changes</button>
+                      </form>
+                    </details>
+                  <% } else { %>
+                    <span class="muted">Waiting for the client to update and resubmit.</span>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } else { %>
+      <p class="muted">No event requests are waiting for review.</p>
+    <% } %>
+  </section>
+
+  <section class="panel" id="bookings">
+    <h2>Vendor Booking Requests</h2>
+    <p class="muted">Review vendor bookings requested by your clients. Accepting adds the vendor to the event and sends an invitation; declining requires a reason.</p>
+    <% if (bookingRequests.length) { %>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Client and event</th><th>Vendor</th><th>Requested details</th><th>Actions</th></tr></thead>
+          <tbody><% bookingRequests.forEach((booking) => { %>
+            <tr>
+              <td><strong><%= booking.client_name %></strong><br><a href="/events/<%= booking.event_id %>"><%= booking.event_title %></a><br><span class="muted"><%= booking.event_date %></span></td>
+              <td><%= booking.business_name %><br><span class="muted"><%= booking.category %></span></td>
+              <td><%= booking.message || 'No additional notes.' %></td>
+              <td>
+                <form method="post" action="/client-vendor-bookings/<%= booking.id %>/decision">
+                  <input type="hidden" name="decision" value="accept">
+                  <button class="primary" type="submit">Accept and invite</button>
+                </form>
+                <details>
+                  <summary>Decline request</summary>
+                  <form method="post" action="/client-vendor-bookings/<%= booking.id %>/decision">
+                    <input type="hidden" name="decision" value="decline">
+                    <label>Reason<textarea name="reason" maxlength="1000" rows="2" required></textarea></label>
+                    <button type="submit">Decline with reason</button>
+                  </form>
+                </details>
+              </td>
+            </tr>
+          <% }) %></tbody>
+        </table>
+      </div>
+    <% } else { %><p class="muted">No vendor booking requests are waiting for review.</p><% } %>
+  </section>
+
+  <section class="panel" id="messages">
+    <h2>Client messages</h2>
+    <p class="muted">Recent client portal messages and email communication for your workspace.</p>
+    <% if (plannerMessages.length) { %>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Client</th><th>Event</th><th>Channel</th><th>Message</th><th></th></tr></thead>
+          <tbody><% plannerMessages.forEach((message) => { %>
+            <tr>
+              <td><%= message.created_at %></td>
+              <td><%= message.client_name %></td>
+              <td><%= message.event_title || 'General' %></td>
+              <td><%= message.channel %><%= message.delivery_status === 'failed' ? ' · email delivery failed' : '' %></td>
+              <td><%= message.message %></td>
+              <td><a href="/clients/<%= message.client_id %>">Open conversation</a></td>
+            </tr>
+          <% }) %></tbody>
+        </table>
+      </div>
+    <% } else { %><p class="muted">Client messages will appear here.</p><% } %>
+  </section>
 
   <ul class="d-stats" aria-label="Event and vendor summary">
     <li class="d-stat tone-coral">
@@ -71,9 +198,15 @@
     </li>
   </ul>
 
+  <ul class="d-stats planner-finance-stats" aria-label="Planner work summary">
+    <li class="d-stat tone-coral"><strong><%= plannerFinance.open_tasks %></strong><span>Open planning tasks</span></li>
+    <li class="d-stat tone-saffron"><strong><%= money(plannerFinance.actual_expenses) %></strong><span>Recorded expenses</span></li>
+    <li class="d-stat tone-plum"><strong><%= money(plannerFinance.outstanding_invoices) %></strong><span>Outstanding vendor invoices</span></li>
+  </ul>
+
   <div class="d-main">
     <div>
-      <h2 class="d-section">Coming up</h2>
+      <h2 class="d-section" id="my-events">My Events · Coming up</h2>
       <% if (upcomingEvents.length) { %>
         <div class="d-list">
           <% upcomingEvents.forEach((event) => {
@@ -151,5 +284,10 @@
     </aside>
   </div>
 </div>
+<section class="panel planner-settings" id="settings">
+  <h2>Planner settings</h2>
+  <p>Your workspace uses <strong><%= user.email %></strong> as its sign-in address.</p>
+  <p class="muted">Update your account password from the <a href="/auth">planner sign-in page</a> or manage your Nodevents subscription in <a href="/plans">Plans and payments</a>.</p>
+</section>
 <script src="/dashboard.js" defer></script>
 <%- include('partials/foot') %>

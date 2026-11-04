@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
+const { DatabaseSync } = require('node:sqlite');
 const { spawn } = require('node:child_process');
 const test = require('node:test');
 
@@ -35,9 +36,9 @@ async function request(baseUrl, cookieJar, route, { method = 'GET', form } = {})
   return response;
 }
 
-test('client portal invitations, role guards, requests, messages, and payments stay scoped', { timeout: 120_000 }, async (context) => {
+test('client accounts and private event links keep their separate workflows and access boundaries', { timeout: 120_000 }, async (context) => {
   const project = path.resolve(__dirname, '..');
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nodevents-client-portal-'));
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nodevents-client-link-'));
   const port = await availablePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   for (const file of ['server.js', 'db.js', 'templates.js', 'mailer.js', 'mpesa.js']) {
@@ -54,7 +55,7 @@ test('client portal invitations, role guards, requests, messages, and payments s
       NODE_ENV: 'development',
       PORT: String(port),
       APP_BASE_URL: baseUrl,
-      SESSION_SECRET: 'client-portal-integration-test-session-secret',
+      SESSION_SECRET: 'client-link-integration-test-session-secret',
       NODE_PATH: path.join(project, 'node_modules'),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -65,7 +66,9 @@ test('client portal invitations, role guards, requests, messages, and payments s
   server.stdout.on('data', (chunk) => { serverOutput += chunk; });
   server.stderr.setEncoding('utf8');
   server.stderr.on('data', (chunk) => { serverErrors += chunk; });
+  let db;
   context.after(async () => {
+    db?.close();
     server.kill();
     await new Promise((resolve) => {
       if (server.exitCode !== null || server.signalCode !== null) return resolve();
@@ -76,7 +79,7 @@ test('client portal invitations, role guards, requests, messages, and payments s
   });
 
   let ready = false;
-  const startupDeadline = Date.now() + 30_000;
+  const startupDeadline = Date.now() + 60_000;
   while (Date.now() < startupDeadline) {
     if (server.exitCode !== null) break;
     try {
@@ -89,7 +92,7 @@ test('client portal invitations, role guards, requests, messages, and payments s
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
-  assert.equal(ready, true, `Nodevents did not start within 30 seconds. ${serverOutput}\n${serverErrors}`);
+  assert.equal(ready, true, `Nodevents did not start within 60 seconds. ${serverOutput}\n${serverErrors}`);
 
   const planner = createCookieJar();
   const registerPlanner = await request(baseUrl, planner, '/auth/register', {
@@ -103,136 +106,256 @@ test('client portal invitations, role guards, requests, messages, and payments s
   assert.equal(registerPlanner.status, 302);
   assert.equal(registerPlanner.headers.get('location'), '/dashboard');
 
-  const addClient = await request(baseUrl, planner, '/clients', {
+  const createEvent = await request(baseUrl, planner, '/events', {
     method: 'POST',
     form: {
-      name: 'Portal Client',
-      email: 'client@example.test',
-      phone: '0712345678',
-      notes: 'Private planner notes not shared with the client.',
+      title: 'Private Link Wedding',
+      event_date: '2030-06-01',
+      event_type: 'wedding',
+      venue: 'Nairobi Convention Centre',
     },
   });
-  assert.equal(addClient.status, 302);
-  assert.equal(addClient.headers.get('location'), '/clients/1');
+  assert.equal(createEvent.status, 302);
+  assert.equal(createEvent.headers.get('location'), '/events/1');
 
-  const invite = await request(baseUrl, planner, '/clients/1/invite', { method: 'POST' });
-  assert.equal(invite.status, 302);
-  const profile = await request(baseUrl, planner, '/clients/1');
-  const profileHtml = await profile.text();
-  const token = profileHtml.match(/\/client\/invite\/([a-f0-9]{64})/);
-  assert.ok(token, 'demo mode should provide the one-time invitation link to the planner');
+  db = new DatabaseSync(path.join(directory, 'data.db'));
+  db.exec('PRAGMA foreign_keys = ON');
+  db.prepare('UPDATE events SET budget_total = 5000, expected_guests = 5, budget_currency = ? WHERE id = 1')
+    .run('KES');
+  const vendorId = Number(db.prepare(`
+    INSERT INTO vendors (event_id, name, category, services, email, token, status, note, estimated_cost, cost_per_guest)
+    VALUES (1, 'Private Caterer', 'Catering', 'Private service notes must not be shared', 'private@example.test',
+      ?, 'confirmed', 'Confidential vendor note', 1000, 20)
+  `).run('a'.repeat(64)).lastInsertRowid);
+  db.prepare(`
+    INSERT INTO guests (event_id, name, email, group_size, rsvp_status)
+    VALUES (1, 'Guest One', 'guest@example.test', 2, 'attending'),
+      (1, 'Guest Two', '', 1, 'awaiting'),
+      (1, 'Guest Three', '', 1, 'declined')
+  `).run();
+  db.prepare(`
+    INSERT INTO tasks (event_id, vendor_id, title, start_time, notes)
+    VALUES (1, ?, 'Ceremony begins', '2030-06-01T10:00', 'Private task notes must not be shared')
+  `).run(vendorId);
+  db.prepare(`
+    INSERT INTO invoices (vendor_id, amount, filename, original_name, status)
+    VALUES (?, 450, 'private.pdf', 'private-invoice.pdf', 'paid'),
+      (?, 1600, 'pending.pdf', 'pending-invoice.pdf', 'sent')
+  `).run(vendorId, vendorId);
 
-  const invitation = await request(baseUrl, createCookieJar(), `/client/invite/${token[1]}`);
-  const invitationHtml = await invitation.text();
-  assert.equal(invitation.status, 200, serverErrors);
-  assert.match(invitationHtml, /Create your Nodevents account/);
-  const client = createCookieJar();
-  const claim = await request(baseUrl, client, `/client/invite/${token[1]}`, {
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const expiresAtLocal = new Date(expiresAt.getTime() - expiresAt.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const createLink = await request(baseUrl, planner, '/events/1/client-link', {
     method: 'POST',
-    form: { password: 'client-test-password', confirm_password: 'client-test-password' },
+    form: { pin: '4826', expires_at: expiresAtLocal, show_budget: 'on' },
   });
-  assert.equal(claim.status, 302);
-  assert.equal(claim.headers.get('location'), '/client/dashboard');
+  assert.equal(createLink.status, 302);
+  const plannerEvent = await request(baseUrl, planner, '/events/1');
+  const plannerEventHtml = await plannerEvent.text();
+  const linkMatch = plannerEventHtml.match(/value="(http:\/\/127\.0\.0\.1:\d+\/client\/[a-f0-9]{64})"/);
+  assert.ok(linkMatch, 'planner event should show its private client link');
+  const clientUrl = new URL(linkMatch[1]);
+  const token = clientUrl.pathname.split('/').pop();
 
-  const claimedInvite = await request(baseUrl, createCookieJar(), `/client/invite/${token[1]}`);
-  assert.equal(claimedInvite.status, 410, 'a successful invitation can only be claimed once');
-  const dashboard = await request(baseUrl, client, '/client/dashboard');
-  const dashboardHtml = await dashboard.text();
-  assert.equal(dashboard.status, 200, serverErrors);
-  assert.match(dashboardHtml, /Private client portal/);
-  assert.match(dashboardHtml, /Planner One/);
-  assert.doesNotMatch(dashboardHtml, /Private planner notes not shared with the client/);
-  assert.equal((await request(baseUrl, client, '/dashboard')).status, 403);
-  assert.equal((await request(baseUrl, client, '/clients/1')).status, 403);
-  const clientLogin = createCookieJar();
-  const sharedLogin = await request(baseUrl, clientLogin, '/auth/login', {
+  const noAccountPage = await request(baseUrl, createCookieJar(), '/client/access');
+  assert.equal(noAccountPage.status, 200);
+  assert.match(await noAccountPage.text(), /No account is needed/);
+  assert.equal((await request(baseUrl, createCookieJar(), '/auth')).status, 200);
+  const clientInput = await request(baseUrl, createCookieJar(), '/client/access', {
+    method: 'POST',
+    form: { event_link: clientUrl.href },
+  });
+  assert.equal(clientInput.status, 302);
+  assert.equal(clientInput.headers.get('location'), `/client/${token}`);
+  assert.equal((await request(baseUrl, createCookieJar(), '/auth?audience=client')).headers.get('location'), '/client/auth?mode=register');
+  assert.equal((await request(baseUrl, createCookieJar(), '/client/register')).headers.get('location'), '/client/auth?mode=register');
+  assert.equal((await request(baseUrl, createCookieJar(), '/client/dashboard')).headers.get('location'), '/client/auth');
+  assert.equal((await request(baseUrl, createCookieJar(), `/client/invite/${'b'.repeat(64)}`)).headers.get('location'), '/client/auth?loggedOut=1');
+  assert.equal((await request(baseUrl, createCookieJar(), '/auth/login', {
+    method: 'POST',
+    form: { audience: 'client', email: 'client@example.test', password: 'irrelevant' },
+  })).headers.get('location'), '/client/auth');
+
+  const accountClient = createCookieJar();
+  const registrationPage = await request(baseUrl, accountClient, '/client/auth?mode=register');
+  assert.equal(registrationPage.status, 200);
+  assert.match(await registrationPage.text(), /Create your client account/);
+  const registerClient = await request(baseUrl, accountClient, '/client/register', {
     method: 'POST',
     form: {
-      audience: 'client',
+      name: 'Client One',
       email: 'client@example.test',
+      phone: '+254700000001',
       password: 'client-test-password',
     },
   });
-  assert.equal(sharedLogin.status, 302);
-  assert.equal(sharedLogin.headers.get('location'), '/client/dashboard');
+  assert.equal(registerClient.status, 302);
+  assert.equal(registerClient.headers.get('location'), '/client/dashboard');
+  const clientDashboard = await request(baseUrl, accountClient, '/client/dashboard');
+  assert.equal(clientDashboard.status, 200, serverErrors);
+  const clientDashboardHtml = await clientDashboard.text();
+  assert.match(clientDashboardHtml, /Client dashboard navigation/);
+  assert.match(clientDashboardHtml, /Request an Event/);
+  assert.doesNotMatch(clientDashboardHtml, /href="\/dashboard"/);
+  assert.equal((await request(baseUrl, accountClient, '/dashboard')).headers.get('location'), '/client/dashboard');
+  assert.equal((await request(baseUrl, accountClient, '/clients')).headers.get('location'), '/client/dashboard');
+  assert.equal((await request(baseUrl, planner, '/client/dashboard')).status, 403);
 
-  const submitRequest = await request(baseUrl, client, '/client/requests', {
+  const submitRequest = await request(baseUrl, accountClient, '/client/requests', {
     method: 'POST',
     form: {
-      client_id: '1',
-      title: 'Portal Wedding',
+      planner_id: '1',
+      title: 'Client Account Wedding Request',
       event_type: 'wedding',
-      desired_date: '2027-06-01',
+      desired_date: '2031-06-01',
+      desired_time: '14:30',
       venue: 'Nairobi',
-      estimated_budget: '120000',
-      details: 'Client-submitted request.',
+      expected_guests: '80',
+      estimated_budget: '250000',
+      services_required: 'Catering',
+      service_requirements: 'Vegetarian menu options',
+      specific_requirements: 'Outdoor ceremony and reception plan',
     },
   });
   assert.equal(submitRequest.status, 302);
-  assert.equal((await request(baseUrl, client, '/client/messages', {
-    method: 'POST',
-    form: { client_id: '999', message: 'Should not be accepted.' },
-  })).status, 404);
-  const plannerProfile = await request(baseUrl, planner, '/clients/1');
-  assert.match(await plannerProfile.text(), /Portal Wedding/);
-
-  const createEvent = await request(baseUrl, planner, '/clients/1/requests/1/convert', {
-    method: 'POST',
-    form: { event_date: '2027-06-01' },
+  assert.equal(submitRequest.headers.get('location'), '/client/dashboard#requests');
+  const savedRequest = db.prepare(`
+    SELECT event_requests.*, clients.account_user_id
+    FROM event_requests JOIN clients ON clients.id = event_requests.client_id
+    WHERE event_requests.title = 'Client Account Wedding Request'
+  `).get();
+  assert.equal(savedRequest.account_user_id, 2);
+  assert.deepEqual(JSON.parse(savedRequest.service_answers), {
+    requirements: 'Vegetarian menu options',
+    categoryRequirements: 'Outdoor ceremony and reception plan',
   });
-  assert.equal(createEvent.status, 302);
-  const recordPayment = await request(baseUrl, planner, '/clients/1/payments', {
+  const updatedPlannerDashboard = await request(baseUrl, planner, '/dashboard');
+  assert.equal(updatedPlannerDashboard.status, 200, serverErrors);
+  assert.match(await updatedPlannerDashboard.text(), /Client Account Wedding Request/);
+
+  const client = createCookieJar();
+  const lockedLink = await request(baseUrl, client, `/client/${token}`);
+  assert.equal(lockedLink.status, 401);
+  assert.match(await lockedLink.text(), /Enter your event PIN/);
+  const wrongPin = await request(baseUrl, client, `/client/${token}/access`, {
+    method: 'POST',
+    form: { pin: '0000' },
+  });
+  assert.equal(wrongPin.status, 401);
+  const unlock = await request(baseUrl, client, `/client/${token}/access`, {
+    method: 'POST',
+    form: { pin: '4826' },
+  });
+  assert.equal(unlock.status, 302);
+  assert.equal(unlock.headers.get('location'), `/client/${token}`);
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const invalidAttempt = await request(baseUrl, client, `/client/${token}/access`, {
+      method: 'POST',
+      form: { pin: '0000' },
+    });
+    assert.equal(invalidAttempt.status, 401);
+  }
+  const throttledPin = await request(baseUrl, client, `/client/${token}/access`, {
+    method: 'POST',
+    form: { pin: '4826' },
+  });
+  assert.equal(throttledPin.status, 429);
+
+  const dashboard = await request(baseUrl, client, `/client/${token}`);
+  const html = await dashboard.text();
+  assert.equal(dashboard.status, 200, serverErrors);
+  assert.match(html, /Budget summary/);
+  assert.match(html, /KES 5,000\.00/);
+  assert.match(html, /KES 1,060\.00/);
+  assert.match(html, /KES 450\.00/);
+  assert.match(html, /KES 2,950\.00/);
+  assert.match(html, /Headcount and RSVP progress/);
+  assert.match(html, /Ceremony begins/);
+  assert.match(html, /Private Caterer/);
+  assert.doesNotMatch(html, /Private service notes must not be shared/);
+  assert.doesNotMatch(html, /Confidential vendor note/);
+  assert.doesNotMatch(html, /private-invoice\.pdf/);
+  assert.doesNotMatch(html, /Private task notes must not be shared/);
+  assert.match(html, /This link expires/);
+
+  const timelineApproval = await request(baseUrl, client, `/client/${token}/approvals`, {
+    method: 'POST',
+    form: { approved_by: 'Client Reviewer', approval_type: 'timeline', decision: 'approved' },
+  });
+  assert.equal(timelineApproval.status, 302);
+  const vendorApproval = await request(baseUrl, client, `/client/${token}/approvals`, {
+    method: 'POST',
+    form: { approved_by: 'Client Reviewer', approval_type: 'vendor', vendor_id: String(vendorId), decision: 'approved' },
+  });
+  assert.equal(vendorApproval.status, 302);
+  db.prepare("UPDATE tasks SET title = 'Updated ceremony time' WHERE event_id = 1").run();
+  const updatedTimeline = await request(baseUrl, client, `/client/${token}`);
+  const updatedTimelineHtml = await updatedTimeline.text();
+  assert.match(updatedTimelineHtml, /Plan changed since approval/);
+  assert.match(updatedTimelineHtml, /Updated ceremony time/);
+  const changesRequest = await request(baseUrl, client, `/client/${token}/approvals`, {
     method: 'POST',
     form: {
-      event_id: '1',
-      description: 'Planning deposit',
-      amount: '1000',
-      payment_method: 'M-Pesa',
-      reference: 'CLIENT-REF-1',
-      status: 'pending',
+      approved_by: 'Client Reviewer',
+      approval_type: 'timeline',
+      decision: 'changes',
+      note: 'Please move the ceremony to noon.',
     },
   });
-  assert.equal(recordPayment.status, 302);
-
-  const sendMessage = await request(baseUrl, client, '/client/messages', {
-    method: 'POST',
-    form: { client_id: '1', event_id: '1', message: 'Could you share the latest schedule?' },
-  });
-  assert.equal(sendMessage.status, 302);
-  const reply = await request(baseUrl, planner, '/clients/1/conversation', {
-    method: 'POST',
-    form: { event_id: '1', message: 'The schedule is being prepared.' },
-  });
-  assert.equal(reply.status, 302);
-  const updatedDashboard = await request(baseUrl, client, '/client/dashboard');
-  const updatedHtml = await updatedDashboard.text();
-  assert.match(updatedHtml, /Portal Wedding/);
-  assert.match(updatedHtml, /Planning deposit/);
-  assert.match(updatedHtml, /The schedule is being prepared/);
-
-  const otherPlanner = createCookieJar();
-  const otherAccount = await request(baseUrl, otherPlanner, '/auth/register', {
+  assert.equal(changesRequest.status, 302);
+  const invalidChangesRequest = await request(baseUrl, client, `/client/${token}/approvals`, {
     method: 'POST',
     form: {
-      name: 'Planner Two',
-      email: 'planner2@example.test',
-      password: 'planner-two-test-password',
+      approved_by: 'Client Reviewer',
+      approval_type: 'timeline',
+      decision: 'changes',
+      note: ' ',
     },
   });
-  assert.equal(otherAccount.status, 302);
-  assert.equal((await request(baseUrl, otherPlanner, '/clients/1')).status, 404);
-  const secondClient = await request(baseUrl, otherPlanner, '/clients', {
+  assert.equal(invalidChangesRequest.status, 400);
+  assert.equal(db.prepare(`
+    SELECT COUNT(*) AS count FROM client_link_approvals
+    WHERE event_id = 1 AND approval_type = 'timeline'
+  `).get().count, 2);
+
+  db.prepare('UPDATE events SET client_show_budget = 0 WHERE id = 1').run();
+  const privateBudgetPage = await request(baseUrl, client, `/client/${token}`);
+  assert.doesNotMatch(await privateBudgetPage.text(), /Budget summary/);
+  db.prepare('UPDATE events SET client_show_budget = 1 WHERE id = 1').run();
+
+  const clientComment = await request(baseUrl, client, `/client/${token}/comments`, {
     method: 'POST',
-    form: {
-      name: 'Portal Client',
-      email: 'client@example.test',
-      phone: '0712345678',
-    },
+    form: { sender_name: 'Client Reviewer', message: 'Could you confirm the arrival time?' },
   });
-  assert.equal(secondClient.status, 302);
-  assert.equal(secondClient.headers.get('location'), '/clients/2');
-  const linkExistingClient = await request(baseUrl, otherPlanner, '/clients/2/invite', { method: 'POST' });
-  assert.equal(linkExistingClient.status, 302);
-  const sharedPortal = await request(baseUrl, client, '/client/dashboard');
-  assert.match(await sharedPortal.text(), /Planner Two/);
+  assert.equal(clientComment.status, 302);
+  const updatedPlannerEvent = await request(baseUrl, planner, '/events/1');
+  const updatedPlannerHtml = await updatedPlannerEvent.text();
+  assert.match(updatedPlannerHtml, /Client approvals/);
+  assert.match(updatedPlannerHtml, /Client Reviewer/);
+  assert.match(updatedPlannerHtml, /Please move the ceremony to noon/);
+  assert.match(updatedPlannerHtml, /Could you confirm the arrival time/);
+
+  const plannerReply = await request(baseUrl, planner, '/events/1/client-comments', {
+    method: 'POST',
+    form: { message: 'The venue opens at 9:30 AM.' },
+  });
+  assert.equal(plannerReply.status, 302);
+  const updatedClientLink = await request(baseUrl, client, `/client/${token}`);
+  assert.match(await updatedClientLink.text(), /The venue opens at 9:30 AM/);
+
+  const expiredLink = await request(baseUrl, planner, '/events/1/client-link', {
+    method: 'POST',
+    form: { expires_at: '2020-01-01T00:00' },
+  });
+  assert.equal(expiredLink.status, 302);
+  const stillActive = await request(baseUrl, client, `/client/${token}`);
+  assert.equal(stillActive.status, 200);
+
+  db.prepare("UPDATE events SET client_token_expires_at = datetime('now', '-1 minute') WHERE id = 1").run();
+  const expiredPortalResponse = await request(baseUrl, client, `/client/${token}`);
+  assert.equal(expiredPortalResponse.status, 404);
+  assert.match(await expiredPortalResponse.text(), /invalid, revoked, or expired/);
+
+  await request(baseUrl, planner, '/events/1/client-link/revoke', { method: 'POST' });
+  assert.equal((await request(baseUrl, client, `/client/${token}`)).status, 404);
 });

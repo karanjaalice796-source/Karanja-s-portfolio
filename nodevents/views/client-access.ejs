@@ -1,0 +1,15 @@
+<%- include('partials/head', { title }) %>
+<section class="auth-container">
+  <p class="eyebrow">Nodevents client event portal</p>
+  <h1 class="auth-heading">Open your event link</h1>
+  <p class="auth-intro">No account is needed. Paste the private event link your planner shared with you.</p>
+  <% if (error) { %><p class="error" role="alert"><%= error %></p><% } %>
+  <form class="auth-form" method="post" action="/client/access">
+    <label class="auth-field">Event link or code
+      <input class="auth-input" name="event_link" autocomplete="url" maxlength="2048" placeholder="Paste your private event link" required>
+    </label>
+    <button class="login-button secondary-login-button" type="submit">Open event portal</button>
+  </form>
+  <p class="auth-recovery-link">Don't have a link? Ask your event planner to create one from the event workspace.</p>
+</section>
+<%- include('partials/foot') %>

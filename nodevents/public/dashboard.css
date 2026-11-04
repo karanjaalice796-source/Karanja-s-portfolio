@@ -47,6 +47,9 @@ body:has(.dash) { background: var(--page); }
 .d-hero::after { width: 120px; height: 120px; right: 150px; bottom: -55px; background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.5), transparent 60%), color-mix(in srgb, var(--teal-mid) 26%, transparent); }
 .d-hero h1 { margin: 0 0 .35rem; font-size: clamp(2rem, 5vw, 3rem); line-height: 1.05; }
 .d-sub { margin: 0; max-width: 34rem; font-size: 1.05rem; color: color-mix(in srgb, var(--ink) 82%, transparent); }
+.planner-portal-links { display: flex; flex-wrap: wrap; gap: .45rem; }
+.planner-portal-links a { padding: .5rem .7rem; border: 1px solid var(--line); border-radius: 999px; color: var(--ink); font-size: .84rem; font-weight: 650; text-decoration: none; }
+.planner-portal-links a:hover, .planner-portal-links a:focus-visible { border-color: var(--coral-mid); background: var(--coral-tint); }
 
 .d-new { margin: 1rem 0; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); }
 .d-new summary { display: flex; align-items: center; gap: .75rem; padding: 1rem 1.25rem; font-weight: 700; cursor: pointer; list-style: none; }
@@ -58,6 +61,8 @@ body:has(.dash) { background: var(--page); }
 .d-form button { justify-self: start; }
 
 .d-stats { list-style: none; margin: 1rem 0 1.5rem; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .9rem; }
+.planner-finance-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.planner-finance-stats .d-stat strong { font-size: 1.4rem; overflow-wrap: anywhere; }
 .d-stat { display: grid; gap: .1rem; padding: 1rem 1.1rem; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); }
 .d-icon { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: .45rem; border-radius: 13px; background: var(--tone-tint); color: var(--tone-deep); }
 .d-icon svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }

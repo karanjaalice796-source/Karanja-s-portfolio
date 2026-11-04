@@ -80,9 +80,48 @@ db.exec(`
     venue TEXT NOT NULL DEFAULT '',
     details TEXT NOT NULL DEFAULT '',
     estimated_budget REAL NOT NULL DEFAULT 0 CHECK (estimated_budget >= 0),
+    desired_time TEXT NOT NULL DEFAULT '',
+    expected_guests INTEGER NOT NULL DEFAULT 0 CHECK (expected_guests >= 0),
+    services_required TEXT NOT NULL DEFAULT '',
+    service_answers TEXT NOT NULL DEFAULT '{}',
+    decision_reason TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'pending'
-      CHECK (status IN ('pending', 'converted', 'declined')),
+      CHECK (status IN ('pending', 'approved', 'rejected', 'changes_requested')),
     event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS client_request_attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_id INTEGER NOT NULL REFERENCES event_requests(id) ON DELETE CASCADE,
+    stored_name TEXT NOT NULL,
+    original_name TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS client_notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    planner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    request_id INTEGER REFERENCES event_requests(id) ON DELETE CASCADE,
+    event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+    notification_type TEXT NOT NULL,
+    message TEXT NOT NULL,
+    read_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS client_vendor_booking_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    planner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    vendor_profile_id INTEGER NOT NULL REFERENCES vendor_profiles(id) ON DELETE CASCADE,
+    vendor_id INTEGER REFERENCES vendors(id) ON DELETE SET NULL,
+    message TEXT NOT NULL DEFAULT '',
+    decision_reason TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined')),
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
@@ -320,6 +359,28 @@ db.exec(`
     message TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS client_link_approvals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    approval_type TEXT NOT NULL CHECK (approval_type IN ('timeline', 'vendor')),
+    vendor_id INTEGER REFERENCES vendors(id) ON DELETE SET NULL,
+    approved_by TEXT NOT NULL,
+    decision TEXT NOT NULL DEFAULT 'approved',
+    note TEXT NOT NULL DEFAULT '',
+    fingerprint TEXT NOT NULL DEFAULT '',
+    approved_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_client_link_approval_history
+    ON client_link_approvals(event_id, approval_type, vendor_id, id);
+  CREATE TABLE IF NOT EXISTS client_link_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    sender_role TEXT NOT NULL CHECK (sender_role IN ('client', 'planner')),
+    sender_name TEXT NOT NULL,
+    message TEXT NOT NULL,
+    email_status TEXT NOT NULL DEFAULT 'sent' CHECK (email_status IN ('sent', 'failed')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
   CREATE TABLE IF NOT EXISTS password_reset_tokens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -343,6 +404,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_tasks_event_time ON tasks(event_id, start_time);
   CREATE INDEX IF NOT EXISTS idx_invoices_vendor ON invoices(vendor_id);
   CREATE INDEX IF NOT EXISTS idx_changes_event ON changes(event_id, id);
+  CREATE INDEX IF NOT EXISTS idx_client_link_comments_event ON client_link_comments(event_id, id);
   CREATE INDEX IF NOT EXISTS idx_event_staff_event ON event_staff(event_id, id);
   CREATE INDEX IF NOT EXISTS idx_event_zones_event ON event_zones(event_id, id);
   CREATE INDEX IF NOT EXISTS idx_expenses_event ON expenses(event_id, expense_date, id);
@@ -353,6 +415,60 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_password_reset_user ON password_reset_tokens(user_id, expires_at);
   CREATE INDEX IF NOT EXISTS idx_vendor_password_reset_account ON vendor_password_reset_tokens(vendor_account_id, expires_at);
   CREATE INDEX IF NOT EXISTS idx_vendor_profiles_directory ON vendor_profiles(is_published, category, business_name);
+`);
+
+const eventRequestColumns = db.prepare('PRAGMA table_info(event_requests)').all();
+const eventRequestSchema = db.prepare(`
+  SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'event_requests'
+`).get().sql;
+if (!eventRequestColumns.some((column) => column.name === 'decision_reason')
+  || !eventRequestSchema.includes("'approved'")) {
+  db.exec(`
+    BEGIN IMMEDIATE;
+    CREATE TABLE event_requests_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      event_type TEXT NOT NULL DEFAULT 'other',
+      desired_date TEXT NOT NULL DEFAULT '',
+      venue TEXT NOT NULL DEFAULT '',
+      details TEXT NOT NULL DEFAULT '',
+      estimated_budget REAL NOT NULL DEFAULT 0 CHECK (estimated_budget >= 0),
+      decision_reason TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'approved', 'rejected', 'changes_requested')),
+      event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    INSERT INTO event_requests_new
+      (id, user_id, client_id, title, event_type, desired_date, venue, details, estimated_budget,
+        status, event_id, created_at, updated_at)
+    SELECT id, user_id, client_id, title, event_type, desired_date, venue, details, estimated_budget,
+      CASE status WHEN 'converted' THEN 'approved' WHEN 'declined' THEN 'rejected' ELSE status END,
+      event_id, created_at, updated_at
+    FROM event_requests;
+    DROP TABLE event_requests;
+    ALTER TABLE event_requests_new RENAME TO event_requests;
+    COMMIT;
+  `);
+}
+db.exec('CREATE INDEX IF NOT EXISTS idx_event_requests_client ON event_requests(client_id, status, created_at)');
+for (const [column, statement] of [
+  ['desired_time', "ALTER TABLE event_requests ADD COLUMN desired_time TEXT NOT NULL DEFAULT ''"],
+  ['expected_guests', 'ALTER TABLE event_requests ADD COLUMN expected_guests INTEGER NOT NULL DEFAULT 0 CHECK (expected_guests >= 0)'],
+  ['services_required', "ALTER TABLE event_requests ADD COLUMN services_required TEXT NOT NULL DEFAULT ''"],
+  ['service_answers', "ALTER TABLE event_requests ADD COLUMN service_answers TEXT NOT NULL DEFAULT '{}'"],
+]) {
+  const columns = db.prepare('PRAGMA table_info(event_requests)').all();
+  if (!columns.some((item) => item.name === column)) db.exec(statement);
+}
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_client_notifications_user ON client_notifications(client_user_id, read_at, created_at);
+  CREATE INDEX IF NOT EXISTS idx_client_booking_requests_planner ON client_vendor_booking_requests(planner_user_id, status, created_at);
+  CREATE INDEX IF NOT EXISTS idx_client_booking_requests_client ON client_vendor_booking_requests(client_user_id, status, created_at);
+  CREATE INDEX IF NOT EXISTS idx_client_request_attachments_request ON client_request_attachments(request_id, id);
 `);
 
 const userColumns = db.prepare('PRAGMA table_info(users)').all();
@@ -394,6 +510,30 @@ if (!eventColumns.some((column) => column.name === 'venue_notes')) {
 if (!eventColumns.some((column) => column.name === 'client_token')) {
   db.exec('ALTER TABLE events ADD COLUMN client_token TEXT');
 }
+if (!eventColumns.some((column) => column.name === 'client_token_expires_at')) {
+  db.exec('ALTER TABLE events ADD COLUMN client_token_expires_at TEXT');
+}
+if (!eventColumns.some((column) => column.name === 'client_pin_hash')) {
+  db.exec('ALTER TABLE events ADD COLUMN client_pin_hash TEXT');
+}
+if (!eventColumns.some((column) => column.name === 'client_show_budget')) {
+  db.exec('ALTER TABLE events ADD COLUMN client_show_budget INTEGER NOT NULL DEFAULT 1 CHECK (client_show_budget IN (0, 1))');
+}
+const approvalColumns = db.prepare('PRAGMA table_info(client_link_approvals)').all();
+if (!approvalColumns.some((column) => column.name === 'decision')) {
+  db.exec("ALTER TABLE client_link_approvals ADD COLUMN decision TEXT NOT NULL DEFAULT 'approved'");
+}
+if (!approvalColumns.some((column) => column.name === 'note')) {
+  db.exec("ALTER TABLE client_link_approvals ADD COLUMN note TEXT NOT NULL DEFAULT ''");
+}
+if (!approvalColumns.some((column) => column.name === 'fingerprint')) {
+  db.exec("ALTER TABLE client_link_approvals ADD COLUMN fingerprint TEXT NOT NULL DEFAULT ''");
+}
+db.exec(`
+  DROP INDEX IF EXISTS idx_client_link_approval_target;
+  CREATE INDEX IF NOT EXISTS idx_client_link_approval_history
+    ON client_link_approvals(event_id, approval_type, vendor_id, id);
+`);
 if (!eventColumns.some((column) => column.name === 'budget_total')) {
   db.exec('ALTER TABLE events ADD COLUMN budget_total REAL NOT NULL DEFAULT 0 CHECK (budget_total >= 0)');
 }
