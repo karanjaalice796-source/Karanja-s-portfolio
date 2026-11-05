@@ -19,7 +19,25 @@
     <a class="client-metric" href="#my-events"><span>Approved events</span><strong><%= summary.approvedEvents %></strong></a>
     <a class="client-metric" href="#my-events"><span>Upcoming events</span><strong><%= summary.upcomingEvents %></strong></a>
     <a class="client-metric" href="#payments"><span>Outstanding payments</span><strong><%= money(summary.outstandingPayments) %></strong></a>
-    <a class="client-metric" href="#messages"><span>Planner messages</span><strong><%= summary.plannerMessages %></strong></a>
+    <a class="client-metric" href="#messages"><span>Planner messages</span><strong><%= summary.unreadMessages %></strong></a>
+  </section>
+
+  <section class="panel" id="my-tickets">
+    <h2>My tickets</h2>
+    <p class="muted">Ticket history includes tickets issued while signed in to this client account.</p>
+    <% if (ticketHistory.length) { %>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Event</th><th>Ticket</th><th>Date</th><th>Status</th><th></th></tr></thead>
+        <tbody><% ticketHistory.forEach((ticket) => { %>
+          <tr>
+            <td><strong><%= ticket.event_title %></strong><% if (ticket.venue) { %><br><span class="muted"><%= ticket.venue %></span><% } %></td>
+            <td><%= ticket.ticket_name %></td><td><%= ticket.event_date %></td>
+            <td><%= ticket.checked_in_at ? 'Used' : ticket.status.replace('_', ' ') %></td>
+            <td><a href="/tickets/<%= ticket.qr_token %>">View ticket</a><% if (ticket.status === 'confirmed') { %> · <a href="/tickets/<%= ticket.qr_token %>/download">Download PDF</a><% } %></td>
+          </tr>
+        <% }) %></tbody>
+      </table></div>
+    <% } else { %><p class="muted">Tickets purchased while signed in to this account will appear here.</p><% } %>
   </section>
 
   <section class="panel" id="request-event">
@@ -82,7 +100,7 @@
     <% if (requests.length) { %>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Request</th><th>Planner</th><th>Date / time</th><th>Guests</th><th>Budget</th><th>Status</th></tr></thead>
+          <thead><tr><th>Request</th><th>Planner</th><th>Date / time</th><th>Guests</th><th>Budget</th><th>Quotation</th><th>Status</th></tr></thead>
           <tbody><% requests.forEach((item) => { %>
             <tr>
               <td><strong><%= item.title %></strong><br><span class="muted"><%= templates[item.event_type]?.label || 'Other' %><%= item.venue ? ` · ${item.venue}` : '' %></span>
@@ -95,6 +113,7 @@
               <td><%= item.desired_date || 'To be confirmed' %><%= item.desired_time ? ` · ${item.desired_time}` : '' %></td>
               <td><%= item.expected_guests || '—' %></td>
               <td><%= money(item.estimated_budget) %></td>
+              <td><% if (item.quote_amount) { %><strong><%= money(item.quote_amount) %></strong><% if (item.quote_details) { %><br><span class="muted"><%= item.quote_details %></span><% } %><br><span class="muted">Received <%= item.quote_sent_at %></span><% } else { %><span class="muted">Not sent yet</span><% } %></td>
               <td><strong><%= statusLabel(item.status) %></strong>
                 <% if (item.decision_reason) { %><br><span class="muted"><%= item.decision_reason %></span><% } %>
                 <% if (item.linked_event_title) { %><br><a href="#my-events"><%= item.linked_event_title %></a><% } %>
@@ -115,6 +134,8 @@
             <label>Expected guests<input type="number" name="expected_guests" min="0" max="100000" value="<%= item.expected_guests %>" required></label>
             <label>Estimated budget (KES)<input type="number" name="estimated_budget" min="0" max="1000000000" step="0.01" value="<%= item.estimated_budget %>" required></label>
             <label class="wide-field">Services required<input name="services_required" maxlength="1000" value="<%= item.services_required %>"></label>
+            <label class="wide-field">Service details<textarea name="service_requirements" maxlength="2000" rows="3"><%= item.service_answers ? JSON.parse(item.service_answers).requirements || '' : '' %></textarea></label>
+            <label class="wide-field">Event-specific requirements<textarea name="specific_requirements" maxlength="2000" rows="3"><%= item.service_answers ? JSON.parse(item.service_answers).categoryRequirements || '' : '' %></textarea></label>
             <label class="wide-field">Special instructions<textarea name="details" maxlength="2000" rows="3"><%= item.details %></textarea></label>
             <button class="primary" type="submit">Resubmit request</button>
           </form>
@@ -167,16 +188,6 @@
   <section class="panel" id="book-vendor">
     <h2>Book a vendor</h2>
     <p class="muted">Booking requests go to your event planner for review. A confirmed booking is added to the event plan.</p>
-    <% if (vendorProfiles.length) { %>
-      <div class="client-event-grid">
-        <% vendorProfiles.forEach((vendor) => { %><article class="client-event-card">
-          <p class="eyebrow"><%= vendor.category %><%= vendor.location ? ` · ${vendor.location}` : '' %></p>
-          <h3><%= vendor.business_name %></h3>
-          <% if (vendor.description) { %><p><%= vendor.description %></p><% } %>
-          <% if (vendor.services) { %><p><strong>Services:</strong> <%= vendor.services %></p><% } %>
-        </article><% }) %>
-      </div>
-    <% } %>
     <% if (events.length && vendorProfiles.length) { %>
       <form class="client-request-form" method="post" action="/client/vendor-bookings">
         <label>Event<select name="event_id" required><% events.forEach((event) => { %><option value="<%= event.id %>"><%= event.title %> · <%= event.event_date %></option><% }) %></select></label>
@@ -229,7 +240,9 @@
     <% if (messages.length) { %><ol class="timeline">
       <% messages.slice().reverse().forEach((message) => { %><li>
         <div class="when"><strong><%= message.sender_role === 'client' ? 'You' : message.planner_name %></strong><br><span class="muted"><%= message.created_at %></span></div>
-        <div><strong><%= message.event_title || 'General message' %></strong><p><%= message.message %></p><span class="muted"><%= message.delivery_status === 'failed' ? 'Saved in Nodevents; email delivery failed' : message.sender_role === 'client' ? 'Sent to your planner' : 'Message from your planner' %></span></div>
+        <div><strong><%= message.event_title || 'General message' %></strong><p><%= message.message %></p>
+          <% if (message.progress_url) { %><p><a class="button primary" href="<%= message.progress_url %>">Open event progress</a></p><% } %>
+          <span class="muted"><%= message.delivery_status === 'failed' ? 'Saved in Nodevents; email delivery failed or is not configured' : message.sender_role === 'client' ? 'Sent to your planner' : 'Message from your planner' %></span></div>
       </li><% }) %>
     </ol><% } else { %><p class="muted">No messages yet.</p><% } %>
     <% clients.forEach((client) => { %><form class="client-request-form client-message-form" method="post" action="/client/messages">
@@ -270,5 +283,6 @@
     </form>
     <% if (supportEmail) { %><p><a href="mailto:<%= supportEmail %>">Contact support</a></p><% } else { %><p class="muted">Contact support using the email address provided by your planner.</p><% } %>
   </section>
+  <%- include('partials/platform-rating', { platformRating, returnTo: '/client/dashboard' }) %>
 </div>
 <%- include('partials/foot') %>

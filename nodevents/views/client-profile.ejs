@@ -54,7 +54,7 @@
                 <% if (item.decision_reason) { %><br><span class="muted"><%= item.decision_reason %></span><% } %>
                 <% if (item.linked_event_title) { %><br><a href="/events/<%= item.event_id %>"><%= item.linked_event_title %></a><% } %>
               </td>
-              <td><% if (item.status === 'pending') { %><a href="/dashboard#client-event-requests">Review in Client Event Requests</a><% } else { %>—<% } %></td>
+              <td><% if (item.status === 'pending') { %><a href="/client-event-requests">Review in Client Event Requests</a><% } else { %>—<% } %></td>
             </tr>
           <% }) %>
         </tbody>
@@ -152,7 +152,7 @@
   <% } else { %><p class="muted">No client payment records yet.</p><% } %>
 </section>
 
-<section class="panel" id="messages">
+<section class="panel">
   <h2>Communication</h2>
   <p class="muted"><%= mailConfigured ? 'Emails are sent through the configured mail service.' : 'Demo mode: emails are logged locally but not delivered. Configure SMTP to send them.' %></p>
   <% if (clientRecord.email) { %>

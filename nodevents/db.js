@@ -45,6 +45,7 @@ db.exec(`
     services TEXT NOT NULL DEFAULT '',
     description TEXT NOT NULL DEFAULT '',
     location TEXT NOT NULL DEFAULT '',
+    gallery_json TEXT NOT NULL DEFAULT '[]',
     is_published INTEGER NOT NULL DEFAULT 0 CHECK (is_published IN (0, 1)),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
@@ -111,6 +112,17 @@ db.exec(`
     read_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS planner_notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    planner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    request_id INTEGER REFERENCES event_requests(id) ON DELETE CASCADE,
+    event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+    notification_type TEXT NOT NULL,
+    message TEXT NOT NULL,
+    target_url TEXT NOT NULL,
+    read_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
   CREATE TABLE IF NOT EXISTS client_vendor_booking_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -155,8 +167,16 @@ db.exec(`
     event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,
     sender_role TEXT NOT NULL CHECK (sender_role IN ('planner', 'client')),
     message TEXT NOT NULL,
+    progress_url TEXT NOT NULL DEFAULT '',
     delivery_status TEXT NOT NULL CHECK (delivery_status IN ('received', 'sent', 'failed')),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS platform_ratings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -460,12 +480,16 @@ for (const [column, statement] of [
   ['expected_guests', 'ALTER TABLE event_requests ADD COLUMN expected_guests INTEGER NOT NULL DEFAULT 0 CHECK (expected_guests >= 0)'],
   ['services_required', "ALTER TABLE event_requests ADD COLUMN services_required TEXT NOT NULL DEFAULT ''"],
   ['service_answers', "ALTER TABLE event_requests ADD COLUMN service_answers TEXT NOT NULL DEFAULT '{}'"],
+  ['quote_amount', 'ALTER TABLE event_requests ADD COLUMN quote_amount REAL CHECK (quote_amount IS NULL OR quote_amount > 0)'],
+  ['quote_details', "ALTER TABLE event_requests ADD COLUMN quote_details TEXT NOT NULL DEFAULT ''"],
+  ['quote_sent_at', 'ALTER TABLE event_requests ADD COLUMN quote_sent_at TEXT'],
 ]) {
   const columns = db.prepare('PRAGMA table_info(event_requests)').all();
   if (!columns.some((item) => item.name === column)) db.exec(statement);
 }
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_client_notifications_user ON client_notifications(client_user_id, read_at, created_at);
+  CREATE INDEX IF NOT EXISTS idx_planner_notifications_user ON planner_notifications(planner_user_id, read_at, created_at);
   CREATE INDEX IF NOT EXISTS idx_client_booking_requests_planner ON client_vendor_booking_requests(planner_user_id, status, created_at);
   CREATE INDEX IF NOT EXISTS idx_client_booking_requests_client ON client_vendor_booking_requests(client_user_id, status, created_at);
   CREATE INDEX IF NOT EXISTS idx_client_request_attachments_request ON client_request_attachments(request_id, id);
@@ -558,6 +582,12 @@ if (!eventColumns.some((column) => column.name === 'registration_is_open')) {
 if (!eventColumns.some((column) => column.name === 'meals_served_count')) {
   db.exec('ALTER TABLE events ADD COLUMN meals_served_count INTEGER NOT NULL DEFAULT 0 CHECK (meals_served_count >= 0)');
 }
+if (!eventColumns.some((column) => column.name === 'ticket_color')) {
+  db.exec("ALTER TABLE events ADD COLUMN ticket_color TEXT NOT NULL DEFAULT '#343a35'");
+}
+if (!eventColumns.some((column) => column.name === 'ticket_logo')) {
+  db.exec("ALTER TABLE events ADD COLUMN ticket_logo TEXT NOT NULL DEFAULT ''");
+}
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_events_client_token ON events(client_token) WHERE client_token IS NOT NULL');
 const eventsWithoutRegistrationTokens = db.prepare('SELECT id FROM events WHERE registration_token IS NULL').all();
 const setEventRegistrationToken = db.prepare('UPDATE events SET registration_token = ? WHERE id = ?');
@@ -610,6 +640,13 @@ const vendorProfileColumns = db.prepare('PRAGMA table_info(vendor_profiles)').al
 if (!vendorProfileColumns.some((column) => column.name === 'service_categories')) {
   db.exec("ALTER TABLE vendor_profiles ADD COLUMN service_categories TEXT NOT NULL DEFAULT ''");
 }
+if (!vendorProfileColumns.some((column) => column.name === 'gallery_json')) {
+  db.exec("ALTER TABLE vendor_profiles ADD COLUMN gallery_json TEXT NOT NULL DEFAULT '[]'");
+}
+const portalMessageColumns = db.prepare('PRAGMA table_info(client_portal_messages)').all();
+if (!portalMessageColumns.some((column) => column.name === 'progress_url')) {
+  db.exec("ALTER TABLE client_portal_messages ADD COLUMN progress_url TEXT NOT NULL DEFAULT ''");
+}
 const taskColumns = db.prepare('PRAGMA table_info(tasks)').all();
 if (!taskColumns.some((column) => column.name === 'assigned_staff_id')) {
   db.exec('ALTER TABLE tasks ADD COLUMN assigned_staff_id INTEGER REFERENCES event_staff(id) ON DELETE SET NULL');
@@ -625,6 +662,10 @@ const registrationColumns = db.prepare('PRAGMA table_info(registrations)').all()
 if (!registrationColumns.some((column) => column.name === 'custom_answers')) {
   db.exec("ALTER TABLE registrations ADD COLUMN custom_answers TEXT NOT NULL DEFAULT '{}'");
 }
+if (!registrationColumns.some((column) => column.name === 'account_user_id')) {
+  db.exec('ALTER TABLE registrations ADD COLUMN account_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL');
+}
+db.exec('CREATE INDEX IF NOT EXISTS idx_registrations_account ON registrations(account_user_id, created_at DESC)');
 const contractColumns = db.prepare('PRAGMA table_info(vendor_contracts)').all();
 if (!contractColumns.some((column) => column.name === 'reminder_sent_at')) {
   db.exec('ALTER TABLE vendor_contracts ADD COLUMN reminder_sent_at TEXT');

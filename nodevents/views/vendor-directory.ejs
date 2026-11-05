@@ -33,6 +33,7 @@
     <div class="directory-grid">
       <% vendors.forEach((vendor) => { %>
         <article class="panel directory-card">
+          <% if (vendor.gallery.length) { %><img class="directory-card-image" src="/vendor-gallery/<%= vendor.gallery[0] %>" alt="<%= vendor.business_name %> service example" loading="lazy"><% } %>
           <div class="directory-categories">
             <% const profileCategories = vendor.service_categories
               ? vendor.service_categories.split('|')

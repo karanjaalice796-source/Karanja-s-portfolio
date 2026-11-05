@@ -1,14 +1,16 @@
 <%- include('partials/head', { title }) %>
 <section class="auth-container">
+  <a class="auth-brand" href="/" aria-label="Nodevents home"><span class="auth-brand-mark">N</span><span>Nodevents</span></a>
   <p class="eyebrow">Nodevents account access</p>
-  <h1 class="auth-heading"><%= authMode === 'register' ? 'Create your planner account' : 'Log in' %></h1>
-  <p class="auth-intro">Organize events and keep every planning detail in one place.</p>
+  <h1 class="auth-heading"><%= authMode === 'register' ? 'Create your planner account' : 'Welcome back' %></h1>
+  <p class="auth-intro"><%= authMode === 'register' ? 'Create an account to organize events and bring every detail together.' : 'Log in to continue planning your events.' %></p>
+  <%- include('partials/auth-role-switch', { activeRole: 'planner', authMode }) %>
   <% if (loggedOut) { %><p class="flash auth-logout-notice" role="status">You've been logged out.</p><% } %>
   <% if (error) { %><p class="error" role="alert"><%= error %></p><% } %>
   <% if (audience === 'planner') { %>
   <div class="auth-tabs" role="tablist" aria-label="Planner account options">
-    <button class="auth-tab" id="login-tab" type="button" role="tab" aria-controls="login-panel" aria-selected="<%= authMode !== 'register' %>" data-auth-tab="login">Log in</button>
-    <button class="auth-tab" id="register-tab" type="button" role="tab" aria-controls="register-panel" aria-selected="<%= authMode === 'register' %>" data-auth-tab="register">Create account</button>
+    <button class="auth-tab" id="login-tab" type="button" role="tab" aria-controls="login-panel" aria-selected="<%= authMode !== 'register' %>" tabindex="<%= authMode !== 'register' ? 0 : -1 %>" data-auth-tab="login">Log in</button>
+    <button class="auth-tab" id="register-tab" type="button" role="tab" aria-controls="register-panel" aria-selected="<%= authMode === 'register' %>" tabindex="<%= authMode === 'register' ? 0 : -1 %>" data-auth-tab="register">Create account</button>
   </div>
   <% } %>
   <div id="login-panel" role="tabpanel" aria-labelledby="login-tab" data-auth-panel="login" <%= authMode === 'register' ? 'hidden' : '' %>>
@@ -64,5 +66,4 @@
     </form>
   </div>
 </section>
-<% if (audience === 'planner') { %><p class="vendor-signin-link">Are you a vendor? <a href="/vendor/login">Sign in to your vendor account</a>.</p><% } %>
 <%- include('partials/foot') %>

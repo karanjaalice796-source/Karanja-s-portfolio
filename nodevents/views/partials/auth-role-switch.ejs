@@ -1,0 +1,8 @@
+<nav class="auth-role-switch" aria-label="Choose an account type">
+  <a href="/auth<%= authMode === 'register' ? '?mode=register' : '' %>"
+     <%= activeRole === 'planner' ? 'aria-current="page"' : '' %>>Planner</a>
+  <a href="/vendor/login<%= authMode === 'register' ? '?mode=register' : '' %>"
+     <%= activeRole === 'vendor' ? 'aria-current="page"' : '' %>>Vendor</a>
+  <a href="/client/auth?mode=<%= authMode === 'register' ? 'register' : 'login' %>"
+     <%= activeRole === 'client' ? 'aria-current="page"' : '' %>>Client</a>
+</nav>

@@ -9,6 +9,12 @@
   <h1><%= vendor.business_name %></h1>
   <% if (vendor.location) { %><p class="intro"><%= vendor.location %></p><% } %>
   <% if (vendor.description) { %><p><%= vendor.description %></p><% } %>
+  <% if (gallery.length) { %>
+    <h2>Service gallery</h2>
+    <div class="vendor-gallery-grid public-gallery">
+      <% gallery.forEach((filename) => { %><img src="/vendor-gallery/<%= filename %>" alt="<%= vendor.business_name %> service example" loading="lazy"><% }) %>
+    </div>
+  <% } %>
   <% if (vendor.services) { %>
     <h2>Services offered</h2>
     <p><%= vendor.services %></p>

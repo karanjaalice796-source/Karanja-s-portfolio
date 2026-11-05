@@ -1,8 +1,10 @@
 const assert = require('node:assert/strict');
+const bcrypt = require('bcryptjs');
 const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
+const QRCode = require('qrcode');
 const { DatabaseSync } = require('node:sqlite');
 const { spawn } = require('node:child_process');
 const test = require('node:test');
@@ -22,11 +24,18 @@ function createCookieJar() {
   return { cookie: '' };
 }
 
-async function request(baseUrl, cookieJar, route, { method = 'GET', form } = {}) {
+async function request(baseUrl, cookieJar, route, { method = 'GET', form, files } = {}) {
   const headers = {};
   const options = { method, headers, redirect: 'manual' };
   if (cookieJar.cookie) headers.Cookie = cookieJar.cookie;
-  if (form) {
+  if (files) {
+    const body = new FormData();
+    Object.entries(form || {}).forEach(([name, value]) => {
+      (Array.isArray(value) ? value : [value]).forEach((item) => body.append(name, String(item)));
+    });
+    files.forEach((file) => body.append(file.field, new Blob([file.data], { type: file.type }), file.name));
+    options.body = body;
+  } else if (form) {
     headers['Content-Type'] = 'application/x-www-form-urlencoded';
     options.body = new URLSearchParams(form).toString();
   }
@@ -36,7 +45,7 @@ async function request(baseUrl, cookieJar, route, { method = 'GET', form } = {})
   return response;
 }
 
-test('client accounts and private event links keep their separate workflows and access boundaries', { timeout: 120_000 }, async (context) => {
+test('client accounts stay role-scoped while private links support PINs, expiry, approvals, and comments', { timeout: 120_000 }, async (context) => {
   const project = path.resolve(__dirname, '..');
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nodevents-client-link-'));
   const port = await availablePort();
@@ -56,6 +65,7 @@ test('client accounts and private event links keep their separate workflows and 
       PORT: String(port),
       APP_BASE_URL: baseUrl,
       SESSION_SECRET: 'client-link-integration-test-session-secret',
+      GOOGLE_MAPS_ROUTES_API_KEY: '',
       NODE_PATH: path.join(project, 'node_modules'),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -79,7 +89,7 @@ test('client accounts and private event links keep their separate workflows and 
   });
 
   let ready = false;
-  const startupDeadline = Date.now() + 60_000;
+  const startupDeadline = Date.now() + 30_000;
   while (Date.now() < startupDeadline) {
     if (server.exitCode !== null) break;
     try {
@@ -92,9 +102,24 @@ test('client accounts and private event links keep their separate workflows and 
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
-  assert.equal(ready, true, `Nodevents did not start within 60 seconds. ${serverOutput}\n${serverErrors}`);
+  assert.equal(ready, true, `Nodevents did not start within 30 seconds. ${serverOutput}\n${serverErrors}`);
 
   const planner = createCookieJar();
+  const plannerAuthPage = await request(baseUrl, createCookieJar(), '/auth');
+  const plannerAuthHtml = await plannerAuthPage.text();
+  assert.equal(plannerAuthPage.status, 200);
+  assert.match(plannerAuthHtml, /Choose an account type/);
+  assert.match(plannerAuthHtml, /href="\/client\/auth\?mode=login"/);
+  assert.match(plannerAuthHtml, /href="\/vendor\/login"/);
+  const clientAuthPage = await request(baseUrl, createCookieJar(), '/client/auth?mode=login');
+  const clientAuthHtml = await clientAuthPage.text();
+  assert.match(clientAuthHtml, /Welcome back/);
+  assert.match(clientAuthHtml, /href="\/client\/auth\?mode=register"/);
+  const vendorRegistrationPage = await request(baseUrl, createCookieJar(), '/vendor/login?mode=register');
+  const vendorRegistrationHtml = await vendorRegistrationPage.text();
+  assert.equal(vendorRegistrationPage.status, 200);
+  assert.match(vendorRegistrationHtml, /Create vendor account/);
+  assert.match(vendorRegistrationHtml, /Personal invitation link/);
   const registerPlanner = await request(baseUrl, planner, '/auth/register', {
     method: 'POST',
     form: {
@@ -105,6 +130,27 @@ test('client accounts and private event links keep their separate workflows and 
   });
   assert.equal(registerPlanner.status, 302);
   assert.equal(registerPlanner.headers.get('location'), '/dashboard');
+  const plannerDashboard = await request(baseUrl, planner, '/dashboard');
+  const plannerDashboardHtml = await plannerDashboard.text();
+  assert.equal(plannerDashboard.status, 200, serverErrors);
+  for (const section of ['Overview and analytics', 'Client Event Requests', 'My Events', 'Client Management',
+    'Vendor Management', 'Bookings', 'Budget and Expenses', 'Payments and Invoices', 'Tasks and Schedules',
+    'Reports', 'Messages', 'Settings']) {
+    assert.match(plannerDashboardHtml, new RegExp(section));
+  }
+  assert.doesNotMatch(plannerDashboardHtml, /Approve and create event/);
+  assert.equal((await request(baseUrl, planner, '/client-event-requests')).status, 200);
+  assert.equal((await request(baseUrl, planner, '/my-events')).status, 200);
+  assert.equal((await request(baseUrl, planner, '/analytics')).status, 200);
+  assert.equal((await request(baseUrl, planner, '/reports')).status, 200);
+  assert.equal((await request(baseUrl, planner, '/planner/notifications')).status, 200);
+  const plannerRating = await request(baseUrl, planner, '/platform-rating', {
+    method: 'POST',
+    form: { rating: '5', return_to: '/dashboard' },
+  });
+  assert.equal(plannerRating.headers.get('location'), '/dashboard#nodevents-rating');
+  const ratedHomepage = await request(baseUrl, planner, '/');
+  assert.match(await ratedHomepage.text(), /5\.0 \/ 5/);
 
   const createEvent = await request(baseUrl, planner, '/events', {
     method: 'POST',
@@ -117,9 +163,109 @@ test('client accounts and private event links keep their separate workflows and 
   });
   assert.equal(createEvent.status, 302);
   assert.equal(createEvent.headers.get('location'), '/events/1');
+  const myEventsPage = await request(baseUrl, planner, '/my-events');
+  const myEventsHtml = await myEventsPage.text();
+  assert.equal(myEventsPage.status, 200);
+  assert.match(myEventsHtml, /My event summary/);
+  assert.match(myEventsHtml, /Upcoming events/);
+  assert.match(myEventsHtml, /Private Link Wedding/);
+  assert.match(myEventsHtml, /Planning tasks/);
+  assert.match(myEventsHtml, /Open event/);
+  assert.equal((await request(baseUrl, planner, '/events/1/registration')).status, 200);
+  assert.equal((await request(baseUrl, planner, '/events/1/tickets')).status, 200);
+  const missingRoutesKey = await request(baseUrl, planner, '/events/1/logistics/route-distance', {
+    method: 'POST',
+    form: { origin: 'Nairobi', destination: 'Kiambu' },
+  });
+  assert.equal(missingRoutesKey.status, 503);
+  assert.match(await missingRoutesKey.text(), /GOOGLE_MAPS_ROUTES_API_KEY/);
 
   db = new DatabaseSync(path.join(directory, 'data.db'));
   db.exec('PRAGMA foreign_keys = ON');
+  db.prepare('INSERT INTO ticket_types (event_id, name, price, capacity) VALUES (1, ?, 0, 10)')
+    .run('Regular');
+  db.prepare('UPDATE events SET registration_is_open = 1, ticket_color = ? WHERE id = 1').run('#a8431f');
+
+  const vendorPassword = 'gallery-vendor-test-password';
+  const vendorPasswordHash = await bcrypt.hash(vendorPassword, 10);
+  db.prepare('INSERT INTO vendor_accounts (name, email, password_hash) VALUES (?, ?, ?)')
+    .run('Gallery Vendor', 'gallery@example.test', vendorPasswordHash);
+  const vendorAccount = createCookieJar();
+  const vendorLogin = await request(baseUrl, vendorAccount, '/vendor/login', {
+    method: 'POST',
+    form: { email: 'gallery@example.test', password: vendorPassword },
+  });
+  assert.equal(vendorLogin.status, 302);
+  assert.equal(vendorLogin.headers.get('location'), '/vendor/dashboard');
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB', 'base64');
+  const saveVendorProfile = await request(baseUrl, vendorAccount, '/vendor/profile', {
+    method: 'POST',
+    form: {
+      business_name: 'Gallery Vendor',
+      service_categories: ['Catering'],
+      services: 'Buffet service and setup',
+      description: 'Fresh event catering',
+      location: 'Nairobi',
+      is_published: 'on',
+    },
+    files: [{ field: 'gallery', name: 'catering.png', type: 'image/png', data: png }],
+  });
+  assert.equal(saveVendorProfile.status, 302);
+  const galleryFilename = JSON.parse(db.prepare('SELECT gallery_json FROM vendor_profiles WHERE vendor_account_id = 1').get().gallery_json)[0];
+  const vendorProfileEditor = await request(baseUrl, vendorAccount, '/vendor/profile');
+  assert.equal(vendorProfileEditor.status, 200);
+  assert.match(await vendorProfileEditor.text(), /Service gallery/);
+  const vendorDirectory = await request(baseUrl, createCookieJar(), '/vendors');
+  assert.match(await vendorDirectory.text(), /Gallery Vendor/);
+  const vendorPublicProfile = await request(baseUrl, createCookieJar(), '/vendors/1');
+  assert.match(await vendorPublicProfile.text(), /Service gallery/);
+  const vendorImage = await request(baseUrl, createCookieJar(), `/vendor-gallery/${galleryFilename}`);
+  assert.equal(vendorImage.status, 200);
+  assert.equal(vendorImage.headers.get('content-type'), 'image/png');
+  const invalidGalleryUpload = await request(baseUrl, vendorAccount, '/vendor/profile', {
+    method: 'POST',
+    form: {
+      business_name: 'Gallery Vendor',
+      service_categories: ['Catering'],
+      is_published: 'on',
+    },
+    files: [{ field: 'gallery', name: 'not-an-image.png', type: 'image/png', data: Buffer.from('not an image') }],
+  });
+  assert.equal(invalidGalleryUpload.status, 400);
+  assert.equal(JSON.parse(db.prepare('SELECT gallery_json FROM vendor_profiles WHERE vendor_account_id = 1').get().gallery_json).length, 1);
+  const selfRegisteredVendor = createCookieJar();
+  const vendorSignup = await request(baseUrl, selfRegisteredVendor, '/vendor/register', {
+    method: 'POST',
+    form: {
+      name: 'Independent Vendor',
+      email: 'independent-vendor@example.test',
+      password: 'vendor-test-password',
+    },
+  });
+  assert.equal(vendorSignup.status, 302);
+  assert.equal(vendorSignup.headers.get('location'), '/vendor/dashboard');
+  const vendorDashboardPage = await request(baseUrl, selfRegisteredVendor, '/vendor/dashboard');
+  assert.equal(vendorDashboardPage.status, 200);
+  assert.match(await vendorDashboardPage.text(), /Set up your vendor profile/);
+  const inviteToken = 'c'.repeat(64);
+  const invitedVendor = Number(db.prepare(`
+    INSERT INTO vendors (event_id, name, category, services, email, token)
+    VALUES (1, 'Invited Vendor', 'Photography', 'Event photography', 'invited-vendor@example.test', ?)
+  `).run(inviteToken).lastInsertRowid);
+  const invitationPage = await request(baseUrl, createCookieJar(), `/vendor/${inviteToken}/register`);
+  assert.equal(invitationPage.status, 200);
+  assert.match(await invitationPage.text(), /This account will connect to the vendor invitation/);
+  const invitationAccount = createCookieJar();
+  const connectInvitation = await request(baseUrl, invitationAccount, `/vendor/${inviteToken}/register`, {
+    method: 'POST',
+    form: {
+      email: 'invited-vendor@example.test',
+      password: 'invited-vendor-password',
+    },
+  });
+  assert.equal(connectInvitation.status, 302);
+  assert.equal(connectInvitation.headers.get('location'), '/vendor/dashboard');
+  assert.ok(db.prepare('SELECT account_id FROM vendors WHERE id = ?').get(invitedVendor).account_id);
   db.prepare('UPDATE events SET budget_total = 5000, expected_guests = 5, budget_currency = ? WHERE id = 1')
     .run('KES');
   const vendorId = Number(db.prepare(`
@@ -170,11 +316,11 @@ test('client accounts and private event links keep their separate workflows and 
   assert.equal((await request(baseUrl, createCookieJar(), '/auth?audience=client')).headers.get('location'), '/client/auth?mode=register');
   assert.equal((await request(baseUrl, createCookieJar(), '/client/register')).headers.get('location'), '/client/auth?mode=register');
   assert.equal((await request(baseUrl, createCookieJar(), '/client/dashboard')).headers.get('location'), '/client/auth');
-  assert.equal((await request(baseUrl, createCookieJar(), `/client/invite/${'b'.repeat(64)}`)).headers.get('location'), '/client/auth?loggedOut=1');
+  assert.equal((await request(baseUrl, createCookieJar(), `/client/invite/${'b'.repeat(64)}`)).headers.get('location'), '/client/auth?mode=login');
   assert.equal((await request(baseUrl, createCookieJar(), '/auth/login', {
     method: 'POST',
     form: { audience: 'client', email: 'client@example.test', password: 'irrelevant' },
-  })).headers.get('location'), '/client/auth');
+  })).headers.get('location'), '/client/auth?mode=login');
 
   const accountClient = createCookieJar();
   const registrationPage = await request(baseUrl, accountClient, '/client/auth?mode=register');
@@ -191,11 +337,78 @@ test('client accounts and private event links keep their separate workflows and 
   });
   assert.equal(registerClient.status, 302);
   assert.equal(registerClient.headers.get('location'), '/client/dashboard');
+  const accountUserId = db.prepare("SELECT id FROM users WHERE email = 'client@example.test'").get().id;
+  const brandingImage = await QRCode.toBuffer('Nodevents event logo');
+  const saveTicketBranding = await request(baseUrl, planner, '/events/1/tickets/branding', {
+    method: 'POST',
+    form: { ticket_color: '#a8431f' },
+    files: [{ field: 'ticket_logo', name: 'event-logo.png', type: 'image/png', data: brandingImage }],
+  });
+  assert.equal(saveTicketBranding.status, 302);
+  const registrationToken = db.prepare('SELECT registration_token FROM events WHERE id = 1').get().registration_token;
+  const ticketRegistration = await request(baseUrl, accountClient, `/register/${registrationToken}`, {
+    method: 'POST',
+    form: {
+      full_name: 'Client One',
+      email: 'client@example.test',
+      phone: '+254700000001',
+      ticket_type_id: '1',
+    },
+  });
+  assert.equal(ticketRegistration.status, 302);
+  const ticketPath = ticketRegistration.headers.get('location');
+  const ticketToken = ticketPath.split('/').pop();
+  assert.equal(db.prepare('SELECT account_user_id FROM registrations WHERE qr_token = ?').get(ticketToken).account_user_id, accountUserId);
+  const ticketPage = await request(baseUrl, createCookieJar(), ticketPath);
+  assert.equal(ticketPage.status, 200);
+  const ticketHtml = await ticketPage.text();
+  assert.match(ticketHtml, /Download ticket PDF/);
+  assert.match(ticketHtml, /Event overview/);
+  assert.match(ticketHtml, /Scan to enter/);
+  assert.match(ticketHtml, /NODEVENTS/);
+  db.prepare("UPDATE events SET event_type = 'corporate' WHERE id = 1").run();
+  const corporateTicket = await request(baseUrl, createCookieJar(), ticketPath);
+  assert.match(await corporateTicket.text(), /Corporate access/);
+  db.prepare("UPDATE events SET event_type = 'entertainment' WHERE id = 1").run();
+  const festivalTicket = await request(baseUrl, createCookieJar(), ticketPath);
+  assert.match(await festivalTicket.text(), /Festival pass/);
+  db.prepare("UPDATE events SET event_type = 'wedding' WHERE id = 1").run();
+  assert.equal((await request(baseUrl, planner, '/events/1/tickets/logo')).status, 200);
+  assert.equal((await request(baseUrl, createCookieJar(), `${ticketPath}/logo`)).status, 200);
+  const ticketPdf = await request(baseUrl, createCookieJar(), `${ticketPath}/download`);
+  assert.equal(ticketPdf.status, 200);
+  assert.equal(Buffer.from(await ticketPdf.arrayBuffer()).subarray(0, 4).toString(), '%PDF');
+  const clientTicketHistory = await request(baseUrl, accountClient, '/client/dashboard');
+  assert.match(await clientTicketHistory.text(), /Private Link Wedding/);
+  const firstScan = await request(baseUrl, planner, '/events/1/tickets/check-in', {
+    method: 'POST',
+    form: { qr_token: ticketToken },
+  });
+  assert.equal(firstScan.status, 200);
+  assert.equal((await firstScan.json()).status, 'valid');
+  const repeatScan = await request(baseUrl, planner, '/events/1/tickets/check-in', {
+    method: 'POST',
+    form: { qr_token: ticketToken },
+  });
+  assert.equal(repeatScan.status, 409);
+  assert.equal((await repeatScan.json()).status, 'already_used');
+  db.prepare("UPDATE registrations SET status = 'cancelled' WHERE qr_token = ?").run(ticketToken);
+  const cancelledScan = await request(baseUrl, planner, '/events/1/tickets/check-in', {
+    method: 'POST',
+    form: { qr_token: ticketToken },
+  });
+  assert.equal((await cancelledScan.json()).status, 'cancelled');
   const clientDashboard = await request(baseUrl, accountClient, '/client/dashboard');
   assert.equal(clientDashboard.status, 200, serverErrors);
   const clientDashboardHtml = await clientDashboard.text();
   assert.match(clientDashboardHtml, /Client dashboard navigation/);
   assert.match(clientDashboardHtml, /Request an Event/);
+  const clientRating = await request(baseUrl, accountClient, '/platform-rating', {
+    method: 'POST',
+    form: { rating: '4', return_to: '/client/dashboard' },
+  });
+  assert.equal(clientRating.headers.get('location'), '/client/dashboard#nodevents-rating');
+  assert.match(await (await request(baseUrl, accountClient, '/')).text(), /4\.5 \/ 5/);
   assert.doesNotMatch(clientDashboardHtml, /href="\/dashboard"/);
   assert.equal((await request(baseUrl, accountClient, '/dashboard')).headers.get('location'), '/client/dashboard');
   assert.equal((await request(baseUrl, accountClient, '/clients')).headers.get('location'), '/client/dashboard');
@@ -218,7 +431,6 @@ test('client accounts and private event links keep their separate workflows and 
     },
   });
   assert.equal(submitRequest.status, 302);
-  assert.equal(submitRequest.headers.get('location'), '/client/dashboard#requests');
   const savedRequest = db.prepare(`
     SELECT event_requests.*, clients.account_user_id
     FROM event_requests JOIN clients ON clients.id = event_requests.client_id
@@ -229,9 +441,59 @@ test('client accounts and private event links keep their separate workflows and 
     requirements: 'Vegetarian menu options',
     categoryRequirements: 'Outdoor ceremony and reception plan',
   });
-  const updatedPlannerDashboard = await request(baseUrl, planner, '/dashboard');
-  assert.equal(updatedPlannerDashboard.status, 200, serverErrors);
-  assert.match(await updatedPlannerDashboard.text(), /Client Account Wedding Request/);
+  const requestNotification = db.prepare(`
+    SELECT id, target_url, read_at FROM planner_notifications
+    WHERE planner_user_id = 1 AND notification_type = 'event_request_received'
+  `).get();
+  assert.ok(requestNotification);
+  assert.equal(requestNotification.target_url, `/client-event-requests#request-${savedRequest.id}`);
+  assert.equal((await request(baseUrl, planner, '/planner/notifications')).status, 200);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM planner_notifications WHERE planner_user_id = 1 AND read_at IS NULL').get().count, 1);
+  const openRequestNotification = await request(baseUrl, planner, `/planner/notifications/${requestNotification.id}/open`, { method: 'POST' });
+  assert.equal(openRequestNotification.status, 302);
+  assert.equal(openRequestNotification.headers.get('location'), `/client-event-requests#request-${savedRequest.id}`);
+  assert.ok(db.prepare('SELECT read_at FROM planner_notifications WHERE id = ?').get(requestNotification.id).read_at);
+  assert.equal((await request(baseUrl, accountClient, '/planner/notifications')).headers.get('location'), '/client/dashboard');
+
+  const sendQuote = await request(baseUrl, planner, `/client-requests/${savedRequest.id}/quote`, {
+    method: 'POST',
+    form: { quote_amount: '275000', quote_details: 'Includes venue, catering and coordination.' },
+  });
+  assert.equal(sendQuote.status, 302);
+  assert.equal(sendQuote.headers.get('location'), '/dashboard#client-event-requests');
+  const quotedClientDashboard = await request(baseUrl, accountClient, '/client/dashboard');
+  assert.match(await quotedClientDashboard.text(), /KES 275,000\.00/);
+  assert.equal(db.prepare(`
+    SELECT COUNT(*) AS count FROM client_notifications
+    WHERE client_user_id = ? AND notification_type = 'quotation_received'
+  `).get(2).count, 1);
+
+  const approveRequest = await request(baseUrl, planner, `/client-requests/${savedRequest.id}/decision`, {
+    method: 'POST',
+    form: { decision: 'approve', event_date: '2031-06-01' },
+  });
+  assert.equal(approveRequest.status, 302);
+  const approvedRequest = db.prepare('SELECT status, event_id FROM event_requests WHERE id = ?').get(savedRequest.id);
+  assert.equal(approvedRequest.status, 'approved');
+  assert.ok(approvedRequest.event_id);
+  const createApprovedLink = await request(baseUrl, planner, `/events/${approvedRequest.event_id}/client-link`, {
+    method: 'POST',
+    form: { show_budget: 'on' },
+  });
+  assert.equal(createApprovedLink.status, 302);
+  const sendProgressLink = await request(baseUrl, planner, `/events/${approvedRequest.event_id}/client-link/send`, {
+    method: 'POST',
+  });
+  assert.equal(sendProgressLink.status, 302);
+  assert.equal(db.prepare(`
+    SELECT COUNT(*) AS count FROM client_portal_messages
+    WHERE client_id = ? AND progress_url <> ''
+  `).get(savedRequest.client_id).count, 1);
+  const approvedClientDashboard = await request(baseUrl, accountClient, '/client/dashboard');
+  const approvedClientHtml = await approvedClientDashboard.text();
+  assert.match(approvedClientHtml, /Client Account Wedding Request/);
+  assert.match(approvedClientHtml, /Open event progress/);
+  assert.match(approvedClientHtml, new RegExp(`href="http://127\\.0\\.0\\.1:${port}/client/[a-f0-9]{64}"`));
 
   const client = createCookieJar();
   const lockedLink = await request(baseUrl, client, `/client/${token}`);
@@ -328,6 +590,21 @@ test('client accounts and private event links keep their separate workflows and 
     form: { sender_name: 'Client Reviewer', message: 'Could you confirm the arrival time?' },
   });
   assert.equal(clientComment.status, 302);
+  assert.equal(db.prepare(`
+    SELECT COUNT(*) AS count FROM planner_notifications
+    WHERE planner_user_id = 1 AND notification_type = 'client_approval'
+  `).get().count, 2);
+  assert.equal(db.prepare(`
+    SELECT COUNT(*) AS count FROM planner_notifications
+    WHERE planner_user_id = 1 AND notification_type = 'client_changes_requested'
+  `).get().count, 1);
+  assert.equal(db.prepare(`
+    SELECT COUNT(*) AS count FROM planner_notifications
+    WHERE planner_user_id = 1 AND notification_type = 'client_comment'
+  `).get().count, 1);
+  const markPlannerNotificationsRead = await request(baseUrl, planner, '/planner/notifications/read', { method: 'POST' });
+  assert.equal(markPlannerNotificationsRead.status, 302);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM planner_notifications WHERE planner_user_id = 1 AND read_at IS NULL').get().count, 0);
   const updatedPlannerEvent = await request(baseUrl, planner, '/events/1');
   const updatedPlannerHtml = await updatedPlannerEvent.text();
   assert.match(updatedPlannerHtml, /Client approvals/);

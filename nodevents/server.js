@@ -61,6 +61,10 @@ const uploadDirectory = path.join(__dirname, 'uploads');
 fs.mkdirSync(uploadDirectory, { recursive: true });
 const requestAttachmentDirectory = path.join(uploadDirectory, 'client-requests');
 fs.mkdirSync(requestAttachmentDirectory, { recursive: true });
+const vendorGalleryDirectory = path.join(uploadDirectory, 'vendor-gallery');
+fs.mkdirSync(vendorGalleryDirectory, { recursive: true });
+const ticketBrandingDirectory = path.join(uploadDirectory, 'ticket-branding');
+fs.mkdirSync(ticketBrandingDirectory, { recursive: true });
 
 const allowedInvoiceTypes = new Set(['application/pdf', 'image/jpeg', 'image/png']);
 const invoiceUpload = multer({
@@ -89,6 +93,46 @@ const requestAttachmentUpload = multer({
   fileFilter: (_request, file, callback) => {
     if (!allowedRequestAttachmentTypes.has(file.mimetype)) {
       return callback(new Error('Attach up to five JPG, PNG, WebP, or PDF files.'));
+    }
+    return callback(null, true);
+  },
+});
+const allowedGalleryTypes = new Map([
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.png', 'image/png'],
+  ['.webp', 'image/webp'],
+]);
+const vendorGalleryUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_request, _file, callback) => callback(null, vendorGalleryDirectory),
+    filename: (_request, file, callback) => callback(null, `${crypto.randomUUID()}${path.extname(file.originalname).toLowerCase()}`),
+  }),
+  limits: { fileSize: 5 * 1024 * 1024, files: 6 },
+  fileFilter: (_request, file, callback) => {
+    const extension = path.extname(file.originalname).toLowerCase();
+    if (allowedGalleryTypes.get(extension) !== file.mimetype) {
+      return callback(new Error('Upload up to six JPG, PNG, or WebP gallery images, 5 MB each.'));
+    }
+    return callback(null, true);
+  },
+});
+const ticketBrandingTypes = new Map([
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.png', 'image/png'],
+  ['.webp', 'image/webp'],
+]);
+const ticketBrandingUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_request, _file, callback) => callback(null, ticketBrandingDirectory),
+    filename: (_request, file, callback) => callback(null, `${crypto.randomUUID()}${path.extname(file.originalname).toLowerCase()}`),
+  }),
+  limits: { fileSize: 2 * 1024 * 1024, files: 1 },
+  fileFilter: (_request, file, callback) => {
+    const extension = path.extname(file.originalname).toLowerCase();
+    if (ticketBrandingTypes.get(extension) !== file.mimetype) {
+      return callback(new Error('Upload one JPG, PNG, or WebP event logo, up to 2 MB.'));
     }
     return callback(null, true);
   },
@@ -176,6 +220,7 @@ app.use((request, response, next) => {
   response.locals.user = null;
   response.locals.isClient = false;
   response.locals.isAdmin = false;
+  response.locals.plannerUnreadNotifications = 0;
   response.locals.vendorUser = request.session.vendorUser || null;
   response.locals.vendorView = request.path.startsWith('/vendor');
   response.locals.notice = request.session.notice || null;
@@ -201,11 +246,51 @@ app.use((request, response, next) => {
   };
   response.locals.isClient = account.role === 'client';
   response.locals.isAdmin = Boolean(account.is_admin);
+  if (account.role === 'planner') {
+    response.locals.plannerUnreadNotifications = Number(db.prepare(`
+      SELECT COUNT(*) AS count FROM planner_notifications
+      WHERE planner_user_id = ? AND read_at IS NULL
+    `).get(account.id).count);
+  }
   next();
 });
 
 function setNotice(request, message) {
   request.session.notice = message;
+}
+
+function platformRatingFor(userId = null) {
+  const summary = db.prepare(`
+    SELECT COUNT(*) AS count, COALESCE(AVG(rating), 0) AS average
+    FROM platform_ratings
+  `).get();
+  const ownRating = userId
+    ? db.prepare('SELECT rating FROM platform_ratings WHERE user_id = ?').get(userId)?.rating || null
+    : null;
+  return { count: Number(summary.count), average: Number(summary.average), ownRating };
+}
+
+function vendorGallery(profile) {
+  return profile?.gallery_json ? JSON.parse(profile.gallery_json) : [];
+}
+
+async function isValidGalleryImage(file) {
+  const bytes = await fs.promises.readFile(file.path);
+  if (file.mimetype === 'image/jpeg') return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (file.mimetype === 'image/png') return bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  return file.mimetype === 'image/webp'
+    && bytes.toString('ascii', 0, 4) === 'RIFF'
+    && bytes.toString('ascii', 8, 12) === 'WEBP';
+}
+
+async function removeUploadedFiles(files) {
+  await Promise.all(files.map(async (file) => {
+    try {
+      await fs.promises.unlink(file.path);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  }));
 }
 
 function renderVendorRegistration(response, vendor = null, error = null, status = 200) {
@@ -553,6 +638,14 @@ function notifyClient(clientUserId, plannerUserId, notificationType, message, re
   `).run(clientUserId, plannerUserId, requestId, eventId, notificationType, message);
 }
 
+function notifyPlanner(plannerUserId, notificationType, message, targetUrl, requestId = null, eventId = null) {
+  db.prepare(`
+    INSERT INTO planner_notifications
+      (planner_user_id, request_id, event_id, notification_type, message, target_url)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(plannerUserId, requestId, eventId, notificationType, message, targetUrl);
+}
+
 function emitEventUpdate(eventId, message) {
   const attendance = db.prepare(`
     SELECT
@@ -837,8 +930,29 @@ io.on('connection', (socket) => {
   });
 });
 
-app.get('/', (_request, response) => {
-  response.render('home');
+app.get('/', (request, response) => {
+  response.render('home', { platformRating: platformRatingFor(request.currentUser?.id) });
+});
+
+app.post('/platform-rating', (request, response, next) => {
+  if (!request.currentUser) return response.redirect('/auth');
+  next();
+}, (request, response) => {
+  const ratingText = String(request.body.rating || '');
+  if (!/^[1-5]$/.test(ratingText)) {
+    setNotice(request, 'Choose a platform rating from 1 to 5 stars.');
+    return response.redirect('/#nodevents-rating');
+  }
+  db.prepare(`
+    INSERT INTO platform_ratings (user_id, rating)
+    VALUES (?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET rating = excluded.rating, updated_at = datetime('now')
+  `).run(request.currentUser.id, Number(ratingText));
+  setNotice(request, 'Thanks for rating Nodevents.');
+  const returnTo = ['/', '/dashboard', '/client/dashboard'].includes(request.body.return_to)
+    ? request.body.return_to
+    : '/';
+  return response.redirect(`${returnTo}#nodevents-rating`);
 });
 
 app.get('/browse-events', (_request, response) => {
@@ -872,12 +986,12 @@ app.get('/vendors', (request, response) => {
   const vendors = db.prepare(`
     SELECT vendor_profiles.id, vendor_profiles.business_name, vendor_profiles.category,
       vendor_profiles.service_categories, vendor_profiles.services,
-      vendor_profiles.description, vendor_profiles.location
+      vendor_profiles.description, vendor_profiles.location, vendor_profiles.gallery_json
     FROM vendor_profiles
     WHERE ${conditions.join(' AND ')}
     ORDER BY vendor_profiles.business_name COLLATE NOCASE
     LIMIT 100
-  `).all(...values);
+  `).all(...values).map((vendor) => ({ ...vendor, gallery: vendorGallery(vendor) }));
   const savedCategories = db.prepare(`
     SELECT DISTINCT category FROM vendor_profiles
     WHERE is_published = 1 AND category <> ''
@@ -891,11 +1005,25 @@ app.get('/vendors', (request, response) => {
   response.render('vendor-directory', { vendors, categories, search, category, events });
 });
 
+app.get('/vendor-gallery/:filename', (request, response) => {
+  const filename = String(request.params.filename || '');
+  if (!/^[a-f0-9-]{36}\.(?:jpg|jpeg|png|webp)$/.test(filename)) return response.sendStatus(404);
+  const profiles = db.prepare(`
+    SELECT vendor_account_id, is_published, gallery_json
+    FROM vendor_profiles
+    WHERE is_published = 1 OR vendor_account_id = ?
+  `).all(request.session.vendorUser?.id || -1);
+  const accessibleProfile = profiles.some((profile) => vendorGallery(profile).includes(filename));
+  if (!accessibleProfile) return response.sendStatus(404);
+  response.set('Cache-Control', 'private, max-age=3600');
+  return response.sendFile(path.join(vendorGalleryDirectory, filename));
+});
+
 app.get('/vendors/:profileId', (request, response) => {
   const profileId = Number(request.params.profileId);
   if (!Number.isSafeInteger(profileId) || profileId <= 0) return response.sendStatus(404);
   const vendor = db.prepare(`
-    SELECT id, business_name, category, service_categories, services, description, location
+    SELECT id, business_name, category, service_categories, services, description, location, gallery_json
     FROM vendor_profiles WHERE id = ? AND is_published = 1
   `).get(profileId);
   if (!vendor) return response.sendStatus(404);
@@ -903,7 +1031,7 @@ app.get('/vendors/:profileId', (request, response) => {
     ? db.prepare('SELECT id, title, event_date FROM events WHERE user_id = ? ORDER BY event_date, id DESC')
       .all(request.currentUser.id)
     : [];
-  response.render('vendor-profile', { vendor, events });
+  response.render('vendor-profile', { vendor, gallery: vendorGallery(vendor), events });
 });
 
 app.get('/learn', (_request, response) => {
@@ -1156,9 +1284,10 @@ app.get('/vendor', (_request, response) => {
 
 app.get('/vendor/login', (request, response) => {
   if (request.session.vendorUser) return response.redirect('/vendor/dashboard');
+  const mode = request.query.mode === 'register' ? 'register' : 'login';
   response.render('vendor-auth', {
-    title: 'Vendor sign in',
-    mode: 'login',
+    title: mode === 'register' ? 'Create vendor account' : 'Vendor sign in',
+    mode,
     error: null,
     vendor: null,
   });
@@ -1182,7 +1311,7 @@ app.post('/vendor/login', async (request, response, next) => {
     return response.status(401).render('vendor-auth', {
       title: 'Vendor sign in',
       mode: 'login',
-      error: 'Email or password is incorrect. To create an account, open the personal invite link from your planner.',
+      error: 'Email or password is incorrect. Create an account if you are new to Nodevents, or check the email and password and try again.',
       vendor: null,
     });
   }
@@ -1207,10 +1336,54 @@ app.get('/vendor/register', (request, response) => {
   return renderVendorRegistration(response);
 });
 
-app.post('/vendor/register', (request, response, next) => {
+app.post('/vendor/register', async (request, response, next) => {
   const invitationLink = String(request.body.invitation_link || '').trim();
-  if (!invitationLink || invitationLink.length > 2048) {
-    return renderVendorRegistration(response, null, 'Paste the personal invitation link from your planner.', 400);
+  if (!invitationLink) {
+    const name = String(request.body.name || '').trim();
+    const email = String(request.body.email || '').trim().toLowerCase();
+    const password = String(request.body.password || '');
+    if (!name || name.length > 80 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+      || password.length < 8 || password.length > 128) {
+      return renderVendorRegistration(
+        response,
+        null,
+        'Enter your name, a valid email address, and a password between 8 and 128 characters.',
+        400,
+      );
+    }
+    if (db.prepare('SELECT id FROM vendor_accounts WHERE email = ?').get(email)) {
+      return renderVendorRegistration(
+        response,
+        null,
+        'A vendor account already uses this email. Please sign in instead.',
+        409,
+      );
+    }
+    try {
+      const passwordHash = await bcrypt.hash(password, 12);
+      const result = db.prepare('INSERT INTO vendor_accounts (name, email, password_hash) VALUES (?, ?, ?)')
+        .run(name, email, passwordHash);
+      const vendorId = Number(result.lastInsertRowid);
+      request.session.regenerate((error) => {
+        if (error) return next(error);
+        request.session.vendorUser = { id: vendorId, name, email };
+        response.redirect('/vendor/dashboard');
+      });
+    } catch (error) {
+      if (error.errcode === 2067 || error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        return renderVendorRegistration(
+          response,
+          null,
+          'A vendor account already uses this email. Please sign in instead.',
+          409,
+        );
+      }
+      return next(error);
+    }
+    return;
+  }
+  if (invitationLink.length > 2048) {
+    return renderVendorRegistration(response, null, 'Enter the complete personal invitation link from your planner.', 400);
   }
   let vendor;
   try {
@@ -1250,10 +1423,44 @@ app.get('/vendor/profile', requireVendorAuth, (request, response) => {
   } else if (profile?.category && vendorServiceCategories.includes(profile.category)) {
     selectedServiceCategories = [profile.category];
   }
-  response.render('vendor-profile-edit', { profile, vendorServiceCategories, selectedServiceCategories });
+  response.render('vendor-profile-edit', {
+    profile,
+    gallery: vendorGallery(profile),
+    vendorServiceCategories,
+    selectedServiceCategories,
+  });
 });
 
-app.post('/vendor/profile', requireVendorAuth, (request, response) => {
+app.post('/vendor/profile', requireVendorAuth, vendorGalleryUpload.array('gallery', 6), async (request, response, next) => {
+  const uploadedFiles = request.files || [];
+  let gallerySaved = false;
+  try {
+    const profile = db.prepare('SELECT * FROM vendor_profiles WHERE vendor_account_id = ?')
+      .get(request.session.vendorUser.id) || null;
+    const currentGallery = vendorGallery(profile);
+    const submittedKeep = Array.isArray(request.body.gallery_keep)
+      ? request.body.gallery_keep
+      : request.body.gallery_keep ? [request.body.gallery_keep] : [];
+    const keptGallery = [...new Set(submittedKeep.filter((filename) => currentGallery.includes(filename)))];
+    for (const file of uploadedFiles) {
+      if (!await isValidGalleryImage(file)) {
+        await removeUploadedFiles(uploadedFiles);
+        return response.status(400).render('message', {
+          title: 'Unsupported gallery image',
+          message: 'The uploaded file content does not match a supported JPG, PNG, or WebP image.',
+          href: '/vendor/profile',
+          linkText: 'Return to vendor profile',
+          vendorView: true,
+        });
+      }
+    }
+
+    const gallery = [...keptGallery, ...uploadedFiles.map((file) => path.basename(file.filename))];
+    if (gallery.length > 12) {
+      await removeUploadedFiles(uploadedFiles);
+      setNotice(request, 'A vendor profile can contain up to 12 gallery images. Remove an image before adding more.');
+      return response.redirect('/vendor/profile');
+    }
   const businessName = String(request.body.business_name || '').trim();
   const submittedCategories = Array.isArray(request.body.service_categories)
     ? request.body.service_categories
@@ -1269,13 +1476,14 @@ app.post('/vendor/profile', requireVendorAuth, (request, response) => {
   const isPublished = request.body.is_published === 'on' ? 1 : 0;
   if (!businessName || businessName.length > 120 || !category
     || services.length > 1500 || description.length > 2000 || location.length > 160) {
+    await removeUploadedFiles(uploadedFiles);
     setNotice(request, 'Enter a business name, choose at least one service category, and keep services, description, and location within their character limits.');
     return response.redirect('/vendor/profile');
   }
   db.prepare(`
     INSERT INTO vendor_profiles
-      (vendor_account_id, business_name, category, service_categories, services, description, location, is_published, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      (vendor_account_id, business_name, category, service_categories, services, description, location, gallery_json, is_published, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(vendor_account_id) DO UPDATE SET
       business_name = excluded.business_name,
       category = excluded.category,
@@ -1283,13 +1491,23 @@ app.post('/vendor/profile', requireVendorAuth, (request, response) => {
       services = excluded.services,
       description = excluded.description,
       location = excluded.location,
+      gallery_json = excluded.gallery_json,
       is_published = excluded.is_published,
       updated_at = datetime('now')
-  `).run(request.session.vendorUser.id, businessName, category, serviceCategories, services, description, location, isPublished);
+  `).run(request.session.vendorUser.id, businessName, category, serviceCategories, services, description, location, JSON.stringify(gallery), isPublished);
+    gallerySaved = true;
+    const removedGallery = currentGallery.filter((filename) => !gallery.includes(filename));
+    await removeUploadedFiles(removedGallery.map((filename) => ({
+      path: path.join(vendorGalleryDirectory, filename),
+    })));
   setNotice(request, isPublished
-    ? 'Vendor profile saved and published in Find Vendors.'
-    : 'Vendor profile saved as a draft and hidden from Find Vendors.');
+      ? 'Vendor profile and gallery saved and published in Find Vendors.'
+      : 'Vendor profile and gallery saved as a draft and hidden from Find Vendors.');
   response.redirect('/vendor/profile');
+  } catch (error) {
+    if (!gallerySaved) await removeUploadedFiles(uploadedFiles);
+    next(error);
+  }
 });
 
 app.get('/vendor/:token/register', (request, response) => {
@@ -1336,7 +1554,7 @@ app.get('/auth', (request, response) => {
   return response.render('auth', {
     title: 'Account sign in',
     error: null,
-    authMode: 'login',
+    authMode: request.query.mode === 'register' ? 'register' : 'login',
     loggedOut: request.query.loggedOut === '1',
     audience: 'planner',
     oauthProviders: oauthProviders(),
@@ -1540,7 +1758,7 @@ app.post('/auth/register', async (request, response, next) => {
 
 app.post('/auth/login', async (request, response, next) => {
   const audience = request.body.audience === 'client' ? 'client' : 'planner';
-  if (audience === 'client') return response.redirect('/client/auth');
+  if (audience === 'client') return response.redirect('/client/auth?mode=login');
   const ip = request.ip || request.socket.remoteAddress || 'unknown';
   if (loginAttemptsExceeded(ip)) {
     return renderAuth(response, 'Too many sign-in attempts. Wait 15 minutes and try again.', 429, 'login', audience);
@@ -1749,7 +1967,7 @@ app.post('/clients/:id/invite', requireAuth, (request, response) => {
 });
 
 app.get('/client/invite/:token', (request, response) => {
-  return   response.redirect('/client/auth?loggedOut=1');
+  return response.redirect('/client/auth?mode=login');
 });
 
 app.post('/client/invite/:token', async (request, response, next) => {
@@ -1830,6 +2048,16 @@ app.get('/client/dashboard', requireClientAuth, (request, response) => {
     WHERE clients.account_user_id = ? AND client_messages.user_id = clients.user_id
     ORDER BY client_messages.created_at DESC, client_messages.id DESC
   `).all(request.currentUser.id);
+  const ticketHistory = db.prepare(`
+    SELECT registrations.qr_token, registrations.status, registrations.checked_in_at,
+      registrations.created_at, ticket_types.name AS ticket_name,
+      events.title AS event_title, events.event_date, events.venue
+    FROM registrations
+    JOIN ticket_types ON ticket_types.id = registrations.ticket_type_id
+    JOIN events ON events.id = registrations.event_id
+    WHERE registrations.account_user_id = ?
+    ORDER BY registrations.created_at DESC, registrations.id DESC
+  `).all(request.currentUser.id);
   const notifications = db.prepare(`
     SELECT * FROM client_notifications
     WHERE client_user_id = ?
@@ -1877,7 +2105,7 @@ app.get('/client/dashboard', requireClientAuth, (request, response) => {
       .reduce((total, payment) => total + Number(payment.amount), 0)
       + invoices.filter((invoice) => invoice.status !== 'paid')
         .reduce((total, invoice) => total + Number(invoice.amount), 0),
-    plannerMessages: messages.filter((message) => message.sender_role === 'planner').length,
+    unreadMessages: messages.filter((message) => message.sender_role === 'planner').length,
     unreadNotifications: notifications.filter((notification) => !notification.read_at).length,
   };
   return response.render('client-dashboard', {
@@ -1893,6 +2121,7 @@ app.get('/client/dashboard', requireClientAuth, (request, response) => {
     invoices,
     messages,
     emails,
+    ticketHistory,
     notifications,
     planners,
     vendorProfiles,
@@ -1901,6 +2130,7 @@ app.get('/client/dashboard', requireClientAuth, (request, response) => {
     summary,
     templates,
     supportEmail: process.env.SUPPORT_EMAIL || '',
+    platformRating: platformRatingFor(request.currentUser.id),
   });
 });
 
@@ -2025,6 +2255,9 @@ app.post('/client/requests', requireClientAuth, requestAttachmentUpload.array('a
     ));
     notifyClient(request.currentUser.id, planner.id, 'event_request_received',
       `Your request for "${title}" was sent to ${planner.name}.`, requestId);
+    notifyPlanner(planner.id, 'event_request_received',
+      `${request.currentUser.name} requested "${title}".`,
+      `/client-event-requests#request-${requestId}`, requestId);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
@@ -2062,6 +2295,7 @@ app.post('/client/requests/:requestId/update', requireClientAuth, async (request
   const venue = String(request.body.venue || '').trim();
   const details = String(request.body.details || '').trim();
   const servicesRequired = String(request.body.services_required || '').trim();
+  const serviceRequirements = String(request.body.service_requirements || '').trim();
   const specificRequirements = String(request.body.specific_requirements || '').trim();
   const expectedGuestsText = String(request.body.expected_guests || '').trim();
   const expectedGuests = expectedGuestsText ? Number(expectedGuestsText) : 0;
@@ -2070,7 +2304,7 @@ app.post('/client/requests/:requestId/update', requireClientAuth, async (request
   if (!title || title.length > 120 || !isEventType(eventType)
     || !isValidDate(desiredDate) || (desiredTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(desiredTime))
     || venue.length > 160 || details.length > 2000 || servicesRequired.length > 1000
-    || specificRequirements.length > 2000
+    || serviceRequirements.length > 2000 || specificRequirements.length > 2000
     || !Number.isSafeInteger(expectedGuests) || expectedGuests < 0 || expectedGuests > 100000
     || !Number.isFinite(budget) || budget < 0 || budget > 1000000000) {
     setNotice(request, 'Enter a valid event request, date, venue, details, and estimated budget.');
@@ -2086,12 +2320,12 @@ app.post('/client/requests/:requestId/update', requireClientAuth, async (request
     eventType,
     desiredDate,
     venue,
-    [details, specificRequirements].filter(Boolean).join('\n\n'),
+    [details, serviceRequirements, specificRequirements].filter(Boolean).join('\n\n'),
     budget,
     desiredTime,
     expectedGuests,
     servicesRequired,
-    JSON.stringify({ categoryRequirements: specificRequirements }),
+    JSON.stringify({ requirements: serviceRequirements, categoryRequirements: specificRequirements }),
     requestId,
     eventRequest.linked_client_id,
     eventRequest.user_id,
@@ -2114,6 +2348,9 @@ app.post('/client/requests/:requestId/update', requireClientAuth, async (request
   );
   notifyClient(request.currentUser.id, eventRequest.user_id, 'event_request_resubmitted',
     `Your revised request for "${title}" was sent to your planner.`, requestId);
+  notifyPlanner(eventRequest.user_id, 'event_request_resubmitted',
+    `${request.currentUser.name} updated and resubmitted "${title}".`,
+    `/client-event-requests#request-${requestId}`, requestId);
   setNotice(request, notificationSent
     ? 'Your updated request was sent to your planner.'
     : 'Your updated request was saved, but your planner email notification could not be delivered.');
@@ -2135,6 +2372,9 @@ app.post('/client/messages', requireClientAuth, async (request, response) => {
     INSERT INTO client_portal_messages (user_id, client_id, event_id, sender_role, message, delivery_status)
     VALUES (?, ?, ?, 'client', ?, 'received')
   `).run(client.user_id, client.id, eventId, message);
+  notifyPlanner(client.user_id, 'client_message',
+    `${client.name} sent a message${event ? ` about "${event.title}"` : ''}.`,
+    '/dashboard#messages', null, eventId);
   const notificationAttempted = client.planner_email ? await sendMail({
     to: client.planner_email,
     subject: `New Nodevents client message from ${client.name}`,
@@ -2216,6 +2456,9 @@ app.post('/client/vendor-bookings', requireClientAuth, async (request, response)
       (client_user_id, planner_user_id, client_id, event_id, vendor_profile_id, message)
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(request.currentUser.id, assignment.planner_id, assignment.client_id, eventId, profileId, message);
+  notifyPlanner(assignment.planner_id, 'vendor_booking_request',
+    `${request.currentUser.name} requested ${vendorProfile.business_name} for "${assignment.title}".`,
+    '/dashboard#bookings', null, eventId);
   const planner = db.prepare('SELECT email, name FROM users WHERE id = ?').get(assignment.planner_id);
   const notificationAttempted = planner?.email ? await sendMail({
     to: planner.email,
@@ -2296,7 +2539,7 @@ app.post('/client-requests/:requestId/decision', requireAuth, async (request, re
   const requestId = Number(request.params.requestId);
   const eventRequest = Number.isSafeInteger(requestId) && db.prepare(`
     SELECT event_requests.*, clients.name AS client_name, clients.email AS client_email,
-      accounts.email AS account_email, clients.id AS linked_client_id
+      accounts.id AS client_user_id, accounts.email AS account_email, clients.id AS linked_client_id
     FROM event_requests JOIN clients ON clients.id = event_requests.client_id
     LEFT JOIN users AS accounts ON accounts.id = clients.account_user_id
     WHERE event_requests.id = ? AND event_requests.user_id = ? AND event_requests.status = 'pending'
@@ -2388,20 +2631,71 @@ app.post('/client-requests/:requestId/decision', requireAuth, async (request, re
   const notificationType = decision === 'approve'
     ? 'event_request_approved'
     : decision === 'reject' ? 'event_request_rejected' : 'event_request_changes';
-  notifyClient(
-    eventRequest.client_user_id,
-    request.currentUser.id,
-    notificationType,
-    message,
-    requestId,
-    eventId,
-  );
+  if (eventRequest.client_user_id) {
+    notifyClient(
+      eventRequest.client_user_id,
+      request.currentUser.id,
+      notificationType,
+      message,
+      requestId,
+      eventId,
+    );
+  }
   setNotice(request, decision === 'approve'
     ? `Request approved and event created.${notificationSent ? '' : ' The decision was saved, but email could not be delivered.'}`
     : decision === 'reject'
       ? `Request rejected with a reason.${notificationSent ? '' : ' The decision was saved, but email could not be delivered.'}`
       : `Changes requested from the client.${notificationSent ? '' : ' The decision was saved, but email could not be delivered.'}`);
   return response.redirect(eventId ? `/events/${eventId}` : '/dashboard#client-event-requests');
+});
+
+app.post('/client-requests/:requestId/quote', requireAuth, async (request, response) => {
+  const requestId = Number(request.params.requestId);
+  const eventRequest = Number.isSafeInteger(requestId) ? db.prepare(`
+    SELECT event_requests.*, clients.id AS linked_client_id, clients.account_user_id AS client_user_id,
+      clients.email AS client_email, accounts.email AS account_email
+    FROM event_requests
+    JOIN clients ON clients.id = event_requests.client_id AND clients.user_id = event_requests.user_id
+    LEFT JOIN users AS accounts ON accounts.id = clients.account_user_id AND accounts.role = 'client'
+    WHERE event_requests.id = ? AND event_requests.user_id = ?
+      AND event_requests.status = 'pending'
+  `).get(requestId, request.currentUser.id) : null;
+  if (!eventRequest) return response.sendStatus(404);
+
+  const quoteAmount = Number(String(request.body.quote_amount || '').trim());
+  const quoteDetails = String(request.body.quote_details || '').trim();
+  if (!Number.isFinite(quoteAmount) || quoteAmount <= 0 || quoteAmount > 1000000000
+    || quoteDetails.length > 2000) {
+    setNotice(request, 'Enter a quotation greater than zero and keep its notes under 2,000 characters.');
+    return response.redirect('/dashboard#client-event-requests');
+  }
+  const updated = db.prepare(`
+    UPDATE event_requests
+    SET quote_amount = ?, quote_details = ?, quote_sent_at = datetime('now'), updated_at = datetime('now')
+    WHERE id = ? AND user_id = ? AND status = 'pending'
+  `).run(quoteAmount, quoteDetails, requestId, request.currentUser.id);
+  if (!updated.changes) return response.sendStatus(409);
+
+  const message = `Your planner sent a quotation for "${eventRequest.title}": KES ${quoteAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.${quoteDetails ? `\n\n${quoteDetails}` : ''}`;
+  const clientEmail = eventRequest.account_email || eventRequest.client_email;
+  const notificationSent = clientEmail
+    ? await sendMail({ to: clientEmail, subject: `Nodevents quotation: ${eventRequest.title}`, text: message })
+    : false;
+  db.prepare(`
+    INSERT INTO client_portal_messages (user_id, client_id, event_id, sender_role, message, delivery_status)
+    VALUES (?, ?, NULL, 'planner', ?, ?)
+  `).run(
+    request.currentUser.id,
+    eventRequest.linked_client_id,
+    message,
+    notificationSent ? 'sent' : 'failed',
+  );
+  if (eventRequest.client_user_id) {
+    notifyClient(eventRequest.client_user_id, request.currentUser.id, 'quotation_received',
+      message, requestId);
+  }
+  setNotice(request, `Quotation sent to ${eventRequest.client_name}.${notificationSent ? '' : ' It is available in the client dashboard; email delivery was not available.'}`);
+  return response.redirect('/dashboard#client-event-requests');
 });
 
 app.post('/client-vendor-bookings/:requestId/decision', requireAuth, async (request, response) => {
@@ -2532,6 +2826,10 @@ app.post('/clients/:id/conversation', requireAuth, async (request, response) => 
     INSERT INTO client_portal_messages (user_id, client_id, event_id, sender_role, message, delivery_status)
     VALUES (?, ?, ?, 'planner', ?, ?)
   `).run(request.currentUser.id, clientId, eventId, message, deliveryStatus);
+  if (client.account_user_id) {
+    notifyClient(client.account_user_id, request.currentUser.id, 'planner_message',
+      `Your planner sent you a message${event ? ` about "${event.title}"` : ''}.`, null, eventId);
+  }
   setNotice(request, deliveryStatus === 'sent'
     ? (mailConfigured ? 'Reply sent and saved to the event link.' : 'Reply saved to the event link; demo mode did not deliver an email.')
     : 'Reply saved to the event link, but the client email could not be delivered.');
@@ -2589,6 +2887,45 @@ app.post('/clients/:id/payments/:paymentId/status', requireAuth, (request, respo
   return response.redirect(`/clients/${clientId}`);
 });
 
+app.get('/planner/notifications', requireAuth, (request, response) => {
+  const notifications = db.prepare(`
+    SELECT id, notification_type, message, target_url, read_at, created_at
+    FROM planner_notifications
+    WHERE planner_user_id = ?
+    ORDER BY created_at DESC, id DESC
+    LIMIT 100
+  `).all(request.currentUser.id);
+  response.render('planner-notifications', { notifications });
+});
+
+app.post('/planner/notifications/:id/open', requireAuth, (request, response) => {
+  const notificationId = Number(request.params.id);
+  const notification = Number.isSafeInteger(notificationId) ? db.prepare(`
+    SELECT target_url FROM planner_notifications
+    WHERE id = ? AND planner_user_id = ?
+  `).get(notificationId, request.currentUser.id) : null;
+  if (!notification) return response.sendStatus(404);
+  db.prepare(`
+    UPDATE planner_notifications SET read_at = datetime('now')
+    WHERE id = ? AND planner_user_id = ? AND read_at IS NULL
+  `).run(notificationId, request.currentUser.id);
+  const targetUrl = notification.target_url;
+  return response.redirect(
+    typeof targetUrl === 'string' && targetUrl.startsWith('/')
+      && !targetUrl.startsWith('//') && !targetUrl.includes('\\')
+      ? targetUrl
+      : '/planner/notifications',
+  );
+});
+
+app.post('/planner/notifications/read', requireAuth, (request, response) => {
+  db.prepare(`
+    UPDATE planner_notifications SET read_at = datetime('now')
+    WHERE planner_user_id = ? AND read_at IS NULL
+  `).run(request.currentUser.id);
+  return response.redirect('/planner/notifications');
+});
+
 app.get('/dashboard', requireAuth, (request, response) => {
   const events = db.prepare(`
     SELECT events.*,
@@ -2629,26 +2966,27 @@ app.get('/dashboard', requireAuth, (request, response) => {
     WHERE booking_requests.planner_user_id = ? AND booking_requests.status = 'pending'
     ORDER BY booking_requests.created_at, booking_requests.id
   `).all(request.currentUser.id);
-  const plannerMessages = db.prepare(`
-    SELECT portal_messages.id, portal_messages.created_at, portal_messages.message,
-      clients.id AS client_id, clients.name AS client_name, events.title AS event_title,
-      'Portal' AS channel, portal_messages.delivery_status
-    FROM client_portal_messages AS portal_messages
-    JOIN clients ON clients.id = portal_messages.client_id AND clients.user_id = portal_messages.user_id
-    LEFT JOIN events ON events.id = portal_messages.event_id AND events.user_id = portal_messages.user_id
-    WHERE portal_messages.user_id = ? AND portal_messages.sender_role = 'client'
-    UNION ALL
-    SELECT email_messages.id, email_messages.created_at,
-      email_messages.subject || ': ' || email_messages.message AS message,
-      clients.id AS client_id, clients.name AS client_name, events.title AS event_title,
-      'Email' AS channel, email_messages.status AS delivery_status
-    FROM client_messages AS email_messages
-    JOIN clients ON clients.id = email_messages.client_id AND clients.user_id = email_messages.user_id
-    LEFT JOIN events ON events.id = email_messages.event_id AND events.user_id = email_messages.user_id
-    WHERE email_messages.user_id = ?
-    ORDER BY 2 DESC, 1 DESC
-    LIMIT 20
+  const portalMessages = db.prepare(`
+    SELECT client_portal_messages.client_id, clients.name AS client_name,
+      events.title AS event_title, client_portal_messages.message,
+      client_portal_messages.sender_role, client_portal_messages.created_at
+    FROM client_portal_messages
+    JOIN clients ON clients.id = client_portal_messages.client_id
+    LEFT JOIN events ON events.id = client_portal_messages.event_id AND events.user_id = clients.user_id
+    WHERE client_portal_messages.user_id = ? AND clients.user_id = ?
   `).all(request.currentUser.id, request.currentUser.id);
+  const legacyMessages = db.prepare(`
+    SELECT client_messages.client_id, clients.name AS client_name,
+      events.title AS event_title, client_messages.message,
+      'planner' AS sender_role, client_messages.created_at
+    FROM client_messages
+    JOIN clients ON clients.id = client_messages.client_id
+    LEFT JOIN events ON events.id = client_messages.event_id AND events.user_id = clients.user_id
+    WHERE client_messages.user_id = ? AND clients.user_id = ?
+  `).all(request.currentUser.id, request.currentUser.id);
+  const plannerMessages = [...portalMessages, ...legacyMessages]
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 12);
   const plannerFinance = db.prepare(`
     SELECT
       COALESCE((SELECT SUM(expenses.actual_amount) FROM expenses JOIN events ON events.id = expenses.event_id WHERE events.user_id = ?), 0) AS actual_expenses,
@@ -2665,8 +3003,86 @@ app.get('/dashboard', requireAuth, (request, response) => {
     bookingRequests,
     plannerMessages,
     plannerFinance,
+    platformRating: platformRatingFor(request.currentUser.id),
     templates,
     selectedEventType,
+  });
+});
+
+app.get('/client-event-requests', requireAuth, (request, response) => {
+  const clientRequests = db.prepare(`
+    SELECT event_requests.*, clients.name AS client_name, clients.organization AS client_organization,
+      (SELECT COUNT(*) FROM client_request_attachments WHERE request_id = event_requests.id) AS attachment_count
+    FROM event_requests JOIN clients ON clients.id = event_requests.client_id
+    WHERE event_requests.user_id = ? AND clients.user_id = event_requests.user_id
+      AND event_requests.status IN ('pending', 'changes_requested')
+    ORDER BY event_requests.created_at, event_requests.id
+  `).all(request.currentUser.id);
+  return response.render('planner-client-requests', {
+    user: request.currentUser,
+    clientRequests,
+    templates,
+  });
+});
+
+app.get('/my-events', requireAuth, (request, response) => {
+  const events = db.prepare(`
+    SELECT events.*, clients.name AS client_name,
+      (SELECT COUNT(*) FROM vendors WHERE vendors.event_id = events.id) AS vendor_count,
+      (SELECT COUNT(*) FROM vendors WHERE vendors.event_id = events.id AND vendors.status = 'pending') AS pending_count,
+      (SELECT COUNT(*) FROM vendors WHERE vendors.event_id = events.id AND vendors.status = 'confirmed') AS confirmed_count,
+      (SELECT COUNT(*) FROM tasks WHERE tasks.event_id = events.id) AS task_count,
+      (SELECT COALESCE(SUM(completed), 0) FROM tasks WHERE tasks.event_id = events.id) AS completed_task_count,
+      (SELECT COUNT(*) FROM guests WHERE guests.event_id = events.id) AS guest_count
+    FROM events LEFT JOIN clients ON clients.id = events.client_id AND clients.user_id = events.user_id
+    WHERE events.user_id = ?
+    ORDER BY events.event_date, events.id DESC
+  `).all(request.currentUser.id);
+  const today = new Date();
+  const todayOrdinal = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  const dashboardEvents = events.map((event) => {
+    const [year, month, day] = event.event_date.split('-').map(Number);
+    const daysUntil = Math.round((Date.UTC(year, month - 1, day) - todayOrdinal) / 86400000);
+    return { ...event, daysUntil, isPast: daysUntil < 0 };
+  });
+  return response.render('planner-my-events', {
+    user: request.currentUser,
+    events: dashboardEvents,
+    templates,
+  });
+});
+
+app.get('/analytics', requireAuth, (request, response) => {
+  const metrics = db.prepare(`
+    SELECT COUNT(DISTINCT events.id) AS event_count,
+      COUNT(DISTINCT CASE WHEN events.event_date >= date('now') THEN events.id END) AS upcoming_events,
+      (SELECT COUNT(*) FROM event_requests WHERE user_id = ? AND status IN ('pending', 'changes_requested')) AS pending_requests,
+      (SELECT COUNT(*) FROM registrations JOIN events ON events.id = registrations.event_id WHERE events.user_id = ? AND registrations.status = 'confirmed') AS confirmed_tickets,
+      (SELECT COALESCE(SUM(expenses.actual_amount), 0) FROM expenses JOIN events ON events.id = expenses.event_id WHERE events.user_id = ?) AS actual_expenses
+    FROM events WHERE events.user_id = ?
+  `).get(request.currentUser.id, request.currentUser.id, request.currentUser.id, request.currentUser.id);
+  return response.render('planner-insights', {
+    title: 'Planner analytics',
+    mode: 'analytics',
+    metrics,
+    events: [],
+  });
+});
+
+app.get('/reports', requireAuth, (request, response) => {
+  const events = db.prepare(`
+    SELECT events.id, events.title, events.event_date, events.budget_currency,
+      (SELECT COUNT(*) FROM registrations WHERE registrations.event_id = events.id AND status = 'confirmed') AS confirmed_tickets,
+      (SELECT COUNT(*) FROM guests WHERE guests.event_id = events.id) AS guest_records,
+      (SELECT COALESCE(SUM(actual_amount), 0) FROM expenses WHERE expenses.event_id = events.id) AS actual_expenses
+    FROM events WHERE events.user_id = ?
+    ORDER BY events.event_date DESC, events.id DESC
+  `).all(request.currentUser.id);
+  return response.render('planner-insights', {
+    title: 'Event reports',
+    mode: 'reports',
+    metrics: null,
+    events,
   });
 });
 
@@ -2830,6 +3246,15 @@ function renderPlannerEvent(request, response, eventId, toolPage = 'overview') {
   const clientLinkComments = db.prepare(`
     SELECT * FROM client_link_comments WHERE event_id = ? ORDER BY id
   `).all(eventId);
+  const linkedClient = event.client_id
+    ? db.prepare(`
+      SELECT clients.id, clients.name, clients.email,
+        accounts.email AS account_email, accounts.id AS account_user_id
+      FROM clients
+      LEFT JOIN users AS accounts ON accounts.id = clients.account_user_id
+      WHERE clients.id = ? AND clients.user_id = ?
+    `).get(event.client_id, event.user_id) || null
+    : null;
   response.render('event', {
     event,
     templates,
@@ -2847,6 +3272,7 @@ function renderPlannerEvent(request, response, eventId, toolPage = 'overview') {
     changes,
     clientLinkApprovals,
     clientLinkComments,
+    linkedClient,
     clientUrl: event.client_token ? clientPageUrl(event.client_token) : null,
     mapsUrl: event.venue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.venue)}` : null,
     mailConfigured,
@@ -2867,7 +3293,7 @@ app.get('/events/:id/:toolPage', requireAuth, (request, response) => {
   const tools = { budget: 'budget', guests: 'guests', catering: 'catering' };
   const toolPage = tools[request.params.toolPage];
   if (toolPage) return renderPlannerEvent(request, response, eventId, toolPage);
-  if (['logistics', 'tickets', 'event-day', 'reports'].includes(request.params.toolPage)) {
+  if (['logistics', 'registration', 'tickets', 'event-day', 'reports'].includes(request.params.toolPage)) {
     return renderOperationsModule(request, response, eventId, request.params.toolPage);
   }
   return response.sendStatus(404);
@@ -2943,7 +3369,7 @@ app.get('/register/:token', (request, response) => {
   if (!/^[a-f0-9]{64}$/.test(token)) return response.sendStatus(404);
   const event = db.prepare(`
     SELECT id, title, event_date, event_type, venue, venue_notes, budget_currency,
-      registration_token, custom_questions, registration_is_open
+      registration_token, custom_questions, registration_is_open, ticket_color, ticket_logo
     FROM events WHERE registration_token = ?
   `).get(token);
   if (!event) return response.sendStatus(404);
@@ -3073,11 +3499,15 @@ app.post('/register/:token', async (request, response, next) => {
     const status = Number(ticket.price) > 0 ? 'awaiting_payment' : 'confirmed';
     const result = db.prepare(`
       INSERT INTO registrations
-        (event_id, ticket_type_id, full_name, email, phone, qr_token, status, payment_method, payment_reference, custom_answers)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (event_id, ticket_type_id, account_user_id, full_name, email, phone, qr_token, status, payment_method, payment_reference, custom_answers)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       event.id,
       ticketTypeId,
+      request.currentUser?.role === 'client'
+        && request.currentUser.email.toLowerCase() === email
+        ? request.currentUser.id
+        : null,
       fullName,
       email,
       phone,
@@ -3167,7 +3597,8 @@ app.get('/tickets/:token', (request, response) => {
   const registration = db.prepare(`
     SELECT registrations.*, ticket_types.name AS ticket_name,
       payment_transactions.status AS mpesa_status,
-      events.id AS event_id, events.title AS event_title, events.event_date, events.venue
+      events.id AS event_id, events.title AS event_title, events.event_date, events.venue,
+      events.event_type, events.ticket_color, events.ticket_logo
     FROM registrations
     JOIN ticket_types ON ticket_types.id = registrations.ticket_type_id
     JOIN events ON events.id = registrations.event_id
@@ -3182,9 +3613,88 @@ app.get('/tickets/:token', (request, response) => {
       title: registration.event_title,
       event_date: registration.event_date,
       venue: registration.venue,
+      event_type: registration.event_type,
+      ticket_color: registration.ticket_color,
+      ticket_logo: registration.ticket_logo,
     },
     today: new Date().toISOString().slice(0, 10),
   });
+});
+
+app.get('/tickets/:token/logo', (request, response) => {
+  const token = String(request.params.token || '');
+  if (!/^[a-f0-9]{64}$/.test(token)) return response.sendStatus(404);
+  const event = db.prepare(`
+    SELECT events.ticket_logo FROM registrations
+    JOIN events ON events.id = registrations.event_id
+    WHERE registrations.qr_token = ?
+  `).get(token);
+  if (!event?.ticket_logo || !/^[a-f0-9-]+\.(?:jpg|jpeg|png|webp)$/.test(event.ticket_logo)) return response.sendStatus(404);
+  response.set('Cache-Control', 'private, max-age=3600');
+  return response.sendFile(path.join(ticketBrandingDirectory, event.ticket_logo));
+});
+
+app.get('/tickets/:token/download', async (request, response, next) => {
+  const token = String(request.params.token || '');
+  if (!/^[a-f0-9]{64}$/.test(token)) return response.sendStatus(404);
+  const registration = db.prepare(`
+    SELECT registrations.full_name, registrations.status, ticket_types.name AS ticket_name,
+      registrations.id AS registration_id,
+      events.title AS event_title, events.event_date, events.venue, events.event_type,
+      events.ticket_color, events.ticket_logo
+    FROM registrations
+    JOIN ticket_types ON ticket_types.id = registrations.ticket_type_id
+    JOIN events ON events.id = registrations.event_id
+    WHERE registrations.qr_token = ?
+  `).get(token);
+  if (!registration) return response.sendStatus(404);
+  if (registration.status !== 'confirmed') return response.status(410).send('This ticket is not valid for entry.');
+  try {
+    const qr = await QRCode.toBuffer(token, { type: 'png', width: 300, margin: 1 });
+    const color = /^#[0-9a-f]{6}$/i.test(registration.ticket_color || '') ? registration.ticket_color : '#343a35';
+    const document = new PDFDocument({ size: [420, 590], margin: 28 });
+    response.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': 'attachment; filename="nodevents-ticket.pdf"',
+      'Cache-Control': 'private, no-store',
+    });
+    document.pipe(response);
+    const eventLabel = registration.event_type === 'corporate'
+      ? 'CORPORATE ACCESS'
+      : registration.event_type === 'entertainment'
+        ? 'FESTIVAL PASS'
+        : registration.event_type === 'sports'
+          ? 'MATCHDAY PASS'
+          : 'EVENT TICKET';
+    document.roundedRect(20, 20, 380, 550, 18).fill('#ffffff');
+    document.rect(20, 20, 8, 550).fill(color);
+    document.roundedRect(28, 20, 372, 136, 16).fill('#252921');
+    document.rect(28, 136, 372, 20).fill('#252921');
+    document.fillColor('#fce6db').fontSize(10).text('NODEVENTS  /  EVENT ACCESS', 48, 42, { characterSpacing: 1.1 });
+    document.fillColor('#ffffff').fontSize(9).text(eventLabel, 48, 68);
+    document.fontSize(24).text(registration.event_title, 48, 88, { width: 280, height: 48, ellipsis: true });
+    if (registration.ticket_logo && /^[a-f0-9-]+\.(?:jpg|jpeg|png|webp)$/.test(registration.ticket_logo)) {
+      const logoPath = path.join(ticketBrandingDirectory, registration.ticket_logo);
+      if (fs.existsSync(logoPath)) document.image(logoPath, 320, 38, { fit: [55, 55] });
+    }
+    document.fillColor('#73766d').fontSize(9).text('ATTENDEE', 48, 184, { characterSpacing: .8 });
+    document.fillColor('#252921').fontSize(19).text(registration.full_name, 48, 200, { width: 320, ellipsis: true });
+    document.fillColor('#73766d').fontSize(9).text('TICKET TYPE', 48, 236, { characterSpacing: .8 });
+    document.fillColor('#252921').fontSize(13).text(registration.ticket_name, 48, 251, { width: 145 });
+    document.fillColor('#73766d').fontSize(9).text('TICKET ID', 225, 236, { characterSpacing: .8 });
+    document.fillColor('#252921').fontSize(13).text(`NV-${String(registration.registration_id).padStart(6, '0')}`, 225, 251);
+    document.fillColor('#73766d').fontSize(9).text('DATE', 48, 285, { characterSpacing: .8 });
+    document.fillColor('#252921').fontSize(12).text(new Date(`${registration.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'full' }), 48, 300, { width: 320 });
+    document.fillColor('#73766d').fontSize(9).text('VENUE', 48, 326, { characterSpacing: .8 });
+    document.fillColor('#252921').fontSize(12).text(registration.venue || 'Venue to be confirmed', 48, 341, { width: 320, height: 32, ellipsis: true });
+    document.save().dash(4, { space: 5 }).moveTo(38, 390).lineTo(390, 390).stroke('#c9c9c1').restore();
+    document.image(qr, 134, 402, { fit: [150, 150], align: 'center', valign: 'center' });
+    document.fillColor('#252921').fontSize(10).text('SCAN AT THE ENTRANCE', 48, 554, { width: 324, align: 'center', characterSpacing: .8 });
+    document.fillColor('#73766d').fontSize(8).text('Verified against the Nodevents event register · valid for one entry', 42, 568, { width: 336, align: 'center' });
+    document.end();
+  } catch (error) {
+    return next(error);
+  }
 });
 
 app.get('/tickets/:token/qr', async (request, response) => {
@@ -3254,19 +3764,20 @@ app.post('/events/:id/tickets/check-in', requireAuth, (request, response) => {
   const eventId = Number(request.params.id);
   const token = String(request.body.qr_token || '');
   if (!Number.isSafeInteger(eventId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
-  if (!/^[a-f0-9]{64}$/.test(token)) return response.status(400).json({ error: 'That ticket code is not valid.' });
+  if (!/^[a-f0-9]{64}$/.test(token)) return response.status(400).json({ status: 'invalid', error: 'Invalid: that ticket code is not valid.' });
   const registration = db.prepare(`
     SELECT id, full_name, status, checked_in_at FROM registrations
     WHERE event_id = ? AND qr_token = ?
   `).get(eventId, token);
-  if (!registration) return response.status(404).json({ error: 'That ticket does not belong to this event.' });
-  if (registration.status !== 'confirmed') return response.status(409).json({ error: 'This ticket is not confirmed for entry.' });
-  if (registration.checked_in_at) return response.status(409).json({ error: `${registration.full_name} has already checked in.` });
+  if (!registration) return response.status(404).json({ status: 'invalid', error: 'Invalid: that ticket does not belong to this event.' });
+  if (registration.status === 'cancelled') return response.status(409).json({ status: 'cancelled', error: 'Cancelled: this ticket is not valid for entry.' });
+  if (registration.status !== 'confirmed') return response.status(409).json({ status: 'invalid', error: 'Invalid: this ticket is not confirmed for entry.' });
+  if (registration.checked_in_at) return response.status(409).json({ status: 'already_used', error: `Already used: ${registration.full_name} has checked in.` });
   db.prepare("UPDATE registrations SET checked_in_at = datetime('now') WHERE id = ?").run(registration.id);
   const message = `${registration.full_name} checked in with a ticket.`;
   recordChange(eventId, message);
   emitEventUpdate(eventId, message);
-  return response.json({ message });
+  return response.json({ status: 'valid', message: `Valid: ${message}` });
 });
 
 function renderOperationsModule(request, response, eventId, module) {
@@ -3405,8 +3916,83 @@ function renderOperationsModule(request, response, eventId, module) {
     report,
     catering,
     customQuestions,
+    mapsRouteConfigured: Boolean(process.env.GOOGLE_MAPS_ROUTES_API_KEY),
   });
 }
+
+app.post('/events/:id/logistics/route-distance', requireAuth, async (request, response) => {
+  const eventId = Number(request.params.id);
+  if (!Number.isSafeInteger(eventId) || !eventForOwner(eventId, request.currentUser.id)) return response.sendStatus(404);
+  const origin = String(request.body.origin || '').trim();
+  const destination = String(request.body.destination || '').trim();
+  const jsonResponse = request.accepts('json');
+  const respondWithError = (status, message) => jsonResponse
+    ? response.status(status).json({ error: message })
+    : response.status(status).render('message', {
+      title: 'Driving distance unavailable',
+      message,
+      href: `/events/${eventId}/logistics`,
+      linkText: 'Return to logistics',
+    });
+  if (!origin || !destination || origin.length > 300 || destination.length > 300) {
+    return respondWithError(400, 'Enter an origin and destination of 300 characters or fewer.');
+  }
+  if (!process.env.GOOGLE_MAPS_ROUTES_API_KEY) {
+    return respondWithError(503, 'Driving-route lookup is not configured. Set GOOGLE_MAPS_ROUTES_API_KEY on the server and enable the Google Routes API.');
+  }
+
+  let upstream;
+  try {
+    upstream = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': process.env.GOOGLE_MAPS_ROUTES_API_KEY,
+        'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration',
+      },
+      body: JSON.stringify({
+        origin: { address: origin },
+        destination: { address: destination },
+        travelMode: 'DRIVE',
+        routingPreference: 'TRAFFIC_AWARE',
+        computeAlternativeRoutes: false,
+        languageCode: 'en-US',
+        units: 'METRIC',
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (error) {
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+      return respondWithError(504, 'Google Routes did not respond in time. Try again shortly.');
+    }
+    console.error('Google Routes API connection failed:', error);
+    return respondWithError(502, 'Google Routes could not be reached. Check the server connection and try again.');
+  }
+
+  let routeResponse;
+  try {
+    routeResponse = await upstream.json();
+  } catch (error) {
+    console.error('Google Routes API returned invalid JSON:', error);
+    return respondWithError(502, 'Google Routes returned an unreadable response. Try again later.');
+  }
+  if (!upstream.ok) {
+    console.error(`Google Routes API request failed with status ${upstream.status}.`);
+    return respondWithError(502, 'Google Routes could not calculate this trip. Check the addresses, API key, enabled API, and billing settings.');
+  }
+  const route = routeResponse.routes?.[0];
+  if (!route) return respondWithError(422, 'Google Routes could not find a driving route for those locations.');
+  const durationSeconds = Number.parseFloat(String(route.duration || '').replace(/s$/, ''));
+  if (!Number.isFinite(route.distanceMeters) || !Number.isFinite(durationSeconds)) {
+    console.error('Google Routes API response did not contain valid distance and duration fields.');
+    return respondWithError(502, 'Google Routes returned incomplete route data. Try again later.');
+  }
+  return response.json({
+    distanceMeters: route.distanceMeters,
+    durationSeconds,
+    mapsUrl: `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&travelmode=driving`,
+  });
+});
 
 app.post('/events/:id/logistics/zones', requireAuth, (request, response) => {
   const eventId = Number(request.params.id);
@@ -3564,19 +4150,53 @@ app.post('/events/:id/tickets/settings', requireAuth, (request, response) => {
   const questions = [...new Set(rawQuestions.map((question) => question.trim()).filter(Boolean))];
   if (questions.length > 5 || questions.some((question) => question.length > 120)) {
     setNotice(request, 'Use up to 5 registration questions, each no longer than 120 characters.');
-    return response.redirect(`/events/${eventId}/tickets`);
+    return response.redirect(`/events/${eventId}/registration`);
   }
   const registrationIsOpen = request.body.registration_is_open === 'on' ? 1 : 0;
   const hasTicketTypes = db.prepare('SELECT COUNT(*) AS count FROM ticket_types WHERE event_id = ?').get(eventId).count > 0;
   if (registrationIsOpen && !hasTicketTypes) {
     setNotice(request, 'Add at least one ticket category before opening registration.');
-    return response.redirect(`/events/${eventId}/tickets`);
+    return response.redirect(`/events/${eventId}/registration`);
   }
   db.prepare('UPDATE events SET custom_questions = ?, registration_is_open = ? WHERE id = ?')
     .run(JSON.stringify(questions), registrationIsOpen, eventId);
   recordChange(eventId, registrationIsOpen ? 'Public ticket registration was opened.' : 'Public ticket registration settings were updated.');
   setNotice(request, registrationIsOpen ? 'Registration form saved and opened.' : 'Registration settings saved; public registration is closed.');
-  response.redirect(`/events/${eventId}/tickets`);
+  response.redirect(`/events/${eventId}/registration`);
+});
+
+app.post('/events/:id/tickets/branding', requireAuth, ticketBrandingUpload.single('ticket_logo'), (request, response) => {
+  const eventId = Number(request.params.id);
+  const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.currentUser.id);
+  if (!event) {
+    if (request.file) fs.unlinkSync(request.file.path);
+    return response.sendStatus(404);
+  }
+  const color = String(request.body.ticket_color || '').trim();
+  if (!/^#[0-9a-f]{6}$/i.test(color)) {
+    if (request.file) fs.unlinkSync(request.file.path);
+    setNotice(request, 'Choose a valid six-digit hex ticket color.');
+    return response.redirect(`/events/${eventId}/tickets`);
+  }
+  const filename = request.file ? path.basename(request.file.filename) : event.ticket_logo;
+  db.prepare('UPDATE events SET ticket_color = ?, ticket_logo = ? WHERE id = ? AND user_id = ?')
+    .run(color, filename, eventId, request.currentUser.id);
+  if (request.file && event.ticket_logo) {
+    try {
+      fs.unlinkSync(path.join(ticketBrandingDirectory, event.ticket_logo));
+    } catch (error) {
+      if (error.code !== 'ENOENT') console.error('Could not remove replaced ticket logo:', error);
+    }
+  }
+  setNotice(request, 'Ticket design saved.');
+  return response.redirect(`/events/${eventId}/tickets`);
+});
+
+app.get('/events/:id/tickets/logo', requireAuth, (request, response) => {
+  const eventId = Number(request.params.id);
+  const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.currentUser.id);
+  if (!event || !event.ticket_logo || !/^[a-f0-9-]+\.(?:jpg|jpeg|png|webp)$/.test(event.ticket_logo)) return response.sendStatus(404);
+  return response.sendFile(path.join(ticketBrandingDirectory, event.ticket_logo));
 });
 
 app.post('/events/:id/tickets/types', requireAuth, (request, response) => {
@@ -4404,6 +5024,61 @@ app.post('/events/:id/client-link/revoke', requireAuth, (request, response) => {
   response.redirect(`/events/${eventId}`);
 });
 
+app.post('/events/:id/client-link/send', requireAuth, async (request, response) => {
+  const eventId = Number(request.params.id);
+  const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.currentUser.id);
+  if (!event) return response.sendStatus(404);
+  const client = event.client_id && db.prepare(`
+    SELECT clients.id, clients.name, clients.email, clients.account_user_id,
+      accounts.email AS account_email
+    FROM clients
+    LEFT JOIN users AS accounts ON accounts.id = clients.account_user_id
+    WHERE clients.id = ? AND clients.user_id = ?
+  `).get(event.client_id, request.currentUser.id);
+  if (!client?.account_user_id) {
+    setNotice(request, 'Link this event to a client account before sending a progress link.');
+    return response.redirect(`/events/${eventId}`);
+  }
+  if (!event.client_token || !clientLinkEvent(event.client_token)) {
+    setNotice(request, 'Create or renew a current private client link before sending it.');
+    return response.redirect(`/events/${eventId}`);
+  }
+  const progressUrl = clientPageUrl(event.client_token);
+  const message = `Your progress link for "${event.title}" is ready. Use the private link below to view the event schedule, vendor updates, RSVP progress, and approvals.`;
+  const recipient = client.account_email || client.email;
+  const emailSent = mailConfigured && recipient
+    ? await sendMail({
+      to: recipient,
+      subject: `Your Nodevents progress link: ${event.title}`,
+      text: `${message}\n\n${progressUrl}${event.client_pin_hash ? '\n\nYour planner has enabled PIN protection and will share the PIN with you separately.' : ''}`,
+    })
+    : false;
+  db.prepare(`
+    INSERT INTO client_portal_messages
+      (user_id, client_id, event_id, sender_role, message, progress_url, delivery_status)
+    VALUES (?, ?, ?, 'planner', ?, ?, ?)
+  `).run(
+    request.currentUser.id,
+    client.id,
+    eventId,
+    message,
+    progressUrl,
+    emailSent ? 'sent' : 'failed',
+  );
+  notifyClient(
+    client.account_user_id,
+    request.currentUser.id,
+    'event_progress_link',
+    `Your planner shared a progress link for "${event.title}". Open it from Messages.`,
+    null,
+    eventId,
+  );
+  setNotice(request, emailSent
+    ? `Progress link sent to ${client.name} in Nodevents and by email.`
+    : `Progress link saved in ${client.name}'s Nodevents messages. Email delivery was unavailable.`);
+  return response.redirect(`/events/${eventId}`);
+});
+
 app.get('/events/:id/timeline.pdf', requireAuth, (request, response) => {
   const eventId = Number(request.params.id);
   const event = Number.isSafeInteger(eventId) && eventForOwner(eventId, request.session.user.id);
@@ -4750,6 +5425,9 @@ app.post('/client/:token/approvals', async (request, response) => {
   recordChange(event.id, decision === 'approved'
     ? `Client approval received for ${description}.`
     : `The client requested changes to ${description}.`);
+  notifyPlanner(event.user_id, decision === 'approved' ? 'client_approval' : 'client_changes_requested',
+    `${approvedBy} ${decision === 'approved' ? 'approved' : 'requested changes to'} ${description} for "${event.title}".`,
+    `/events/${event.id}`, null, event.id);
   emitEventUpdate(event.id, decision === 'approved'
     ? 'A client approval was recorded.'
     : 'The client requested a change.');
@@ -4788,6 +5466,8 @@ app.post('/client/:token/comments', async (request, response) => {
     VALUES (?, 'client', ?, ?, ?)
   `).run(event.id, senderName, message, notificationSent ? 'sent' : 'failed');
   recordChange(event.id, `${senderName} left a message in the client event portal.`);
+  notifyPlanner(event.user_id, 'client_comment',
+    `${senderName} commented on "${event.title}".`, `/events/${event.id}`, null, event.id);
   emitEventUpdate(event.id, 'A client left a comment.');
   if (mailConfigured && planner?.email && !notificationAttempted) {
     console.warn(`Client comment for event ${event.id} was saved, but the planner email notification was not delivered.`);
@@ -4823,6 +5503,10 @@ app.post('/events/:id/client-comments', requireAuth, async (request, response) =
     VALUES (?, 'planner', ?, ?, ?)
   `).run(eventId, request.currentUser.name, message, notificationSent ? 'sent' : 'failed');
   recordChange(eventId, 'The planner replied to a client event portal message.');
+  if (client?.account_user_id) {
+    notifyClient(client.account_user_id, request.currentUser.id, 'planner_message',
+      `Your planner replied about "${event.title}".`, null, eventId);
+  }
   emitEventUpdate(eventId, 'The planner replied to a client comment.');
   setNotice(request, notificationSent
     ? 'Your reply was saved and emailed to the client.'
@@ -4908,15 +5592,34 @@ app.get('/invoices/:id/download', requireAuth, (request, response) => {
   return response.download(path.join(uploadDirectory, invoice.filename), invoice.original_name);
 });
 
-app.use((error, _request, response, _next) => {
+app.use((error, request, response, _next) => {
   if (error instanceof multer.MulterError) {
-    const message = error.code === 'LIMIT_FILE_SIZE'
-      ? 'Invoice files must be 8 MB or smaller.'
-      : 'Only one invoice file can be uploaded at a time.';
-    return response.status(400).render('message', { title: 'Upload could not be completed', message, href: 'back', linkText: 'Return' });
+    const galleryUpload = request.path === '/vendor/profile';
+    const message = galleryUpload
+      ? error.code === 'LIMIT_FILE_SIZE'
+        ? 'Vendor gallery images must be 5 MB or smaller.'
+        : 'Upload up to six vendor gallery images per save.'
+      : error.code === 'LIMIT_FILE_SIZE'
+        ? 'Invoice files must be 8 MB or smaller.'
+        : 'Only one invoice file can be uploaded at a time.';
+    return response.status(400).render('message', {
+      title: 'Upload could not be completed',
+      message,
+      href: galleryUpload ? '/vendor/profile' : 'back',
+      linkText: 'Return',
+      vendorView: galleryUpload,
+    });
   }
-  if (error.message === 'Upload a PDF, JPG, or PNG invoice.') {
-    return response.status(400).render('message', { title: 'Unsupported file', message: error.message, href: 'back', linkText: 'Return' });
+  if (error.message === 'Upload a PDF, JPG, or PNG invoice.'
+    || error.message === 'Upload up to six JPG, PNG, or WebP gallery images, 5 MB each.') {
+    const galleryUpload = request.path === '/vendor/profile';
+    return response.status(400).render('message', {
+      title: 'Unsupported file',
+      message: error.message,
+      href: galleryUpload ? '/vendor/profile' : 'back',
+      linkText: 'Return',
+      vendorView: galleryUpload,
+    });
   }
   console.error(error);
   return response.status(500).render('message', {

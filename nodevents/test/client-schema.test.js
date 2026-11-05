@@ -48,6 +48,15 @@ test('client records retain their history when a linked event is removed', (cont
     INSERT INTO events (user_id, client_id, title, event_date) VALUES (?, ?, 'Wedding', '2027-06-01')
   `).run(userId, clientId).lastInsertRowid);
   assert.equal(db.prepare('SELECT client_show_budget FROM events WHERE id = ?').get(eventId).client_show_budget, 1);
+  const requestColumns = db.prepare('PRAGMA table_info(event_requests)').all().map((column) => column.name);
+  assert.ok(requestColumns.includes('quote_amount'));
+  assert.ok(requestColumns.includes('quote_details'));
+  assert.ok(requestColumns.includes('quote_sent_at'));
+  const vendorProfileColumns = db.prepare('PRAGMA table_info(vendor_profiles)').all().map((column) => column.name);
+  const portalMessageColumns = db.prepare('PRAGMA table_info(client_portal_messages)').all().map((column) => column.name);
+  assert.ok(vendorProfileColumns.includes('gallery_json'));
+  assert.ok(portalMessageColumns.includes('progress_url'));
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM platform_ratings').get().count, 0);
   db.prepare(`
     INSERT INTO client_link_approvals (event_id, approval_type, approved_by, decision, fingerprint)
     VALUES (?, 'timeline', 'Client', 'approved', 'timeline-v1'),
@@ -67,8 +76,9 @@ test('client records retain their history when a linked event is removed', (cont
     VALUES (?, ?, ?, 'Deposit', 100, 'Cash', 'RCPT-1', 'paid')
   `).run(userId, clientId, eventId);
   db.prepare(`
-    INSERT INTO client_portal_messages (user_id, client_id, event_id, sender_role, message, delivery_status)
-    VALUES (?, ?, ?, 'planner', 'Welcome to the portal.', 'sent')
+    INSERT INTO client_portal_messages
+      (user_id, client_id, event_id, sender_role, message, progress_url, delivery_status)
+    VALUES (?, ?, ?, 'planner', 'Welcome to the portal.', 'https://nodevents.test/client/example', 'sent')
   `).run(userId, clientId, eventId);
 
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM clients WHERE user_id = ?').get(userId).count, 2);

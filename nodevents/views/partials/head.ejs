@@ -21,7 +21,7 @@
   <link rel="stylesheet" href="/auth-fit.css">
   <% if (title.endsWith('· Client event portal')) { %><link rel="stylesheet" href="/client-portal.css"><% } %>
   <% if (title === 'Client portal' || title === 'Client sign in' || title === 'Create client account') { %><link rel="stylesheet" href="/client-account.css"><% } %>
-  <% if (title === 'Planner dashboard' || title === 'Client portal' || title.endsWith('· Client event portal') || title === 'Clients' || title.endsWith('· Client Profile') || title === 'My vendor events' || title === 'Vendor directory') { %><link rel="stylesheet" href="/dashboard.css"><% } %>
+  <% if (title === 'Planner dashboard' || title === 'My Events' || title === 'Client portal' || title.endsWith('· Client event portal') || title === 'Clients' || title.endsWith('· Client Profile') || title === 'My vendor events' || title === 'Vendor directory') { %><link rel="stylesheet" href="/dashboard.css"><% } %>
   <% if (title === 'Admin dashboard') { %><link rel="stylesheet" href="/admin.css"><% } %>
   <% if (typeof event !== 'undefined' || title.startsWith('RSVP ·')) { %><link rel="stylesheet" href="/planning.css"><% } %>
   <link rel="stylesheet" href="/navigation.css">
@@ -34,6 +34,8 @@
   const isPublicVendorProfile = title.endsWith('· Vendor profile');
   const showPlannerSidebar = Boolean(user && user.role === 'planner' && (
     title === 'Planner dashboard'
+    || title === 'My Events'
+    || title === 'Planner notifications'
     || title === 'Clients'
     || title.endsWith('· Client Profile')
     || title === 'Vendor directory'
@@ -70,8 +72,9 @@
     <% } else if (!isAuthPage && user) { %>
       <nav class="bar-nav" aria-label="Main navigation">
         <a class="<%= title === 'How Nodevents works' ? 'active' : '' %>" href="/learn">Learning</a>
-        <a href="/dashboard">My Events</a>
-        <a href="/dashboard#client-event-requests">Client Event Requests</a>
+        <a href="/my-events">My Events</a>
+        <a href="/client-event-requests">Client Event Requests</a>
+        <a class="planner-notification-link" href="/planner/notifications">Notifications<% if (plannerUnreadNotifications > 0) { %><span class="notification-badge"><%= plannerUnreadNotifications > 99 ? '99+' : plannerUnreadNotifications %></span><% } %></a>
         <a class="<%= selectedTool === 'clients' ? 'active' : '' %>" href="/clients">Clients</a>
         <a href="/dashboard#new">New event</a>
         <% if (isAdmin) { %><a href="/admin">Admin</a><% } %>
@@ -82,6 +85,8 @@
         <a href="/browse-events">Browse Events</a>
         <a href="/vendors">Find Vendors</a>
         <a href="/auth">Planner sign in</a>
+        <a href="/vendor/login">Vendor sign in</a>
+        <a href="/vendor/login?mode=register">Vendor account</a>
         <a href="/client/auth?mode=login">Client sign in</a>
         <a href="/client/auth?mode=register">Create client account</a>
       </nav>
@@ -122,9 +127,11 @@
         <a class="<%= title === 'How Nodevents works' ? 'active' : '' %>" href="/learn">Learning</a>
         <a class="<%= title === 'Browse Events' ? 'active' : '' %>" href="/browse-events">Browse Events</a>
         <a class="<%= isVendorDiscovery ? 'active' : '' %>" href="/vendors">Find Vendors</a>
-        <a class="<%= title === 'Planner dashboard' ? 'active' : '' %>" href="<%= user ? '/dashboard' : vendorUser ? '/vendor/dashboard' : '/auth' %>"><%= vendorUser && !user ? 'My Vendor Events' : 'My Events' %></a>
+        <a class="<%= title === 'Planner dashboard' ? 'active' : '' %>" href="<%= user ? '/dashboard' : vendorUser ? '/vendor/dashboard' : '/auth' %>"><%= vendorUser && !user ? 'My Vendor Events' : 'Overview' %></a>
         <% if (user && user.role === 'planner') { %>
-          <a href="/dashboard#client-event-requests">Client Event Requests</a>
+          <a href="/client-event-requests">Client Event Requests</a>
+          <a class="<%= title === 'My Events' ? 'active' : '' %>" href="/my-events">My Events</a>
+          <a class="<%= title === 'Planner notifications' ? 'active' : '' %>" href="/planner/notifications">Notifications<% if (plannerUnreadNotifications > 0) { %><span class="notification-badge"><%= plannerUnreadNotifications > 99 ? '99+' : plannerUnreadNotifications %></span><% } %></a>
           <a class="<%= selectedTool === 'clients' ? 'active' : '' %>" href="/clients">Clients</a>
         <% } %>
         <span class="side-nav-divider" role="presentation"></span>
@@ -133,9 +140,10 @@
         <a class="<%= selectedTool === 'catering' ? 'active' : '' %>" href="<%= plannerToolHref('catering') %>">Catering Management</a>
         <a class="<%= selectedTool === 'budget' ? 'active' : '' %>" href="<%= plannerToolHref('budget') %>">Budget Planner</a>
         <a class="<%= selectedTool === 'logistics' ? 'active' : '' %>" href="<%= plannerToolHref('logistics') %>">Event Logistics</a>
-        <a class="<%= selectedTool === 'tickets' ? 'active' : '' %>" href="<%= plannerToolHref('tickets') %>">Registration & Tickets</a>
+        <a class="<%= selectedTool === 'registration' ? 'active' : '' %>" href="<%= plannerToolHref('registration') %>">Event Registration</a>
+        <a class="<%= selectedTool === 'tickets' ? 'active' : '' %>" href="<%= plannerToolHref('tickets') %>">Tickets</a>
         <a class="<%= selectedTool === 'event-day' ? 'active' : '' %>" href="<%= plannerToolHref('event-day') %>">Event-day Operations</a>
-        <a class="<%= selectedTool === 'reports' ? 'active' : '' %>" href="<%= plannerToolHref('reports') %>">Reports & Analytics</a>
+        <% if (user && user.role === 'planner') { %><a href="/analytics">Analytics</a><a href="/reports">Reports</a><% } %>
         <span class="side-nav-divider" role="presentation"></span>
         <% if (vendorUser) { %><a href="/vendor/profile">Vendor Profile</a><% } %>
         <% if (user) { %><a href="/plans">Plans and payments</a><% } else if (!vendorView) { %><a href="/plans">Plans and payments</a><% } %>
@@ -161,6 +169,7 @@
         <a href="/client/dashboard#payments">Payments and Invoices</a>
         <a href="/client/dashboard#messages">Messages</a>
         <a href="/client/dashboard#notifications">Notifications</a>
+        <a href="/client/dashboard#my-tickets">My Tickets</a>
         <a href="/client/dashboard#profile">My Profile</a>
       </nav>
     </aside>
