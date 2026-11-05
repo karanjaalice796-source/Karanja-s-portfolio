@@ -1,15 +1,17 @@
 <%- include('partials/head', { title, vendorView: true }) %>
 <section class="auth-container">
+  <a class="auth-brand" href="/" aria-label="Nodevents home"><span class="auth-brand-mark">N</span><span>Nodevents</span></a>
   <p class="eyebrow">Nodevents vendor portal</p>
-  <h1 class="auth-heading"><%= mode === 'register' ? 'Create vendor account' : 'Vendor sign in' %></h1>
+  <h1 class="auth-heading"><%= mode === 'register' ? 'Create vendor account' : 'Welcome back' %></h1>
   <p class="auth-intro"><%= mode === 'register'
     ? (vendor
       ? `Create an account for the invitation to ${vendor.name}. Your invited email will be your sign-in email.`
-      : 'Create an account using the personal invitation link and invited email address from your planner.')
-    : 'Sign in to view all event invitations linked to your vendor account.' %></p>
+      : 'Create an account to publish your services and receive event invitations from planners.')
+    : 'Log in to view your event invitations and manage your services.' %></p>
+  <%- include('partials/auth-role-switch', { activeRole: 'vendor', authMode: mode }) %>
   <% if (error) { %><p class="error" role="alert"><%= error %></p><% } %>
   <div class="auth-tabs" role="tablist" aria-label="Vendor account options">
-    <button class="auth-tab" id="vendor-login-tab" type="button" role="tab" aria-controls="vendor-login-panel" aria-selected="<%= mode === 'login' %>" tabindex="<%= mode === 'login' ? 0 : -1 %>" data-auth-tab="login">Sign in</button>
+    <button class="auth-tab" id="vendor-login-tab" type="button" role="tab" aria-controls="vendor-login-panel" aria-selected="<%= mode === 'login' %>" tabindex="<%= mode === 'login' ? 0 : -1 %>" data-auth-tab="login">Log in</button>
     <button class="auth-tab" id="vendor-register-tab" type="button" role="tab" aria-controls="vendor-register-panel" aria-selected="<%= mode === 'register' %>" tabindex="<%= mode === 'register' ? 0 : -1 %>" data-auth-tab="register">Create account</button>
   </div>
   <div id="vendor-login-panel" role="tabpanel" aria-labelledby="vendor-login-tab" data-auth-panel="login" <%= mode === 'register' ? 'hidden' : '' %>>
@@ -23,7 +25,7 @@
           <button class="password-toggle" type="button" data-password-toggle aria-label="Show password" aria-pressed="false">Show</button>
         </span>
       </label>
-      <button class="login-button" type="submit">Sign in</button>
+      <button class="login-button" type="submit" data-auth-submit data-loading-label="Logging in...">Log in</button>
     </form>
     <p class="auth-recovery-link"><a href="/vendor/forgot">Forgot password?</a></p>
   </div>
@@ -34,20 +36,43 @@
           <input class="auth-input" type="email" name="email" autocomplete="email" maxlength="160" value="<%= vendor.email %>" required>
         </label>
       <% } else { %>
-        <label class="auth-field">Personal invitation link
-          <input class="auth-input" type="url" name="invitation_link" autocomplete="url" maxlength="2048" placeholder="Paste the link from your planner" required>
+        <label class="auth-field">Your name
+          <input class="auth-input" name="name" autocomplete="name" maxlength="80" placeholder="Your name" required>
+        </label>
+        <label class="auth-field">Email
+          <input class="auth-input" type="email" name="email" autocomplete="email" maxlength="160" placeholder="E-mail" required>
         </label>
       <% } %>
-      <label class="auth-field">Create password <small>(8 characters or more)</small>
+      <label class="auth-field"><%= vendor ? 'Create password' : 'Password' %> <small>(8 characters or more)</small>
         <span class="password-field auth-password-field">
           <input class="auth-input" type="password" name="password" autocomplete="new-password" minlength="8" maxlength="128" data-password-input required>
           <button class="password-toggle" type="button" data-password-toggle aria-label="Show password" aria-pressed="false">Show</button>
         </span>
       </label>
-      <button class="login-button" type="submit">Create account</button>
+      <button class="login-button secondary-login-button" type="submit" data-auth-submit data-loading-label="Creating account...">Create account</button>
     </form>
-    <p class="vendor-auth-footer">Use the personal invitation link and invited email address from your planner.</p>
+    <% if (vendor) { %>
+      <p class="vendor-auth-footer">This account will connect to the vendor invitation from your planner.</p>
+    <% } else { %>
+      <details class="vendor-invitation-option">
+        <summary>Have a personal invitation link?</summary>
+        <form class="auth-form" method="post" action="/vendor/register">
+          <label class="auth-field">Personal invitation link
+            <input class="auth-input" type="url" name="invitation_link" autocomplete="url" maxlength="2048" placeholder="Paste the link from your planner" required>
+          </label>
+          <label class="auth-field">Invited email
+            <input class="auth-input" type="email" name="email" autocomplete="email" maxlength="160" placeholder="Email from your invitation" required>
+          </label>
+          <label class="auth-field">Create password
+            <span class="password-field auth-password-field">
+              <input class="auth-input" type="password" name="password" autocomplete="new-password" minlength="8" maxlength="128" data-password-input required>
+              <button class="password-toggle" type="button" data-password-toggle aria-label="Show password" aria-pressed="false">Show</button>
+            </span>
+          </label>
+          <button class="login-button secondary-login-button" type="submit">Connect invitation</button>
+        </form>
+      </details>
+    <% } %>
   </div>
-  <p class="vendor-auth-footer"><a href="/auth">Planner sign in</a></p>
 </section>
 <%- include('partials/foot') %>

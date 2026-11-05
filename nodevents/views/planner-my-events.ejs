@@ -1,0 +1,119 @@
+<%- include('partials/head', { title: 'My Events' }) %>
+<%
+  const tones = {
+    wedding: 'coral', birthday: 'saffron', graduation: 'teal', corporate: 'plum',
+    'baby-family': 'saffron', religious: 'plum', entertainment: 'coral', education: 'teal',
+    sports: 'teal', 'private-gathering': 'sand', community: 'plum',
+    'business-promotion': 'saffron', other: 'sand',
+  };
+  const upcomingEvents = events.filter((item) => !item.isPast);
+  const pastEvents = events.filter((item) => item.isPast);
+  const totalVendors = events.reduce((total, item) => total + Number(item.vendor_count), 0);
+  const pendingVendors = events.reduce((total, item) => total + Number(item.pending_count), 0);
+%>
+<div class="dash">
+  <section class="d-hero events-hero" id="overview">
+    <div>
+      <p class="eyebrow">Planner workspace</p>
+      <h1>My Events</h1>
+      <p class="d-sub">Your event dashboard at a glance. Open any event to keep plans, vendors and schedules moving.</p>
+    </div>
+    <a class="button primary" href="/dashboard#new">＋ Create event</a>
+  </section>
+
+  <ul class="d-stats events-stats" aria-label="My event summary">
+    <li class="d-stat tone-coral">
+      <span class="d-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path></svg></span>
+      <strong><%= events.length %></strong><span>Total events</span>
+    </li>
+    <li class="d-stat tone-teal">
+      <span class="d-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
+      <strong><%= upcomingEvents.length %></strong><span>Upcoming</span>
+    </li>
+    <li class="d-stat tone-saffron">
+      <span class="d-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"></circle><path d="M3 20v-1a6 6 0 0 1 12 0v1M16 5a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 5v1"></path></svg></span>
+      <strong><%= totalVendors %></strong><span>Vendors across events</span>
+    </li>
+    <li class="d-stat tone-plum">
+      <span class="d-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"></path><circle cx="12" cy="12" r="10"></circle></svg></span>
+      <strong><%= pendingVendors %></strong><span>Awaiting vendor replies</span>
+    </li>
+  </ul>
+
+  <section class="events-dashboard-section" aria-labelledby="upcoming-events-heading">
+    <div class="events-section-heading">
+      <div>
+        <p class="eyebrow">Your planning overview</p>
+        <h2 id="upcoming-events-heading">Upcoming events</h2>
+      </div>
+      <span class="events-count"><%= upcomingEvents.length %> event<%= upcomingEvents.length === 1 ? '' : 's' %></span>
+    </div>
+
+    <% if (upcomingEvents.length) { %>
+      <div class="d-list events-dashboard-grid">
+        <% upcomingEvents.forEach((event) => {
+          const date = new Date(`${event.event_date}T12:00:00`);
+          const tone = tones[event.event_type] || 'sand';
+          const tasksDone = event.task_count ? Math.round(Number(event.completed_task_count) / Number(event.task_count) * 100) : 0;
+          const vendorReplies = event.vendor_count ? Math.round((Number(event.confirmed_count) / Number(event.vendor_count)) * 100) : 0;
+          const when = event.daysUntil === 0 ? 'Today' : event.daysUntil === 1 ? 'Tomorrow' : `In ${event.daysUntil} days`;
+        %>
+          <article class="d-card event-dashboard-card tone-<%= tone %>">
+            <time class="d-date" datetime="<%= event.event_date %>">
+              <span><%= date.toLocaleDateString(undefined, { month: 'short' }) %></span>
+              <strong><%= date.getDate() %></strong>
+            </time>
+            <div class="event-dashboard-card-content">
+              <div class="d-top">
+                <span class="d-chip"><%= templates[event.event_type]?.label || 'Event' %></span>
+                <span class="d-when <%= event.daysUntil <= 7 ? 'soon' : '' %>"><%= when %></span>
+              </div>
+              <h3><a href="/events/<%= event.id %>"><%= event.title %></a></h3>
+              <p class="d-meta"><%= date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) %></p>
+              <p class="events-venue"><%= event.venue || 'Venue to be confirmed' %></p>
+              <% if (event.client_name) { %><p class="events-client">Client: <strong><%= event.client_name %></strong></p><% } %>
+              <div class="events-progress-list">
+                <div>
+                  <div class="d-bar-label"><span>Vendor confirmations</span><strong><%= event.confirmed_count %> / <%= event.vendor_count %></strong></div>
+                  <div class="meter" role="progressbar" aria-label="<%= event.title %> vendor confirmations" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= vendorReplies %>"><span style="width:<%= vendorReplies %>%"></span></div>
+                </div>
+                <div>
+                  <div class="d-bar-label"><span>Planning tasks</span><strong><%= event.completed_task_count %> / <%= event.task_count %></strong></div>
+                  <div class="meter pending-meter" role="progressbar" aria-label="<%= event.title %> tasks completed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= tasksDone %>"><span style="width:<%= tasksDone %>%"></span></div>
+                </div>
+              </div>
+              <nav class="events-card-actions" aria-label="Manage <%= event.title %>">
+                <a class="events-primary-action" href="/events/<%= event.id %>">Open event</a>
+                <a href="/events/<%= event.id %>/logistics">Logistics</a>
+                <a href="/events/<%= event.id %>/budget">Budget</a>
+                <a href="/events/<%= event.id %>/reports">Reports</a>
+              </nav>
+            </div>
+          </article>
+        <% }) %>
+      </div>
+    <% } else { %>
+      <section class="d-empty events-empty">
+        <div class="d-art" aria-hidden="true"><span></span><span></span><span></span></div>
+        <h2>No upcoming events yet</h2>
+        <p>Approved client requests and new events you create will show up here.</p>
+        <a class="button primary" href="/dashboard#new">Create your first event</a>
+      </section>
+    <% } %>
+  </section>
+
+  <% if (pastEvents.length) { %>
+    <details class="d-past events-past">
+      <summary>Past events <span class="events-count"><%= pastEvents.length %></span></summary>
+      <ul class="plain">
+        <% pastEvents.forEach((event) => { %>
+          <li>
+            <div><a href="/events/<%= event.id %>"><strong><%= event.title %></strong></a><span class="muted"><%= new Date(`${event.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'medium' }) %> · <%= event.venue || 'Venue not set' %></span></div>
+            <a href="/events/<%= event.id %>/reports">View report</a>
+          </li>
+        <% }) %>
+      </ul>
+    </details>
+  <% } %>
+</div>
+<%- include('partials/foot') %>

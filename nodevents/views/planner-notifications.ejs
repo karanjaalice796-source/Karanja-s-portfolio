@@ -1,0 +1,33 @@
+<%- include('partials/head', { title: 'Planner notifications' }) %>
+<section class="panel">
+  <div class="notification-heading">
+    <div>
+      <p class="eyebrow">Planner workspace</p>
+      <h1>Notifications</h1>
+      <p class="muted">Client requests, messages, booking requests, and event updates.</p>
+    </div>
+    <% if (plannerUnreadNotifications > 0) { %>
+      <form method="post" action="/planner/notifications/read">
+        <button type="submit">Mark all as read</button>
+      </form>
+    <% } %>
+  </div>
+  <% if (notifications.length) { %>
+    <ol class="planner-notification-list">
+      <% notifications.forEach((notification) => { %>
+        <li class="<%= notification.read_at ? 'is-read' : 'is-unread' %>">
+          <div>
+            <p><%= notification.message %></p>
+            <time class="muted"><%= new Date(`${notification.created_at.replace(' ', 'T')}Z`).toLocaleString() %></time>
+          </div>
+          <form method="post" action="/planner/notifications/<%= notification.id %>/open">
+            <button type="submit"><%= notification.read_at ? 'Open' : 'View' %></button>
+          </form>
+        </li>
+      <% }) %>
+    </ol>
+  <% } else { %>
+    <p class="muted">You’re all caught up. New client activity will appear here.</p>
+  <% } %>
+</section>
+<%- include('partials/foot') %>

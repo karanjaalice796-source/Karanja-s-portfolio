@@ -1,0 +1,45 @@
+<%- include('partials/head', { title, activeTool }) %>
+<section class="panel">
+  <p class="eyebrow">Planner workspace</p>
+  <h1>Clients</h1>
+  <p class="muted">Manage client contact details, event requests, service bookings, messages, and payment records. Clients use their own accounts to follow requests and approved event progress.</p>
+  <p><strong><%= clients.length %></strong> client<%= clients.length === 1 ? '' : 's' %></p>
+</section>
+
+<details class="panel">
+  <summary><strong>＋ Add a client</strong></summary>
+  <form method="post" action="/clients" class="form-grid">
+    <label>Name<input name="name" maxlength="120" autocomplete="name" required></label>
+    <label>Email<input name="email" type="email" maxlength="254" autocomplete="email"></label>
+    <label>Phone<input name="phone" type="tel" maxlength="40" autocomplete="tel"></label>
+    <label>Organization<input name="organization" maxlength="120"></label>
+    <label class="wide-field">Notes<textarea name="notes" maxlength="2000" rows="3"></textarea></label>
+    <button class="primary" type="submit">Add client</button>
+  </form>
+</details>
+
+<section class="panel">
+  <h2>Your clients</h2>
+  <% if (clients.length) { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Client</th><th>Contact</th><th>Events</th><th>Open requests</th><th>Recorded payments</th><th></th></tr></thead>
+        <tbody>
+          <% clients.forEach((client) => { %>
+            <tr>
+              <td><strong><a href="/clients/<%= client.id %>"><%= client.name %></a></strong><% if (client.organization) { %><br><span class="muted"><%= client.organization %></span><% } %></td>
+              <td><%= client.email || '—' %><% if (client.phone) { %><br><span class="muted"><%= client.phone %></span><% } %></td>
+              <td><%= client.event_count %></td>
+              <td><%= client.pending_request_count %></td>
+              <td>KES <%= Number(client.paid_total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+              <td><a class="button" href="/clients/<%= client.id %>">Open profile</a></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } else { %>
+    <p class="muted">No clients yet. Add one to start recording requests and planning history.</p>
+  <% } %>
+</section>
+<%- include('partials/foot') %>

@@ -1,0 +1,33 @@
+<section class="panel platform-rating" id="nodevents-rating">
+  <p class="eyebrow">Community feedback</p>
+  <h2>Rate Nodevents</h2>
+  <% if (platformRating.count) { %>
+    <p class="platform-rating-summary">
+      <strong><%= platformRating.average.toFixed(1) %> / 5</strong>
+      <span class="rating-stars" aria-label="<%= platformRating.average.toFixed(1) %> out of 5 stars"><%= '★'.repeat(Math.round(platformRating.average)) %></span>
+      <span class="muted">from <%= platformRating.count %> rating<%= platformRating.count === 1 ? '' : 's' %></span>
+    </p>
+  <% } else { %>
+    <p class="muted">No ratings yet. Share a quick assessment of your Nodevents experience.</p>
+  <% } %>
+  <% if (user) { %>
+    <form method="post" action="/platform-rating" class="platform-rating-form">
+      <input type="hidden" name="return_to" value="<%= returnTo %>">
+      <fieldset>
+        <legend><%= platformRating.ownRating ? `Your rating: ${platformRating.ownRating} out of 5` : 'Your rating' %></legend>
+        <div class="rating-options">
+          <% for (let stars = 1; stars <= 5; stars += 1) { %>
+            <label title="<%= stars %> star<%= stars === 1 ? '' : 's' %>">
+              <input type="radio" name="rating" value="<%= stars %>" <%= platformRating.ownRating === stars ? 'checked' : '' %> required>
+              <span aria-hidden="true">★</span>
+              <span class="sr-only"><%= stars %> star<%= stars === 1 ? '' : 's' %></span>
+            </label>
+          <% } %>
+        </div>
+      </fieldset>
+      <button class="primary" type="submit"><%= platformRating.ownRating ? 'Update my rating' : 'Submit rating' %></button>
+    </form>
+  <% } else { %>
+    <p class="muted"><a href="/auth">Planner sign in</a> or <a href="/client/auth?mode=login">client sign in</a> to rate the platform.</p>
+  <% } %>
+</section>

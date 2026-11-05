@@ -1,0 +1,52 @@
+<%- include('partials/head', { title: 'Client Event Requests' }) %>
+<section class="panel">
+  <p class="eyebrow">Planner workspace</p>
+  <h1>Client Event Requests</h1>
+  <p class="muted">Review incoming requests here. Approved events are managed separately in My Events.</p>
+  <% if (clientRequests.length) { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Client and request</th><th>Preferred date</th><th>Estimated budget</th><th>Status</th><th>Review actions</th></tr></thead>
+        <tbody><% clientRequests.forEach((item) => { %>
+          <tr id="request-<%= item.id %>">
+            <td><strong><%= item.title %></strong><br><span class="muted"><%= item.client_name %><%= item.client_organization ? ` · ${item.client_organization}` : '' %></span><br><span class="muted"><%= templates[item.event_type]?.label || 'Other' %><%= item.venue ? ` · ${item.venue}` : '' %></span><% if (item.details) { %><br><span><%= item.details %></span><% } %></td>
+            <td><%= item.desired_date || 'To be confirmed' %></td>
+            <td>KES <%= Number(item.estimated_budget).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+            <td><%= item.status.replace('_', ' ') %><% if (item.decision_reason) { %><br><span class="muted"><%= item.decision_reason %></span><% } %></td>
+            <td>
+              <% if (item.status === 'pending') { %>
+                <form method="post" action="/client-requests/<%= item.id %>/decision" class="form-grid">
+                  <input type="hidden" name="decision" value="approve">
+                  <label>Event date<input type="date" name="event_date" value="<%= item.desired_date %>" required></label>
+                  <button class="primary" type="submit">Approve and create event</button>
+                </form>
+                <details><summary><%= item.quote_sent_at ? 'Update quotation' : 'Send quotation' %></summary>
+                  <form method="post" action="/client-requests/<%= item.id %>/quote" class="form-grid">
+                    <label>Quotation amount (KES)<input type="number" name="quote_amount" min="0.01" max="1000000000" step="0.01" value="<%= item.quote_amount || '' %>" required></label>
+                    <label class="wide-field">Quotation details<textarea name="quote_details" maxlength="2000" rows="3"><%= item.quote_details || '' %></textarea></label>
+                    <button type="submit">Send quotation to client</button>
+                  </form>
+                </details>
+                <details><summary>Reject request</summary>
+                  <form method="post" action="/client-requests/<%= item.id %>/decision">
+                    <input type="hidden" name="decision" value="reject">
+                    <label>Reason<textarea name="reason" maxlength="2000" rows="2" required></textarea></label>
+                    <button type="submit">Reject with reason</button>
+                  </form>
+                </details>
+                <details><summary>Request changes</summary>
+                  <form method="post" action="/client-requests/<%= item.id %>/decision">
+                    <input type="hidden" name="decision" value="request_changes">
+                    <label>What should the client change?<textarea name="reason" maxlength="2000" rows="2" required></textarea></label>
+                    <button type="submit">Ask for changes</button>
+                  </form>
+                </details>
+              <% } else { %><span class="muted">Waiting for the client to update and resubmit.</span><% } %>
+            </td>
+          </tr>
+        <% }) %></tbody>
+      </table>
+    </div>
+  <% } else { %><p class="muted">No event requests are waiting for review.</p><% } %>
+</section>
+<%- include('partials/foot') %>

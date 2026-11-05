@@ -1,0 +1,26 @@
+<%- include('partials/head', { title }) %>
+<section class="panel">
+  <p class="eyebrow">Planner workspace</p>
+  <h1><%= title %></h1>
+  <% if (mode === 'analytics') { %>
+    <p class="muted">Workspace-wide activity summary. Event-specific reports remain separate.</p>
+    <div class="operations-metrics">
+      <div><strong><%= metrics.event_count %></strong><span>Events</span></div>
+      <div><strong><%= metrics.upcoming_events %></strong><span>Upcoming events</span></div>
+      <div><strong><%= metrics.pending_requests %></strong><span>Requests awaiting review</span></div>
+      <div><strong><%= metrics.confirmed_tickets %></strong><span>Confirmed tickets</span></div>
+      <div><strong>KES <%= Number(metrics.actual_expenses).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></strong><span>Recorded expenses</span></div>
+    </div>
+  <% } else { %>
+    <p class="muted">Choose an event to view its detailed attendance, feedback, and finance report.</p>
+    <% if (events.length) { %>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Event</th><th>Date</th><th>Confirmed tickets</th><th>Guest records</th><th>Actual expenses</th><th></th></tr></thead>
+        <tbody><% events.forEach((event) => { %>
+          <tr><td><strong><%= event.title %></strong></td><td><%= event.event_date %></td><td><%= event.confirmed_tickets %></td><td><%= event.guest_records %></td><td><%= event.budget_currency %> <%= Number(event.actual_expenses).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td><td><a href="/events/<%= event.id %>/reports">Open report</a></td></tr>
+        <% }) %></tbody>
+      </table></div>
+    <% } else { %><p class="muted">Create an event before reports are available.</p><% } %>
+  <% } %>
+</section>
+<%- include('partials/foot') %>

@@ -1,0 +1,288 @@
+<%- include('partials/head', { title, activeTool }) %>
+<%
+  const money = (amount, currency = 'KES') => `${currency} ${Number(amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const statusLabel = (status) => String(status || '').replaceAll('_', ' ');
+%>
+<div class="client-dashboard" data-client-dashboard>
+  <section class="client-hero" id="overview">
+    <div>
+      <p class="eyebrow">Client dashboard</p>
+      <h1>Welcome, <%= user.name %></h1>
+      <p class="intro">Your event requests, plans and conversations with your planners.</p>
+    </div>
+    <a class="button primary" href="#request-event">＋ Request an event</a>
+  </section>
+
+  <section class="client-metrics" aria-label="Client account overview">
+    <a class="client-metric" href="#requests"><span>Event requests</span><strong><%= summary.requests %></strong></a>
+    <a class="client-metric" href="#requests"><span>Awaiting approval</span><strong><%= summary.awaiting %></strong></a>
+    <a class="client-metric" href="#my-events"><span>Approved events</span><strong><%= summary.approvedEvents %></strong></a>
+    <a class="client-metric" href="#my-events"><span>Upcoming events</span><strong><%= summary.upcomingEvents %></strong></a>
+    <a class="client-metric" href="#payments"><span>Outstanding payments</span><strong><%= money(summary.outstandingPayments) %></strong></a>
+    <a class="client-metric" href="#messages"><span>Planner messages</span><strong><%= summary.unreadMessages %></strong></a>
+  </section>
+
+  <section class="panel" id="my-tickets">
+    <h2>My tickets</h2>
+    <p class="muted">Ticket history includes tickets issued while signed in to this client account.</p>
+    <% if (ticketHistory.length) { %>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Event</th><th>Ticket</th><th>Date</th><th>Status</th><th></th></tr></thead>
+        <tbody><% ticketHistory.forEach((ticket) => { %>
+          <tr>
+            <td><strong><%= ticket.event_title %></strong><% if (ticket.venue) { %><br><span class="muted"><%= ticket.venue %></span><% } %></td>
+            <td><%= ticket.ticket_name %></td><td><%= ticket.event_date %></td>
+            <td><%= ticket.checked_in_at ? 'Used' : ticket.status.replace('_', ' ') %></td>
+            <td><a href="/tickets/<%= ticket.qr_token %>">View ticket</a><% if (ticket.status === 'confirmed') { %> · <a href="/tickets/<%= ticket.qr_token %>/download">Download PDF</a><% } %></td>
+          </tr>
+        <% }) %></tbody>
+      </table></div>
+    <% } else { %><p class="muted">Tickets purchased while signed in to this account will appear here.</p><% } %>
+  </section>
+
+  <section class="panel" id="request-event">
+    <p class="eyebrow">Start planning</p>
+    <h2>Request an event</h2>
+    <% if (planners.length) { %>
+      <form class="client-request-form" method="post" action="/client/requests" enctype="multipart/form-data" data-event-request-form>
+        <label>Choose a planner
+          <select name="planner_id" required>
+            <option value="">Select a planner</option>
+            <% planners.forEach((planner) => { %><option value="<%= planner.id %>"><%= planner.name %> · <%= planner.event_count %> events planned</option><% }) %>
+          </select>
+        </label>
+        <label>Event name<input name="title" maxlength="120" placeholder="e.g. Maya's wedding" required></label>
+        <label>Event category
+          <select name="event_type" data-event-category required>
+            <% Object.entries(templates).forEach(([key, template]) => { %><option value="<%= key %>"><%= template.label %></option><% }) %>
+          </select>
+        </label>
+        <label>Preferred date<input type="date" name="desired_date" required></label>
+        <label>Preferred time<input type="time" name="desired_time"></label>
+        <label>Venue or preferred location<input name="venue" maxlength="160" placeholder="Venue, town or area"></label>
+        <label>Expected number of guests<input type="number" name="expected_guests" min="0" max="100000" step="1" value="0" required></label>
+        <label>Estimated budget (KES)<input type="number" name="estimated_budget" min="0" max="1000000000" step="0.01" value="0" required></label>
+        <fieldset class="client-services">
+          <legend>Services you need</legend>
+          <label><input type="checkbox" name="services_required" value="Venue"> Venue</label>
+          <label><input type="checkbox" name="services_required" value="Catering"> Catering</label>
+          <label><input type="checkbox" name="services_required" value="Photography"> Photography</label>
+          <label><input type="checkbox" name="services_required" value="Decorations"> Decorations</label>
+          <label><input type="checkbox" name="services_required" value="Entertainment"> Entertainment</label>
+          <label><input type="checkbox" name="services_required" value="Transport"> Transport</label>
+          <label><input type="checkbox" name="services_required" value="Sound and lighting"> Sound and lighting</label>
+          <label><input type="checkbox" name="services_required" value="Marketing and branding"> Marketing and branding</label>
+        </fieldset>
+        <p class="client-category-hint" data-category-hint role="status">Choose an event type to see planning prompts.</p>
+        <label class="wide-field client-specific" data-client-specific="wedding" hidden>Wedding style, ceremony and reception requirements
+          <textarea name="specific_requirements" maxlength="2000" rows="3" placeholder="Ceremony format, traditions, reception style, bridal party needs" disabled></textarea>
+        </label>
+        <label class="wide-field client-specific" data-client-specific="business-promotion" hidden>Marketing and branding requirements
+          <textarea name="specific_requirements" maxlength="2000" rows="3" placeholder="Campaign goals, target audience, brand assets, product demonstrations, marketing channels" disabled></textarea>
+        </label>
+        <label class="wide-field client-specific" data-client-specific="corporate" hidden>Business event requirements
+          <textarea name="specific_requirements" maxlength="2000" rows="3" placeholder="Agenda, presentations, audience, branding and accessibility" disabled></textarea>
+        </label>
+        <label class="wide-field">Event-specific requirements<textarea name="service_requirements" maxlength="2000" rows="3" placeholder="Tell us what services or arrangements you need"></textarea></label>
+        <label class="wide-field">Special instructions<textarea name="details" maxlength="2000" rows="4" placeholder="Your preferences, accessibility requirements, or other important details"></textarea></label>
+        <label class="wide-field">Inspiration or reference files <small>Up to 5 JPG, PNG, WebP or PDF files; 5 MB each.</small>
+          <input type="file" name="attachments" accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf" multiple>
+        </label>
+        <button class="primary" type="submit">Send event request</button>
+      </form>
+    <% } else { %>
+      <p class="muted">There are no planners available yet. Check back later or contact Nodevents support.</p>
+    <% } %>
+  </section>
+
+  <section class="panel" id="requests">
+    <div class="section-heading"><div><h2>Client Event Requests</h2><p class="muted">Track planner decisions and update a request when changes are requested.</p></div></div>
+    <% if (requests.length) { %>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Request</th><th>Planner</th><th>Date / time</th><th>Guests</th><th>Budget</th><th>Quotation</th><th>Status</th></tr></thead>
+          <tbody><% requests.forEach((item) => { %>
+            <tr>
+              <td><strong><%= item.title %></strong><br><span class="muted"><%= templates[item.event_type]?.label || 'Other' %><%= item.venue ? ` · ${item.venue}` : '' %></span>
+                <% if (item.services_required) { %><br><span class="muted">Services: <%= item.services_required %></span><% } %>
+                <% if (item.details) { %><br><span><%= item.details %></span><% } %>
+                <% const attachments = requestAttachments.filter((attachment) => attachment.request_id === item.id); %>
+                <% if (attachments.length) { %><br><span>Attachments: <% attachments.forEach((attachment, index) => { %><% if (index) { %> · <% } %><a href="/client/requests/<%= item.id %>/attachments/<%= attachment.id %>"><%= attachment.original_name %></a><% }) %></span><% } %>
+              </td>
+              <td><%= item.planner_name %></td>
+              <td><%= item.desired_date || 'To be confirmed' %><%= item.desired_time ? ` · ${item.desired_time}` : '' %></td>
+              <td><%= item.expected_guests || '—' %></td>
+              <td><%= money(item.estimated_budget) %></td>
+              <td><% if (item.quote_amount) { %><strong><%= money(item.quote_amount) %></strong><% if (item.quote_details) { %><br><span class="muted"><%= item.quote_details %></span><% } %><br><span class="muted">Received <%= item.quote_sent_at %></span><% } else { %><span class="muted">Not sent yet</span><% } %></td>
+              <td><strong><%= statusLabel(item.status) %></strong>
+                <% if (item.decision_reason) { %><br><span class="muted"><%= item.decision_reason %></span><% } %>
+                <% if (item.linked_event_title) { %><br><a href="#my-events"><%= item.linked_event_title %></a><% } %>
+              </td>
+            </tr>
+          <% }) %></tbody>
+        </table>
+      </div>
+      <% requests.filter((item) => item.status === 'changes_requested').forEach((item) => { %>
+        <details class="client-resubmit">
+          <summary>Update “<%= item.title %>” and resubmit</summary>
+          <form class="client-request-form" method="post" action="/client/requests/<%= item.id %>/update">
+            <label>Event name<input name="title" maxlength="120" value="<%= item.title %>" required></label>
+            <label>Event category<select name="event_type" required><% Object.entries(templates).forEach(([key, template]) => { %><option value="<%= key %>" <%= item.event_type === key ? 'selected' : '' %>><%= template.label %></option><% }) %></select></label>
+            <label>Preferred date<input type="date" name="desired_date" value="<%= item.desired_date %>" required></label>
+            <label>Preferred time<input type="time" name="desired_time" value="<%= item.desired_time %>"></label>
+            <label>Venue<input name="venue" maxlength="160" value="<%= item.venue %>"></label>
+            <label>Expected guests<input type="number" name="expected_guests" min="0" max="100000" value="<%= item.expected_guests %>" required></label>
+            <label>Estimated budget (KES)<input type="number" name="estimated_budget" min="0" max="1000000000" step="0.01" value="<%= item.estimated_budget %>" required></label>
+            <label class="wide-field">Services required<input name="services_required" maxlength="1000" value="<%= item.services_required %>"></label>
+            <label class="wide-field">Service details<textarea name="service_requirements" maxlength="2000" rows="3"><%= item.service_answers ? JSON.parse(item.service_answers).requirements || '' : '' %></textarea></label>
+            <label class="wide-field">Event-specific requirements<textarea name="specific_requirements" maxlength="2000" rows="3"><%= item.service_answers ? JSON.parse(item.service_answers).categoryRequirements || '' : '' %></textarea></label>
+            <label class="wide-field">Special instructions<textarea name="details" maxlength="2000" rows="3"><%= item.details %></textarea></label>
+            <button class="primary" type="submit">Resubmit request</button>
+          </form>
+        </details>
+      <% }) %>
+    <% } else { %><p class="muted">You have not requested an event yet.</p><% } %>
+  </section>
+
+  <section class="panel" id="my-events">
+    <h2>My events</h2>
+    <% if (events.length) { %>
+      <div class="client-event-grid">
+        <% events.forEach((event) => {
+          const progress = event.task_count ? Math.round(Number(event.completed_task_count) / Number(event.task_count) * 100) : 0;
+          const eventTasks = schedules.filter((item) => item.event_id === event.id);
+          const eventBookings = bookings.filter((item) => item.event_id === event.id);
+        %>
+          <article class="client-event-card">
+            <p class="eyebrow"><%= templates[event.event_type]?.label || 'Event' %> · <%= statusLabel(event.status || 'approved') %></p>
+            <h3><%= event.title %></h3>
+            <p><strong><%= event.event_date %></strong><%= event.venue ? ` · ${event.venue}` : '' %></p>
+            <p>Planner: <%= clients.find((client) => client.id === event.client_id)?.planner_name || 'Assigned planner' %></p>
+            <p><%= event.completed_task_count %> of <%= event.task_count %> tasks complete · <%= event.confirmed_vendor_count %> of <%= event.vendor_count %> services confirmed</p>
+            <progress max="100" value="<%= progress %>"><%= progress %>%</progress><span><%= progress %>% planning progress</span>
+            <h4>Schedule</h4>
+            <% if (eventTasks.length) { %><ul><% eventTasks.forEach((task) => { %><li><time><%= task.start_time %></time> · <%= task.title %></li><% }) %></ul><% } else { %><p class="muted">No schedule items yet.</p><% } %>
+            <h4>Booked services</h4>
+            <% if (eventBookings.length) { %><ul><% eventBookings.forEach((booking) => { %><li><%= booking.vendor_name %> · <%= statusLabel(booking.status) %></li><% }) %></ul><% } else { %><p class="muted">No services booked yet.</p><% } %>
+            <a href="#messages">Message your planner</a>
+          </article>
+        <% }) %>
+      </div>
+    <% } else { %><p class="muted">Approved events will appear here. You can still submit a request to a planner.</p><% } %>
+  </section>
+
+  <section class="panel" id="find-planner">
+    <h2>Find a planner</h2>
+    <p class="muted">Choose a planner when submitting an event request. Your contact details are shared with that planner only after you submit a request.</p>
+    <% if (planners.length) { %>
+      <div class="client-event-grid">
+        <% planners.forEach((planner) => { %><article class="client-event-card">
+          <p class="eyebrow">Event planner</p><h3><%= planner.name %></h3>
+          <p><%= planner.event_count %> event<%= Number(planner.event_count) === 1 ? '' : 's' %> managed on Nodevents</p>
+          <a class="button" href="#request-event">Request an event</a>
+        </article><% }) %>
+      </div>
+    <% } else { %><p class="muted">No planners are currently available.</p><% } %>
+  </section>
+
+  <section class="panel" id="book-vendor">
+    <h2>Book a vendor</h2>
+    <p class="muted">Booking requests go to your event planner for review. A confirmed booking is added to the event plan.</p>
+    <% if (events.length && vendorProfiles.length) { %>
+      <form class="client-request-form" method="post" action="/client/vendor-bookings">
+        <label>Event<select name="event_id" required><% events.forEach((event) => { %><option value="<%= event.id %>"><%= event.title %> · <%= event.event_date %></option><% }) %></select></label>
+        <label>Vendor<select name="vendor_profile_id" required><option value="">Choose a vendor</option><% vendorProfiles.forEach((vendor) => { %><option value="<%= vendor.id %>"><%= vendor.business_name %> · <%= vendor.category %><%= vendor.location ? ` · ${vendor.location}` : '' %></option><% }) %></select></label>
+        <label class="wide-field">Booking details<textarea name="message" maxlength="2000" rows="3" placeholder="What service and date are you asking about?"></textarea></label>
+        <button class="primary" type="submit">Request vendor booking</button>
+      </form>
+    <% } else if (!events.length) { %><p class="muted">An approved event is needed before requesting a vendor booking.</p><% } else { %><p class="muted">There are no published vendor profiles yet.</p><% } %>
+  </section>
+
+  <section class="panel" id="bookings">
+    <h2>My bookings</h2>
+    <% if (vendorBookingRequests.length || bookings.length) { %>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Event</th><th>Vendor / service</th><th>Planner</th><th>Status</th><th>Details</th></tr></thead>
+        <tbody>
+          <% vendorBookingRequests.forEach((booking) => { %><tr><td><%= booking.event_title %><br><span class="muted"><%= booking.event_date %></span></td><td><%= booking.business_name %> · <%= booking.category %></td><td><%= booking.planner_name %></td><td><%= statusLabel(booking.status) %></td><td><%= booking.decision_reason || booking.message || 'Awaiting planner review' %></td></tr><% }) %>
+          <% bookings.forEach((booking) => { %><tr><td><%= booking.event_title %><br><span class="muted"><%= booking.event_date %></span></td><td><%= booking.vendor_name %> · <%= booking.category %></td><td><%= clients.find((client) => client.id === booking.client_id)?.planner_name || 'Planner' %></td><td><%= statusLabel(booking.status) %></td><td><%= booking.services || 'Service details to be confirmed' %></td></tr><% }) %>
+        </tbody>
+      </table></div>
+    <% } else { %><p class="muted">No vendor bookings yet.</p><% } %>
+  </section>
+
+  <section class="panel" id="payments">
+    <h2>Payments and invoices</h2>
+    <p class="muted">This section displays planner-recorded client payments and event vendor invoices. Client event invoices are not currently payable through M-Pesa; attendee ticket payments are separate.</p>
+    <% if (invoices.length) { %><div class="table-wrap"><table>
+      <thead><tr><th>Invoice</th><th>Event</th><th>Vendor</th><th>Amount</th><th>Status</th><th>File</th></tr></thead>
+      <tbody><% invoices.forEach((invoice) => { %><tr>
+        <td><%= invoice.original_name %><br><span class="muted"><%= invoice.created_at %></span></td>
+        <td><%= invoice.event_title %></td><td><%= invoice.vendor_name %></td>
+        <td><%= money(invoice.amount, invoice.budget_currency) %></td><td><%= statusLabel(invoice.status) %></td>
+        <td><a href="/client/invoices/<%= invoice.id %>">Download</a></td>
+      </tr><% }) %></tbody>
+    </table></div><% } %>
+    <% if (payments.length) { %><div class="table-wrap"><table>
+      <thead><tr><th>Date</th><th>Event</th><th>Description</th><th>Amount</th><th>Method / reference</th><th>Status</th></tr></thead>
+      <tbody><% payments.forEach((payment) => { %><tr>
+        <td><%= payment.created_at %></td><td><%= payment.event_title || 'Event removed' %></td>
+        <td><%= payment.description %></td><td><%= money(payment.amount) %></td>
+        <td><%= payment.payment_method %> · <%= payment.reference || 'No reference' %></td>
+        <td><%= payment.status === 'paid' ? 'Recorded as received' : 'Outstanding' %></td>
+      </tr><% }) %></tbody>
+    </table></div><% } %>
+    <% if (!invoices.length && !payments.length) { %><p class="muted">No invoices or payment records yet.</p><% } %>
+  </section>
+
+  <section class="panel" id="messages">
+    <h2>Messages</h2>
+    <% if (messages.length) { %><ol class="timeline">
+      <% messages.slice().reverse().forEach((message) => { %><li>
+        <div class="when"><strong><%= message.sender_role === 'client' ? 'You' : message.planner_name %></strong><br><span class="muted"><%= message.created_at %></span></div>
+        <div><strong><%= message.event_title || 'General message' %></strong><p><%= message.message %></p>
+          <% if (message.progress_url) { %><p><a class="button primary" href="<%= message.progress_url %>">Open event progress</a></p><% } %>
+          <span class="muted"><%= message.delivery_status === 'failed' ? 'Saved in Nodevents; email delivery failed or is not configured' : message.sender_role === 'client' ? 'Sent to your planner' : 'Message from your planner' %></span></div>
+      </li><% }) %>
+    </ol><% } else { %><p class="muted">No messages yet.</p><% } %>
+    <% clients.forEach((client) => { %><form class="client-request-form client-message-form" method="post" action="/client/messages">
+      <h3 class="wide-field">Message <%= client.planner_name %></h3>
+      <input type="hidden" name="client_id" value="<%= client.id %>">
+      <label>Related event<select name="event_id"><option value="">General message</option><% events.filter((event) => event.client_id === client.id).forEach((event) => { %><option value="<%= event.id %>"><%= event.title %></option><% }) %></select></label>
+      <label class="wide-field">Message<textarea name="message" maxlength="5000" rows="3" required></textarea></label>
+      <button class="primary" type="submit">Send message</button>
+    </form><% }) %>
+    <% if (!clients.length) { %><p class="muted">Submit an event request to connect with a planner and start a conversation.</p><% } %>
+  </section>
+
+  <section class="panel" id="notifications">
+    <div class="section-heading"><div><h2>Notifications</h2><p class="muted"><%= summary.unreadNotifications %> unread update<%= summary.unreadNotifications === 1 ? '' : 's' %>.</p></div>
+      <% if (summary.unreadNotifications) { %><form method="post" action="/client/notifications/read"><button type="submit">Mark all as read</button></form><% } %>
+    </div>
+    <% if (notifications.length) { %><ol class="notification-list">
+      <% notifications.forEach((notification) => { %><li class="<%= notification.read_at ? '' : 'unread' %>">
+        <p><strong><%= statusLabel(notification.notification_type) %></strong></p><p><%= notification.message %></p><time><%= notification.created_at %></time>
+      </li><% }) %>
+    </ol><% } else { %><p class="muted">Your event updates will appear here.</p><% } %>
+  </section>
+
+  <section class="panel" id="profile">
+    <h2>My profile</h2>
+    <form class="client-request-form" method="post" action="/client/profile">
+      <label>Name<input name="name" maxlength="80" value="<%= user.name %>" required></label>
+      <label>Email<input type="email" value="<%= user.email %>" readonly></label>
+      <label>Phone<input name="phone" type="tel" maxlength="40" value="<%= user.phone || '' %>"></label>
+      <button class="primary" type="submit">Save profile</button>
+    </form>
+    <h3>Change password</h3>
+    <form class="client-request-form" method="post" action="/client/profile/password">
+      <label>Current password<input type="password" name="current_password" autocomplete="current-password" required></label>
+      <label>New password<input type="password" name="new_password" minlength="8" maxlength="128" autocomplete="new-password" required></label>
+      <label>Confirm new password<input type="password" name="confirm_password" minlength="8" maxlength="128" autocomplete="new-password" required></label>
+      <button type="submit">Update password</button>
+    </form>
+    <% if (supportEmail) { %><p><a href="mailto:<%= supportEmail %>">Contact support</a></p><% } else { %><p class="muted">Contact support using the email address provided by your planner.</p><% } %>
+  </section>
+  <%- include('partials/platform-rating', { platformRating, returnTo: '/client/dashboard' }) %>
+</div>
+<%- include('partials/foot') %>

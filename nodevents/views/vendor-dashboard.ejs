@@ -14,7 +14,10 @@
       <h1>My event invitations</h1>
       <p class="d-sub">Keep your event dates, planner requests, and service details together.</p>
     </div>
-    <a class="button primary" href="/learn#vendors">Vendor guide</a>
+    <div class="site-home-actions">
+      <a class="button primary" href="/vendor/profile">Manage service profile</a>
+      <a class="button" href="/learn#vendors">Vendor guide</a>
+    </div>
   </section>
 
   <ul class="d-stats" aria-label="Vendor invitation summary">
@@ -61,7 +64,8 @@
     <% } else { %>
       <section class="d-empty">
         <h2>No invitations linked yet</h2>
-        <p>Open your personal invitation link from a planner while signed in, then choose “Add this event to my vendor account.”</p>
+        <p>Set up your service profile so planners can discover what you offer. If a planner sent you an invitation, open its private link while signed in to connect the event to your account.</p>
+        <a class="button primary" href="/vendor/profile">Set up your vendor profile</a>
       </section>
     <% } %>
   </section>

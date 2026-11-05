@@ -1,7 +1,8 @@
 <%
   const moduleTitles = {
     logistics: 'Event logistics',
-    tickets: 'Registration and tickets',
+    registration: 'Event registration',
+    tickets: 'Tickets and attendees',
     'event-day': 'Event-day operations',
     reports: 'Event reports',
   };
@@ -22,6 +23,7 @@
       <a href="/events/<%= event.id %>/budget">Budget</a>
       <a href="/events/<%= event.id %>/guests">Guests</a>
       <a href="/events/<%= event.id %>/catering">Catering</a>
+      <a href="/events/<%= event.id %>/registration" class="<%= module === 'registration' ? 'active' : '' %>">Registration</a>
       <a href="/events/<%= event.id %>/tickets" class="<%= module === 'tickets' ? 'active' : '' %>">Tickets</a>
       <a href="/events/<%= event.id %>/event-day" class="<%= module === 'event-day' ? 'active' : '' %>">Event day</a>
       <a href="/events/<%= event.id %>/reports" class="<%= module === 'reports' ? 'active' : '' %>">Reports</a>
@@ -49,6 +51,19 @@
         <label class="wide-field">Notes<input name="notes" maxlength="240" placeholder="Optional setup or access notes"></label>
         <button class="primary" type="submit">Add map area</button>
       </form>
+      <div class="route-distance-tool">
+        <h3>Driving distance between locations</h3>
+        <p class="muted">Estimate road distance and travel time using Google Routes. The location text you enter is sent to Google for route calculation.</p>
+        <% if (!mapsRouteConfigured) { %>
+          <p class="muted">Route lookup is unavailable until the server has a Google Routes API key configured.</p>
+        <% } %>
+        <form class="row operations-form" method="post" action="/events/<%= event.id %>/logistics/route-distance" data-route-distance>
+          <label>Starting location<input name="origin" maxlength="300" placeholder="Street address, venue, or town" required></label>
+          <label>Destination<input name="destination" maxlength="300" value="<%= event.venue || '' %>" placeholder="Street address, venue, or town" required></label>
+          <button class="primary" type="submit" <%= mapsRouteConfigured ? '' : 'disabled' %>>Calculate driving route</button>
+        </form>
+        <p data-route-result role="status" aria-live="polite"></p>
+      </div>
       <% if (zones.length) { %>
         <ul class="compact-list"><% zones.forEach(zone => { %><li><strong><%= zone.label %></strong> · <%= zone.zone_type %><% if (zone.notes) { %> · <%= zone.notes %><% } %>
           <form method="post" action="/events/<%= event.id %>/logistics/zones/<%= zone.id %>/delete"><button type="submit" class="button-small">Remove</button></form></li><% }) %></ul>
@@ -129,16 +144,30 @@
     </section>
   <% } %>
 
-  <% if (module === 'tickets') { %>
+  <% if (module === 'registration') { %>
     <section class="panel operations-panel">
       <h2>Public registration form</h2>
-      <p class="muted">Free tickets are confirmed immediately. Paid tickets stay pending until the organizer verifies an external payment; no payment is collected by Nodevents yet.</p>
+      <p class="muted">Free tickets are confirmed immediately. M-Pesa STK Push is available only when Sandbox credentials and a public HTTPS callback are configured; other paid methods remain pending until independently verified.</p>
+      <p>Manage ticket categories and attendee payments separately on the <a href="/events/<%= event.id %>/tickets">Tickets page</a>.</p>
       <form class="stack" method="post" action="/events/<%= event.id %>/tickets/settings">
         <label>Custom registration questions <small>One question per line, up to 5</small><textarea name="custom_questions" maxlength="1000" placeholder="Dietary requirements&#10;Organization"><%= customQuestions.join('\n') %></textarea></label>
         <label class="profile-publish-toggle"><input type="checkbox" name="registration_is_open" <%= event.registration_is_open ? 'checked' : '' %>> Open public registration</label>
         <button type="submit">Save registration form</button>
       </form>
       <p>Registration link: <a href="/register/<%= event.registration_token %>">/register/<%= event.registration_token %></a></p>
+    </section>
+  <% } %>
+
+  <% if (module === 'tickets') { %>
+    <section class="panel operations-panel">
+      <h2>Ticket design</h2>
+      <p class="muted">Use your event accent color and optional logo on the digital and downloadable PDF ticket. Only JPG, PNG, or WebP logos up to 2 MB are accepted.</p>
+      <form class="row operations-form" method="post" action="/events/<%= event.id %>/tickets/branding" enctype="multipart/form-data">
+        <label>Ticket color<input type="color" name="ticket_color" value="<%= /^#[0-9a-f]{6}$/i.test(event.ticket_color || '') ? event.ticket_color : '#343a35' %>"></label>
+        <label>Event logo<input type="file" name="ticket_logo" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"></label>
+        <% if (event.ticket_logo) { %><img class="ticket-brand-preview" src="/events/<%= event.id %>/tickets/logo" alt="Current event logo"><% } %>
+        <button type="submit">Save ticket design</button>
+      </form>
       <form class="row operations-form" method="post" action="/events/<%= event.id %>/tickets/types">
         <label>Ticket category<input name="name" maxlength="60" placeholder="Regular, VIP, Early Bird" required></label>
         <label>Price (<%= event.budget_currency %>)<input type="number" name="price" min="0" max="9999999" step="0.01" value="0" required></label>
@@ -155,7 +184,7 @@
           <td><%= registration.ticket_name %></td>
           <td><%= registration.price ? cash(registration.price) : 'Free' %><% if (registration.payment_reference) { %><br><small><%= registration.payment_method %>: <%= registration.payment_reference %></small><% } %></td>
           <td><%= registration.status.replace('_', ' ') %></td><td><%= registration.checked_in_at ? 'Checked in' : 'Not checked in' %></td>
-          <td><% if (registration.status === 'awaiting_payment') { %><form method="post" action="/events/<%= event.id %>/tickets/<%= registration.id %>/verify-payment"><label>Verified method/reference<input name="payment_reference" maxlength="100" placeholder="Verified M-Pesa/bank receipt" required></label><button type="submit">Verify payment & issue ticket</button></form><% } else if (registration.status === 'confirmed') { %><a href="/tickets/<%= registration.qr_token %>">View ticket</a><% } %>
+          <td><% if (registration.status === 'awaiting_payment') { %><% if (registration.mpesa_checkout_request_id && registration.mpesa_status === 'pending') { %><form method="post" action="/events/<%= event.id %>/tickets/<%= registration.id %>/check-mpesa"><button type="submit">Check M-Pesa status</button></form><% } %><form method="post" action="/events/<%= event.id %>/tickets/<%= registration.id %>/verify-payment"><label>Verified method/reference<input name="payment_reference" maxlength="100" placeholder="Independently verified receipt" required></label><button type="submit">Verify external payment & issue ticket</button></form><% } else if (registration.status === 'confirmed') { %><a href="/tickets/<%= registration.qr_token %>">View ticket</a><% } %>
             <% if (registration.status !== 'cancelled') { %><form method="post" action="/events/<%= event.id %>/tickets/<%= registration.id %>/cancel"><button class="button-small" type="submit">Cancel</button></form><% } %>
           </td>
         </tr><% }) %>
@@ -238,4 +267,5 @@
     </section>
   <% } %>
 </div>
+<% if (module === 'logistics') { %><script src="/route-distance.js" defer></script><% } %>
 <%- include('partials/foot') %>

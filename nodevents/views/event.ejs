@@ -36,11 +36,33 @@
   <a class="<%= toolPage === 'guests' ? 'active' : '' %>" href="/events/<%= event.id %>/guests">Guest Management</a>
   <a class="<%= toolPage === 'catering' ? 'active' : '' %>" href="/events/<%= event.id %>/catering">Catering Management</a>
   <a href="/events/<%= event.id %>/logistics">Event Logistics</a>
-  <a href="/events/<%= event.id %>/tickets">Registration & Tickets</a>
+  <a href="/events/<%= event.id %>/registration">Event Registration</a>
+  <a href="/events/<%= event.id %>/tickets">Tickets</a>
   <a href="/events/<%= event.id %>/event-day">Event day</a>
   <a href="/events/<%= event.id %>/reports">Reports</a>
   <a href="/vendors">Find vendors</a>
 </nav>
+<% if (toolPage === 'overview') { %>
+<details class="panel planning-panel">
+  <summary>Edit or delete this event</summary>
+  <form class="row budget-form" method="post" action="/events/<%= event.id %>/update">
+    <label>Event name<input name="title" maxlength="120" value="<%= event.title %>" required></label>
+    <label>Date<input type="date" name="event_date" value="<%= event.event_date %>" required></label>
+    <label>Event type<select name="event_type"><% Object.entries(templates).forEach(([key, template]) => { %><option value="<%= key %>" <%= event.event_type === key ? 'selected' : '' %>><%= template.label %></option><% }) %></select></label>
+    <label>Venue<input name="venue" maxlength="160" value="<%= event.venue %>"></label>
+    <label class="wide-field">Venue and arrival notes<textarea name="venue_notes" maxlength="1000"><%= event.venue_notes %></textarea></label>
+    <button class="primary" type="submit">Save event details</button>
+  </form>
+  <details>
+    <summary>Delete event permanently</summary>
+    <p class="error">This permanently deletes the event, its planning records, registrations, and uploaded invoices.</p>
+    <form class="row" method="post" action="/events/<%= event.id %>/delete">
+      <label>Type <strong><%= event.title %></strong> to confirm<input name="confirm_title" autocomplete="off" required></label>
+      <button type="submit">Delete event</button>
+    </form>
+  </details>
+</details>
+<% } %>
 <% if (toolPage === 'overview' || toolPage === 'budget') { %>
 <section class="panel planning-panel" id="budget-management">
   <div class="section-heading">
@@ -199,17 +221,64 @@
     <label>Arrival notes for vendors<textarea name="venue_notes" maxlength="1000" placeholder="Entrance, loading area, parking, or access details"><%= event.venue_notes %></textarea></label>
     <button type="submit">Save venue details</button>
   </form>
-  <p class="muted">Vendors receive an email when venue details change. Arrival notes are visible to vendors and anyone with your read-only host link.</p>
+  <p class="muted">Vendors receive an email when venue details change. Client links show the public venue only; arrival notes remain private to the planner and vendors.</p>
   <% if (clientUrl) { %>
     <div class="share-link">
-      <label>Read-only host link<input class="link-box" readonly value="<%= clientUrl %>" onclick="this.select()"></label>
-      <p class="muted">Anyone with this link can see the timeline, venue notes, and vendor response statuses. It does not show emails, invoices, private vendor links, or vendor notes.</p>
-      <form method="post" action="/events/<%= event.id %>/client-link"><button type="submit">Replace host link</button></form>
-      <form method="post" action="/events/<%= event.id %>/client-link/revoke"><button type="submit">Turn off host link</button></form>
+      <label>Private client link<input class="link-box" readonly value="<%= clientUrl %>" onclick="this.select()"></label>
+      <p class="muted">Clients can see event-level budget totals, timeline, vendor names and response statuses, RSVP progress, and recorded approvals. Vendor contact details, service notes, estimates, contracts, invoices, and arrival notes stay private.</p>
+      <p class="muted"><%= event.client_pin_hash ? 'PIN protection is enabled.' : 'No PIN is set.' %><%= event.client_token_expires_at ? ` Link expires ${new Date(event.client_token_expires_at).toLocaleString()}.` : ' This link has no expiry date.' %></p>
+      <form method="post" action="/events/<%= event.id %>/client-link" class="form-grid">
+        <label>Optional PIN <small>4–12 digits; leave blank to remove PIN protection</small><input type="password" name="pin" inputmode="numeric" pattern="[0-9]{4,12}" maxlength="12" autocomplete="new-password"></label>
+        <label>Optional expiry date and time<input type="datetime-local" name="expires_at" value="<%= event.client_token_expires_at ? new Date(new Date(event.client_token_expires_at).getTime() - new Date(event.client_token_expires_at).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '' %>"></label>
+        <label class="wide-field"><input type="checkbox" name="show_budget" <%= event.client_show_budget !== 0 ? 'checked' : '' %>> Share aggregate budget totals with the client</label>
+        <button type="submit"><%= event.client_token ? 'Replace client link and settings' : 'Create client link' %></button>
+      </form>
+      <form method="post" action="/events/<%= event.id %>/client-link/revoke"><button type="submit">Revoke client link</button></form>
+      <% if (linkedClient) { %>
+        <div class="client-progress-share">
+          <p><strong>Linked client:</strong> <%= linkedClient.name %><% if (linkedClient.account_user_id) { %> · account connected<% } else { %> · no Nodevents account connected<% } %></p>
+          <% if (linkedClient.account_user_id) { %>
+            <form method="post" action="/events/<%= event.id %>/client-link/send">
+              <button class="primary" type="submit">Send progress link in client messages</button>
+            </form>
+          <% } else { %><p class="muted">Connect this client to their Nodevents account before sending the link in portal messages.</p><% } %>
+        </div>
+      <% } %>
     </div>
   <% } else { %>
-    <form method="post" action="/events/<%= event.id %>/client-link"><button type="submit">Create host link</button></form>
+    <form method="post" action="/events/<%= event.id %>/client-link" class="form-grid">
+      <label>Optional PIN <small>4–12 digits</small><input type="password" name="pin" inputmode="numeric" pattern="[0-9]{4,12}" maxlength="12" autocomplete="new-password"></label>
+      <label>Optional expiry date and time<input type="datetime-local" name="expires_at"></label>
+      <label class="wide-field"><input type="checkbox" name="show_budget" checked> Share aggregate budget totals with the client</label>
+      <button type="submit">Create private client link</button>
+    </form>
+    <% if (linkedClient?.account_user_id) { %><p class="muted">After creating the link, send it to <%= linkedClient.name %> using the progress-link message action on this page.</p><% } %>
   <% } %>
+</section>
+<section class="panel" id="client-comments">
+  <h2>Client approvals</h2>
+  <% if (clientLinkApprovals.length) { %>
+    <ul class="plain">
+      <% clientLinkApprovals.forEach((approval) => { %>
+        <li><strong><%= approval.approved_by %></strong> <%= approval.decision === 'changes' ? 'requested changes to' : 'approved' %> <%= approval.approval_type === 'timeline' ? 'the timeline' : approval.vendor_name || 'a vendor' %> · <%= new Date(approval.approved_at).toLocaleString() %><% if (approval.note) { %><br><span class="muted"><%= approval.note %></span><% } %></li>
+      <% }) %>
+    </ul>
+  <% } else { %><p class="muted">No client approvals recorded yet.</p><% } %>
+  <h2>Client comments and questions</h2>
+  <% if (clientLinkComments.length) { %>
+    <ol class="timeline">
+      <% clientLinkComments.forEach((comment) => { %>
+        <li>
+          <div class="when"><strong><%= comment.sender_name %></strong><br><span class="muted"><%= new Date(comment.created_at).toLocaleString() %></span></div>
+          <div><p><%= comment.message %></p><% if (comment.email_status === 'failed') { %><span class="muted">Saved to the client link; email notification was not delivered.</span><% } %></div>
+        </li>
+      <% }) %>
+    </ol>
+  <% } else { %><p class="muted">Client questions and planner replies will appear here.</p><% } %>
+  <form method="post" action="/events/<%= event.id %>/client-comments" class="form-grid">
+    <label class="wide-field">Reply in the client link<textarea name="message" maxlength="2000" rows="3" required></textarea></label>
+    <button class="primary" type="submit">Reply to client</button>
+  </form>
 </section>
 <div class="grid">
   <section class="panel" id="vendor-management">

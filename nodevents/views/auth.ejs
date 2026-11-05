@@ -1,16 +1,21 @@
-<%- include('partials/head', { title: 'Planner sign in' }) %>
+<%- include('partials/head', { title }) %>
 <section class="auth-container">
-  <p class="eyebrow">Nodevents planner access</p>
-  <h1 class="auth-heading"><%= authMode === 'register' ? 'Create your account' : 'Log in' %></h1>
-  <p class="auth-intro">Stop chasing vendors. Keep every detail in one place.</p>
+  <a class="auth-brand" href="/" aria-label="Nodevents home"><span class="auth-brand-mark">N</span><span>Nodevents</span></a>
+  <p class="eyebrow">Nodevents account access</p>
+  <h1 class="auth-heading"><%= authMode === 'register' ? 'Create your planner account' : 'Welcome back' %></h1>
+  <p class="auth-intro"><%= authMode === 'register' ? 'Create an account to organize events and bring every detail together.' : 'Log in to continue planning your events.' %></p>
+  <%- include('partials/auth-role-switch', { activeRole: 'planner', authMode }) %>
   <% if (loggedOut) { %><p class="flash auth-logout-notice" role="status">You've been logged out.</p><% } %>
   <% if (error) { %><p class="error" role="alert"><%= error %></p><% } %>
+  <% if (audience === 'planner') { %>
   <div class="auth-tabs" role="tablist" aria-label="Planner account options">
-    <button class="auth-tab" id="login-tab" type="button" role="tab" aria-controls="login-panel" aria-selected="<%= authMode !== 'register' %>" data-auth-tab="login">Log in</button>
-    <button class="auth-tab" id="register-tab" type="button" role="tab" aria-controls="register-panel" aria-selected="<%= authMode === 'register' %>" data-auth-tab="register">Create account</button>
+    <button class="auth-tab" id="login-tab" type="button" role="tab" aria-controls="login-panel" aria-selected="<%= authMode !== 'register' %>" tabindex="<%= authMode !== 'register' ? 0 : -1 %>" data-auth-tab="login">Log in</button>
+    <button class="auth-tab" id="register-tab" type="button" role="tab" aria-controls="register-panel" aria-selected="<%= authMode === 'register' %>" tabindex="<%= authMode === 'register' ? 0 : -1 %>" data-auth-tab="register">Create account</button>
   </div>
+  <% } %>
   <div id="login-panel" role="tabpanel" aria-labelledby="login-tab" data-auth-panel="login" <%= authMode === 'register' ? 'hidden' : '' %>>
     <form class="auth-form" method="post" action="/auth/login">
+      <input type="hidden" name="audience" value="<%= audience %>">
       <label class="auth-field">Email
         <input class="auth-input" type="email" name="email" autocomplete="email" maxlength="160" placeholder="E-mail" autofocus required>
       </label>
@@ -23,7 +28,8 @@
       <button class="login-button" type="submit" data-auth-submit data-loading-label="Logging in...">Log in</button>
     </form>
     <p class="auth-recovery-link"><a href="/auth/forgot">Forgot password?</a></p>
-    <% if (oauthProviders.apple) { %>
+    <p class="auth-recovery-link"><a href="/client/access">Have a client event link?</a></p>
+    <% if (audience === 'planner' && oauthProviders.apple) { %>
     <div class="social-account-container">
       <span class="social-title">Or sign in with</span>
       <div class="social-accounts" aria-label="Social sign-in options">
@@ -60,5 +66,4 @@
     </form>
   </div>
 </section>
-<p class="vendor-signin-link">Are you a vendor? <a href="/vendor/login">Sign in to your vendor account</a>.</p>
 <%- include('partials/foot') %>

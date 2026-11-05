@@ -1,20 +1,117 @@
 <%- include('partials/head', { title: `Ticket · ${event.title}` }) %>
-<section class="panel public-registration ticket-badge">
-  <p class="eyebrow"><%= registration.status === 'confirmed' ? 'Digital ticket' : 'Registration status' %></p>
-  <h1><%= event.title %></h1>
-  <p class="intro"><%= new Date(`${event.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'full' }) %><%= event.venue ? ` · ${event.venue}` : '' %></p>
-  <p><strong><%= registration.full_name %></strong> · <%= registration.ticket_name %></p>
-  <% if (registration.status === 'awaiting_payment') { %>
-    <p class="budget-warning">Payment verification is pending. Your ticket is not confirmed and this registration QR cannot be used for entry.</p>
-    <p>Payment method: <%= registration.payment_method || 'Not specified' %><%= registration.payment_reference ? ` · Reference: ${registration.payment_reference}` : '' %></p>
-    <p class="muted">Contact the event organizer with your payment receipt. Do not send your PIN or password.</p>
-  <% } else if (registration.status === 'cancelled') { %>
-    <p class="error">This registration has been cancelled.</p>
-  <% } else { %>
-    <p class="badge confirmed">Confirmed ticket</p>
-    <img class="ticket-qr" src="/tickets/<%= registration.qr_token %>/qr" alt="Check-in QR for <%= registration.full_name %>">
-    <p class="muted">Show this QR code to event staff. It can only be checked in once.</p>
-    <% if (event.event_date <= today) { %><a class="button" href="/tickets/<%= registration.qr_token %>/feedback">Share event feedback</a><% } %>
-  <% } %>
-</section>
+<%
+  const eventKind = event.event_type === 'corporate'
+    ? 'corporate'
+    : event.event_type === 'entertainment'
+      ? 'festival'
+      : event.event_type === 'sports'
+        ? 'sports'
+        : 'occasion';
+  const eventLabel = eventKind === 'corporate'
+    ? 'Corporate access'
+    : eventKind === 'festival'
+      ? 'Festival pass'
+      : eventKind === 'sports'
+        ? 'Matchday pass'
+        : 'Event ticket';
+  const eventDate = new Date(`${event.event_date}T12:00:00`);
+%>
+<div class="ticket-page">
+  <article class="event-ticket event-ticket--<%= eventKind %>" style="--ticket-color:<%= /^#[0-9a-f]{6}$/i.test(event.ticket_color || '') ? event.ticket_color : '#343a35' %>">
+    <header class="event-ticket-header">
+      <div class="ticket-hero-art" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div class="ticket-hero-top">
+        <div class="ticket-brand-lockup" aria-label="Nodevents">
+          <span class="ticket-brand-mark" aria-hidden="true">N</span>
+          <span>NODEVENTS<small>EVENT ACCESS</small></span>
+        </div>
+        <% if (event.ticket_logo) { %><img class="ticket-event-logo" src="/tickets/<%= registration.qr_token %>/logo" alt="Event logo"><% } %>
+      </div>
+      <div class="ticket-hero-copy">
+        <span class="ticket-kind"><%= eventLabel %></span>
+        <h1><%= event.title %></h1>
+        <div class="ticket-event-highlights" aria-label="Event details">
+          <span><b aria-hidden="true">◷</b><%= eventDate.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) %></span>
+          <span><b aria-hidden="true">⌖</b><%= event.venue || 'Venue to be confirmed' %></span>
+          <span><b aria-hidden="true">✓</b>Verified ticket</span>
+        </div>
+      </div>
+    </header>
+
+    <% if (registration.status === 'awaiting_payment') { %>
+      <section class="ticket-pending" aria-live="polite">
+        <p class="ticket-state">Registration received · payment pending</p>
+        <h2>This is not an entry ticket yet</h2>
+        <p>Once the organizer or M-Pesa verifies your payment, this page will show your confirmed ticket and scannable entry code.</p>
+        <p><strong><%= registration.full_name %></strong> · <%= registration.ticket_name %></p>
+        <% if (registration.payment_method === 'M-Pesa' && registration.mpesa_status === 'pending') { %><a class="button" href="/tickets/<%= registration.qr_token %>">Refresh payment status</a><% } %>
+        <p class="muted">Contact the event organizer with your payment receipt. Never share your PIN or password.</p>
+      </section>
+    <% } else if (registration.status === 'cancelled') { %>
+      <section class="ticket-pending" aria-live="polite">
+        <p class="ticket-state ticket-state--cancelled">Registration cancelled</p>
+        <h2>This pass is no longer valid</h2>
+        <p>Contact the event organizer if you believe this cancellation was made in error.</p>
+      </section>
+    <% } else { %>
+      <div class="ticket-event-layout">
+        <section class="ticket-overview">
+          <div class="ticket-section-heading">
+            <p class="eyebrow">Your event pass</p>
+            <h2>Event overview</h2>
+          </div>
+          <div class="ticket-overview-grid">
+            <div class="ticket-overview-item">
+              <span class="ticket-overview-icon" aria-hidden="true">◷</span>
+              <div><span class="ticket-field-label">Date</span><strong><%= eventDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) %></strong></div>
+            </div>
+            <div class="ticket-overview-item">
+              <span class="ticket-overview-icon" aria-hidden="true">⌖</span>
+              <div><span class="ticket-field-label">Venue</span><strong><%= event.venue || 'Venue to be confirmed' %></strong></div>
+            </div>
+            <div class="ticket-overview-item">
+              <span class="ticket-overview-icon" aria-hidden="true">♙</span>
+              <div><span class="ticket-field-label">Attendee</span><strong><%= registration.full_name %></strong></div>
+            </div>
+            <div class="ticket-overview-item">
+              <span class="ticket-overview-icon" aria-hidden="true">▤</span>
+              <div><span class="ticket-field-label">Admission</span><strong><%= registration.ticket_name %></strong></div>
+            </div>
+          </div>
+          <div class="ticket-about">
+            <div><span class="ticket-field-label">Ticket number</span><strong>NV-<%= String(registration.id).padStart(6, '0') %></strong></div>
+            <span class="ticket-confirmed-pill"><i aria-hidden="true"></i>Confirmed</span>
+          </div>
+          <div class="ticket-trust-note">
+            <strong>Ready for entry</strong>
+            <p>Your ticket is confirmed. Present the QR code to event staff. It is securely checked against the event register and can only be used once.</p>
+          </div>
+        </section>
+
+        <aside class="ticket-booking-card" aria-label="Ticket entry pass">
+          <div class="ticket-booking-date">
+            <div><span class="ticket-field-label">Your admission</span><strong><%= registration.ticket_name %></strong></div>
+            <span class="ticket-booking-date-badge"><%= eventDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) %></span>
+          </div>
+          <div class="ticket-booking-points">
+            <span><i aria-hidden="true">✓</i>Confirmed event ticket</span>
+            <span><i aria-hidden="true">✓</i>Secure QR code validation</span>
+            <span><i aria-hidden="true">✓</i>One-time entry protection</span>
+          </div>
+          <div class="ticket-qr-frame">
+            <img class="ticket-qr" src="/tickets/<%= registration.qr_token %>/qr" alt="Entry verification QR code for <%= registration.full_name %>">
+          </div>
+          <strong class="ticket-scan-title">Scan to enter</strong>
+          <p class="ticket-scan-copy">Keep this code private and show it at the entrance.</p>
+          <div class="ticket-booking-powered">Powered by <strong>Nodevents</strong></div>
+        </aside>
+      </div>
+      <div class="ticket-actions">
+        <a class="button primary" href="/tickets/<%= registration.qr_token %>/download">Download ticket PDF</a>
+        <button type="button" class="button" onclick="window.print()">Print ticket</button>
+        <% if (event.event_date <= today) { %><a class="button" href="/tickets/<%= registration.qr_token %>/feedback">Share event feedback</a><% } %>
+      </div>
+    <% } %>
+  </article>
+</div>
 <%- include('partials/foot') %>

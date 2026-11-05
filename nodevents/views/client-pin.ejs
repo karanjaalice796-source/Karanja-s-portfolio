@@ -1,0 +1,14 @@
+<%- include('partials/head', { title }) %>
+<section class="auth-container">
+  <p class="eyebrow">Private client event portal</p>
+  <h1 class="auth-heading">Enter your event PIN</h1>
+  <p class="auth-intro">This private link is protected by a PIN. Ask your planner if you need help.</p>
+  <% if (error) { %><p class="error" role="alert"><%= error %></p><% } %>
+  <form class="auth-form" method="post" action="/client/<%= token %>/access">
+    <label class="auth-field">PIN
+      <input class="auth-input" type="password" name="pin" inputmode="numeric" pattern="[0-9]{4,12}" maxlength="12" autocomplete="one-time-code" required>
+    </label>
+    <button class="login-button secondary-login-button" type="submit">Continue to event</button>
+  </form>
+</section>
+<%- include('partials/foot') %>

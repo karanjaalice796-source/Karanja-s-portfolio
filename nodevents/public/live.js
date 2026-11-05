@@ -1,12 +1,14 @@
 (function () {
   const eventElement = document.querySelector('[data-event-id]');
   const vendorElement = document.querySelector('[data-vendor-token]');
-  if (!eventElement && !vendorElement) return;
+  const clientElement = document.querySelector('[data-client-token]');
+  if (!eventElement && !vendorElement && !clientElement) return;
 
   const socket = io();
   socket.on('connect', function () {
     if (eventElement) socket.emit('join:event', Number(eventElement.dataset.eventId));
     if (vendorElement) socket.emit('join:vendor', vendorElement.dataset.vendorToken);
+    if (clientElement) socket.emit('join:client', clientElement.dataset.clientToken);
   });
   socket.on('update', function (data) {
     if (data.attendance) {
@@ -30,5 +32,14 @@
     button.textContent = 'Refresh';
     button.addEventListener('click', function () { location.reload(); });
     banner.appendChild(button);
+    if (clientElement && data.refresh) {
+      if (typeof window.refreshClientPortal === 'function') {
+        window.refreshClientPortal();
+      } else {
+        button.textContent = 'Refreshing…';
+        button.disabled = true;
+        setTimeout(function () { location.reload(); }, 1200);
+      }
+    }
   });
 })();

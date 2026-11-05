@@ -1,0 +1,195 @@
+<%- include('partials/head', { title, activeTool }) %>
+<p><a href="/clients">← All clients</a></p>
+<section class="panel">
+  <p class="eyebrow">Client workspace</p>
+  <h1><%= clientRecord.name %></h1>
+  <p class="muted"><%= clientRecord.organization || 'Individual client' %> · Planner-managed contact and event record</p>
+  <div class="d-stats" aria-label="Client summary">
+    <div class="d-stat"><strong><%= events.length %></strong><span>Linked events</span></div>
+    <div class="d-stat"><strong><%= requests.filter((item) => ['pending', 'changes_requested'].includes(item.status)).length %></strong><span>Open requests</span></div>
+    <div class="d-stat"><strong>KES <%= Number(paymentTotals.paid).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></strong><span>Recorded as received</span></div>
+    <div class="d-stat"><strong>KES <%= Number(paymentTotals.pending).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></strong><span>Pending records</span></div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Client profile</h2>
+  <p class="muted">Clients can create an account to track their requests, approved events, messages, bookings, and payment records. Event-specific private links are available separately from each event workspace.</p>
+  <form method="post" action="/clients/<%= clientRecord.id %>/update" class="form-grid">
+    <label>Name<input name="name" maxlength="120" value="<%= clientRecord.name %>" required></label>
+    <label>Email<input name="email" type="email" maxlength="254" value="<%= clientRecord.email %>"></label>
+    <label>Phone<input name="phone" type="tel" maxlength="40" value="<%= clientRecord.phone %>"></label>
+    <label>Organization<input name="organization" maxlength="120" value="<%= clientRecord.organization %>"></label>
+    <label class="wide-field">Notes<textarea name="notes" maxlength="2000" rows="3"><%= clientRecord.notes %></textarea></label>
+    <button class="primary" type="submit">Save profile</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Event requests</h2>
+  <form method="post" action="/clients/<%= clientRecord.id %>/requests" class="form-grid">
+    <label>Requested event name<input name="title" maxlength="120" required></label>
+    <label>Event type
+      <select name="event_type" required>
+        <% Object.entries(templates).forEach(([key, template]) => { %><option value="<%= key %>"><%= template.label %></option><% }) %>
+      </select>
+    </label>
+    <label>Preferred date<input type="date" name="desired_date"></label>
+    <label>Venue<input name="venue" maxlength="160"></label>
+    <label>Estimated budget (KES)<input type="number" name="estimated_budget" min="0" max="1000000000" step="0.01"></label>
+    <label class="wide-field">Request details<textarea name="details" maxlength="2000" rows="3"></textarea></label>
+    <button class="primary" type="submit">Record request</button>
+  </form>
+  <% if (requests.length) { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Request</th><th>Date / venue</th><th>Estimate</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          <% requests.forEach((item) => { %>
+            <tr>
+              <td><strong><%= item.title %></strong><br><span class="muted"><%= templates[item.event_type]?.label || 'Other' %></span><% if (item.details) { %><br><span class="muted"><%= item.details %></span><% } %></td>
+              <td><%= item.desired_date || 'Date to be confirmed' %><br><span class="muted"><%= item.venue || 'Venue to be confirmed' %></span></td>
+              <td>KES <%= Number(item.estimated_budget).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+              <td><%= item.status.replace('_', ' ') %>
+                <% if (item.decision_reason) { %><br><span class="muted"><%= item.decision_reason %></span><% } %>
+                <% if (item.linked_event_title) { %><br><a href="/events/<%= item.event_id %>"><%= item.linked_event_title %></a><% } %>
+              </td>
+              <td><% if (item.status === 'pending') { %><a href="/client-event-requests">Review in Client Event Requests</a><% } else { %>—<% } %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } else { %><p class="muted">No event requests recorded yet.</p><% } %>
+</section>
+
+<section class="panel">
+  <h2>My events and progress</h2>
+  <% if (availableEvents.length) { %>
+    <form method="post" action="/clients/<%= clientRecord.id %>/events/link" class="inline-form">
+      <label>Link an existing event
+        <select name="event_id" required><% availableEvents.forEach((item) => { %><option value="<%= item.id %>"><%= item.title %> · <%= item.event_date %></option><% }) %></select>
+      </label>
+      <button class="button primary" type="submit">Link event</button>
+    </form>
+  <% } %>
+  <% if (events.length) { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Event</th><th>Tasks</th><th>Vendor responses</th><th>Planning progress</th></tr></thead>
+        <tbody>
+          <% events.forEach((item) => {
+            const taskProgress = item.task_count ? Math.round((Number(item.completed_task_count) / Number(item.task_count)) * 100) : 0;
+            const vendorProgress = item.vendor_count ? Math.round((Number(item.confirmed_vendor_count) / Number(item.vendor_count)) * 100) : 0;
+          %>
+            <tr>
+              <td><a href="/events/<%= item.id %>"><strong><%= item.title %></strong></a><br><span class="muted"><%= item.event_date %> · <%= item.venue || 'Venue to be confirmed' %></span></td>
+              <td><%= item.completed_task_count %> / <%= item.task_count %> complete</td>
+              <td><%= item.confirmed_vendor_count %> / <%= item.vendor_count %> confirmed</td>
+              <td>Tasks <%= taskProgress %>% · vendors <%= vendorProgress %>%</td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } else { %><p class="muted">No events linked to this client. Create one from an event request or link an existing event.</p><% } %>
+  <h3>Service bookings</h3>
+  <% if (bookings.length) { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Event</th><th>Vendor / service</th><th>Details</th><th>Status</th></tr></thead>
+        <tbody><% bookings.forEach((booking) => { %>
+          <tr>
+            <td><%= booking.event_title %><br><span class="muted"><%= booking.event_date %></span></td>
+            <td><strong><%= booking.name %></strong><%= booking.category ? ` · ${booking.category}` : '' %></td>
+            <td><%= booking.services || 'Service details to be confirmed' %></td>
+            <td><%= booking.status.replace('_', ' ') %></td>
+          </tr>
+        <% }) %></tbody>
+      </table>
+    </div>
+  <% } else { %><p class="muted">No vendors are linked to this client’s events yet.</p><% } %>
+</section>
+
+<section class="panel">
+  <h2>Payments</h2>
+  <p class="muted">Manual planner records only. These are not processed or verified by Nodevents; attendee ticket payments are separate.</p>
+  <% if (allEvents.length) { %>
+    <form method="post" action="/clients/<%= clientRecord.id %>/payments" class="form-grid">
+      <label>Event<select name="event_id" required><% allEvents.forEach((item) => { %><option value="<%= item.id %>"><%= item.title %></option><% }) %></select></label>
+      <label>Description<input name="description" maxlength="160" placeholder="e.g. Initial planning deposit" required></label>
+      <label>Amount (KES)<input type="number" name="amount" min="0.01" max="1000000000" step="0.01" required></label>
+      <label>Method<select name="payment_method" required><option>Cash</option><option>Bank transfer</option><option>M-Pesa</option><option>Card</option><option>Other</option></select></label>
+      <label>Reference<input name="reference" maxlength="100" placeholder="Receipt or transaction reference"></label>
+      <label>Status<select name="status"><option value="pending">Pending</option><option value="paid">Received</option></select></label>
+      <button class="primary" type="submit">Add payment record</button>
+    </form>
+  <% } else { %><p class="muted">Link or create an event to record a client payment against it.</p><% } %>
+  <% if (payments.length) { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Date</th><th>Event / description</th><th>Amount</th><th>Method / reference</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          <% payments.forEach((payment) => { %>
+            <tr>
+              <td><%= payment.created_at %></td>
+              <td><%= payment.event_title %><br><span class="muted"><%= payment.description %></span></td>
+              <td>KES <%= Number(payment.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+              <td><%= payment.payment_method %><br><span class="muted"><%= payment.reference || 'No reference' %></span></td>
+              <td><%= payment.status === 'paid' ? 'Received (recorded)' : 'Pending' %></td>
+              <td>
+                <form method="post" action="/clients/<%= clientRecord.id %>/payments/<%= payment.id %>/status" class="inline-form">
+                  <input type="hidden" name="status" value="<%= payment.status === 'paid' ? 'pending' : 'paid' %>">
+                  <% if (payment.status !== 'paid') { %><label>Reference<input name="reference" maxlength="100" required></label><% } %>
+                  <button class="button" type="submit">Mark <%= payment.status === 'paid' ? 'pending' : 'received' %></button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } else { %><p class="muted">No client payment records yet.</p><% } %>
+</section>
+
+<section class="panel">
+  <h2>Communication</h2>
+  <p class="muted"><%= mailConfigured ? 'Emails are sent through the configured mail service.' : 'Demo mode: emails are logged locally but not delivered. Configure SMTP to send them.' %></p>
+  <% if (clientRecord.email) { %>
+    <form method="post" action="/clients/<%= clientRecord.id %>/messages" class="form-grid">
+      <label>Subject<input name="subject" maxlength="160" required></label>
+      <label>Related event<select name="event_id"><option value="">General update</option><% allEvents.forEach((item) => { %><option value="<%= item.id %>"><%= item.title %></option><% }) %></select></label>
+      <label class="wide-field">Message<textarea name="message" maxlength="5000" rows="4" required></textarea></label>
+      <button class="primary" type="submit">Email client</button>
+    </form>
+  <% } else { %><p class="muted">Add an email address to this profile before emailing the client.</p><% } %>
+  <% if (messages.length) { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Date</th><th>Subject</th><th>Event</th><th>Delivery</th><th>Message</th></tr></thead>
+        <tbody><% messages.forEach((item) => { %>
+          <tr><td><%= item.created_at %></td><td><%= item.subject %></td><td><%= item.event_title || 'General' %></td><td><%= item.status === 'sent' ? 'Sent / logged' : 'Failed' %></td><td><%= item.message %></td></tr>
+        <% }) %></tbody>
+      </table>
+    </div>
+  <% } else { %><p class="muted">No communication history yet.</p><% } %>
+  <h3>Portal conversation</h3>
+  <% if (portalMessages.length) { %>
+    <ol class="timeline">
+      <% portalMessages.slice().reverse().forEach((item) => { %>
+        <li>
+          <div class="when"><%= item.sender_role === 'planner' ? 'You' : clientRecord.name %><br><span class="muted"><%= item.created_at %></span></div>
+          <div><strong><%= item.event_title || 'General message' %></strong><p><%= item.message %></p><span class="muted"><%= item.sender_role === 'planner' ? (item.delivery_status === 'sent' ? 'Email sent or logged' : 'Email delivery failed; saved in portal') : 'Received in portal' %></span></div>
+        </li>
+      <% }) %>
+    </ol>
+  <% } else { %><p class="muted">No portal messages yet.</p><% } %>
+  <% if (clientRecord.account_user_id) { %>
+    <form method="post" action="/clients/<%= clientRecord.id %>/conversation" class="form-grid">
+      <label>Related event<select name="event_id"><option value="">General update</option><% allEvents.forEach((item) => { %><option value="<%= item.id %>"><%= item.title %></option><% }) %></select></label>
+      <label class="wide-field">Reply in portal<textarea name="message" maxlength="5000" rows="4" required></textarea></label>
+      <button class="primary" type="submit">Reply to client</button>
+    </form>
+  <% } %>
+</section>
+<%- include('partials/foot') %>

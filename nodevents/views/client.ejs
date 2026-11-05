@@ -1,43 +1,145 @@
-<%- include('partials/head', { title: `${event.title} · Host view` }) %>
-<div class="heading-row">
-  <div>
-    <p class="eyebrow">Read-only host view</p>
+<%- include('partials/head', { title: `${event.title} · Client event portal` }) %>
+<%
+  const approvalFor = (type, vendorId = null) => approvals.find((item) =>
+    item.approval_type === type && Number(item.vendor_id || 0) === Number(vendorId || 0));
+  const money = (amount) => `${budgetSummary?.currency || event.budget_currency} ${Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const approvalLabel = (state) => ({
+    approved: 'Approved',
+    changes: 'Changes requested',
+    outdated: 'Plan changed since approval',
+  }[state] || 'Not yet reviewed');
+%>
+<div class="client-share pt-portal" data-client-token="<%= token %>">
+  <section class="panel client-share-hero pt-head" id="portal-overview" data-live>
+    <p class="eyebrow">Private client event portal · No account required</p>
     <h1><%= event.title %></h1>
-    <p><span class="badge event-type-badge"><%= eventTypeLabel(event.event_type) %></span></p>
     <p class="intro"><%= new Date(`${event.event_date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'full' }) %></p>
-  </div>
+    <p><span class="badge event-type-badge"><%= eventTypeLabel(event.event_type) %></span></p>
+    <p>Venue: <strong><%= event.venue || 'To be confirmed' %></strong></p>
+    <% if (mapsUrl) { %><p><a href="<%= mapsUrl %>" target="_blank" rel="noopener noreferrer">Open the venue in Maps</a></p><% } %>
+    <% if (event.client_token_expires_at) { %><p class="muted">This link expires <%= new Date(event.client_token_expires_at).toLocaleString() %>.</p><% } %>
+  </section>
+
+  <% if (budgetSummary) { %>
+    <section class="panel" id="budget-summary" data-live>
+      <h2>Budget summary</h2>
+      <p class="muted">Event totals only; individual vendor estimates and invoices remain private.</p>
+      <div class="pt-tiles">
+        <div><strong><%= money(budgetSummary.total) %></strong><span>Event budget</span></div>
+        <div><strong><%= money(budgetSummary.planned) %></strong><span>Planned estimates</span></div>
+        <div><strong><%= money(budgetSummary.paid) %></strong><span>Paid to date</span></div>
+        <div><strong><%= money(budgetSummary.remaining) %></strong><span>Budget remaining</span></div>
+      </div>
+    </section>
+  <% } %>
+
+  <section class="panel" id="rsvp-progress" data-live>
+    <h2>Headcount and RSVP progress</h2>
+    <div class="pt-tiles">
+      <div><strong><%= guestTotals.invited %></strong><span>Invited</span></div>
+      <div><strong><%= guestTotals.attending %></strong><span>Attending</span></div>
+      <div><strong><%= guestTotals.awaiting %></strong><span>Awaiting reply</span></div>
+      <div><strong><%= guestTotals.declined %></strong><span>Declined</span></div>
+    </div>
+    <% if (event.expected_guests) { %><p class="muted">Planner's expected headcount: <%= event.expected_guests %>.</p><% } %>
+  </section>
+
+  <section class="panel" id="timeline" data-live>
+    <h2>Event timeline</h2>
+    <% if (tasks.length) { %>
+      <ol class="timeline">
+        <% tasks.forEach((task) => { %>
+          <li>
+            <div class="when" data-local-time="<%= task.start_time %>"><%= new Date(task.start_time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) %></div>
+            <div><strong><%= task.title %></strong></div>
+          </li>
+        <% }) %>
+      </ol>
+    <% } else { %><p class="muted">The planner has not added any schedule items yet.</p><% } %>
+    <% const timelineApproval = approvalFor('timeline'); %>
+    <% if (timelineApproval) { %><p class="profile-published-note">Status: <strong><%= approvalLabel(timelineApproval.state) %></strong> · <%= timelineApproval.approved_by %> · <span data-utc="<%= timelineApproval.approved_at %>"><%= new Date(`${timelineApproval.approved_at.replace(' ', 'T')}Z`).toLocaleString() %></span></p><% } %>
+    <form method="post" action="/client/<%= token %>/approvals" class="pt-form">
+      <label>Your name<input name="approved_by" maxlength="80" autocomplete="name" required></label>
+      <input type="hidden" name="approval_type" value="timeline">
+      <button class="primary" type="submit" name="decision" value="approved">Approve timeline</button>
+    </form>
+    <details class="pt-again">
+      <summary>Ask for changes</summary>
+      <form method="post" action="/client/<%= token %>/approvals" class="pt-form">
+        <label>Your name<input name="approved_by" maxlength="80" autocomplete="name" required></label>
+        <input type="hidden" name="approval_type" value="timeline">
+        <input type="hidden" name="decision" value="changes">
+        <label>What should change?<textarea name="note" maxlength="500" rows="3" required></textarea></label>
+        <button type="submit">Send change request</button>
+      </form>
+    </details>
+  </section>
+
+  <section class="panel" id="vendors" data-live>
+    <h2>Vendors</h2>
+    <p class="muted">Names and response status are shown here. Private contact details, service notes, estimates, contracts, and invoices are not shared.</p>
+    <% if (vendors.length) { %>
+      <div class="client-portal-cards">
+        <% vendors.forEach((vendor) => {
+          const approval = approvalFor('vendor', vendor.id);
+        %>
+          <article class="client-portal-card">
+            <h3><%= vendor.name %></h3>
+            <% if (vendor.category) { %><p><%= vendor.category %></p><% } %>
+            <p>Response: <span class="badge <%= vendor.status %>"><%= vendor.status.replace('_', ' ') %></span></p>
+            <% if (approval) { %><p class="profile-published-note">Status: <strong><%= approvalLabel(approval.state) %></strong> · <%= approval.approved_by %> · <span data-utc="<%= approval.approved_at %>"><%= new Date(`${approval.approved_at.replace(' ', 'T')}Z`).toLocaleString() %></span></p><% } %>
+            <form method="post" action="/client/<%= token %>/approvals" class="pt-form">
+              <label>Your name<input name="approved_by" maxlength="80" autocomplete="name" required></label>
+              <input type="hidden" name="approval_type" value="vendor">
+              <input type="hidden" name="vendor_id" value="<%= vendor.id %>">
+              <button class="primary" type="submit" name="decision" value="approved">Approve this vendor</button>
+            </form>
+            <details class="pt-again">
+              <summary>Ask for changes</summary>
+              <form method="post" action="/client/<%= token %>/approvals" class="pt-form">
+                <label>Your name<input name="approved_by" maxlength="80" autocomplete="name" required></label>
+                <input type="hidden" name="approval_type" value="vendor">
+                <input type="hidden" name="vendor_id" value="<%= vendor.id %>">
+                <input type="hidden" name="decision" value="changes">
+                <label>What should change?<textarea name="note" maxlength="500" rows="3" required></textarea></label>
+                <button type="submit">Send change request</button>
+              </form>
+            </details>
+          </article>
+        <% }) %>
+      </div>
+    <% } else { %><p class="muted">The planner has not added vendors yet.</p><% } %>
+  </section>
+
+  <section class="panel" id="approvals" data-live>
+    <h2>Approval history</h2>
+    <p class="muted">Approval names are entered by the person using this private link and are not independently identity-verified.</p>
+    <% if (approvals.length) { %>
+      <ul class="plain">
+        <% approvals.forEach((approval) => { %>
+          <li><strong><%= approval.approved_by %></strong> <%= approval.decision === 'changes' ? 'requested changes to' : 'approved' %> <%= approval.approval_type === 'timeline' ? 'the timeline' : approval.vendor_name || 'a vendor' %> · <span data-utc="<%= approval.approved_at %>"><%= new Date(`${approval.approved_at.replace(' ', 'T')}Z`).toLocaleString() %></span><% if (approval.note) { %><br><span class="muted"><%= approval.note %></span><% } %></li>
+        <% }) %>
+      </ul>
+    <% } else { %><p class="muted">No approvals have been recorded yet.</p><% } %>
+  </section>
+
+  <section class="panel" id="comments" data-live>
+    <h2>Comments and questions</h2>
+    <% if (comments.length) { %>
+      <ol class="timeline">
+        <% comments.forEach((comment) => { %>
+          <li>
+            <div class="when"><strong><%= comment.sender_name %></strong><br><span class="muted" data-utc="<%= comment.created_at %>"><%= new Date(`${comment.created_at.replace(' ', 'T')}Z`).toLocaleString() %></span></div>
+            <div><p><%= comment.message %></p><% if (comment.email_status === 'failed') { %><span class="muted">Saved to the portal; email notification was not delivered.</span><% } %></div>
+          </li>
+        <% }) %>
+      </ol>
+    <% } else { %><p class="muted">No comments yet. Send your planner a question below.</p><% } %>
+    <form method="post" action="/client/<%= token %>/comments" class="pt-form">
+      <label>Your name<input name="sender_name" maxlength="80" autocomplete="name" required></label>
+      <label>Comment or question<textarea name="message" maxlength="2000" rows="4" required></textarea></label>
+      <button class="primary" type="submit">Send to planner</button>
+    </form>
+  </section>
 </div>
-<section class="panel">
-  <h2>Venue</h2>
-  <p><%= event.venue || 'To be confirmed' %></p>
-  <% if (mapsUrl) { %><p><a href="<%= mapsUrl %>" target="_blank" rel="noopener noreferrer">Open the venue in Maps</a></p><% } %>
-  <% if (event.venue_notes) { %><p class="vendor-note"><strong>Arrival notes:</strong> <%= event.venue_notes %></p><% } %>
-</section>
-<section class="panel">
-  <h2>Event schedule</h2>
-  <p class="muted">This page is read-only and does not update live. Refresh to see the latest details.</p>
-  <% if (tasks.length) { %>
-    <ol class="timeline">
-      <% tasks.forEach((task) => { %>
-        <li>
-          <div class="when"><%= new Date(task.start_time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) %></div>
-          <div>
-            <strong><%= task.title %></strong>
-            <p class="muted"><%= task.vendor_name || 'Event-wide' %><%= task.notes ? ` · ${task.notes}` : '' %></p>
-          </div>
-        </li>
-      <% }) %>
-    </ol>
-  <% } else { %><p class="muted">The planner has not added any schedule items yet.</p><% } %>
-</section>
-<section class="panel">
-  <h2>Vendor responses</h2>
-  <% if (vendors.length) { %>
-    <ul class="plain">
-      <% vendors.forEach((vendor) => { %>
-        <li><strong><%= vendor.name %></strong><%= vendor.category ? ` · ${vendor.category}` : '' %> <span class="badge <%= vendor.status %>"><%= vendor.status.replace('_', ' ') %></span></li>
-      <% }) %>
-    </ul>
-  <% } else { %><p class="muted">The planner has not added vendors yet.</p><% } %>
-</section>
 <%- include('partials/foot') %>
