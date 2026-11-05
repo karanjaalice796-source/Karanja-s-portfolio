@@ -55,6 +55,12 @@ If a payment request times out, check the attendee's phone and Daraja status bef
 
 Production deployments must set a random `SESSION_SECRET` of at least 32 characters and serve the app over HTTPS. Sessions are stored in the local SQLite database; keep that database private and backed up securely. Planner and vendor sign-ins are limited to 10 failed attempts per IP per 15 minutes per app process; deployments with multiple instances should also apply rate limiting at the trusted proxy.
 
+## Deploy to Render
+
+The repository includes a Render Blueprint at `render.yaml`. Create a new Blueprint from this repository and select the `nodevents` service. It runs the app from this directory and attaches a 1 GB persistent disk at `/var/data`; set `DATA_DIR=/var/data` to keep the SQLite database and uploaded files across deploys. The Starter web service and persistent disk are paid Render resources; review current pricing before creating the service.
+
+Render generates `SESSION_SECRET` for the service. After Render assigns the service URL, set `APP_BASE_URL` to that HTTPS origin (for example, `https://nodevents.example.onrender.com`). Add optional OAuth, SMTP, Google Routes, and M-Pesa settings through the Render dashboard as needed; do not commit credentials or upload the local `.env`, `data.db`, or `uploads` directory. Back up the persistent disk regularly.
+
 ## Tests
 
 ```powershell

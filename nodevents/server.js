@@ -39,6 +39,7 @@ const server = http.createServer(app);
 const io = new Server(server);
 const port = Number(process.env.PORT) || 3100;
 const mpesa = createMpesaClient();
+if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
 if (process.env.NODE_ENV === 'production'
   && (typeof process.env.SESSION_SECRET !== 'string' || process.env.SESSION_SECRET.length < 32)) {
   throw new Error('Production requires a SESSION_SECRET with at least 32 characters.');
@@ -57,7 +58,8 @@ const passwordResetAttempts = new Map();
 const loginAttempts = new Map();
 const clientLinkPinAttempts = new Map();
 const clientLinkActionAttempts = new Map();
-const uploadDirectory = path.join(__dirname, 'uploads');
+const dataDirectory = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
+const uploadDirectory = path.join(dataDirectory, 'uploads');
 fs.mkdirSync(uploadDirectory, { recursive: true });
 const requestAttachmentDirectory = path.join(uploadDirectory, 'client-requests');
 fs.mkdirSync(requestAttachmentDirectory, { recursive: true });

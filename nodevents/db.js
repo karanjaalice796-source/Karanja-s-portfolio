@@ -1,8 +1,11 @@
 const path = require('node:path');
 const crypto = require('node:crypto');
+const fs = require('node:fs');
 const { DatabaseSync } = require('node:sqlite');
 
-const db = new DatabaseSync(path.join(__dirname, 'data.db'));
+const dataDirectory = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
+fs.mkdirSync(dataDirectory, { recursive: true });
+const db = new DatabaseSync(path.join(dataDirectory, 'data.db'));
 db.exec('PRAGMA foreign_keys = ON');
 db.exec(`
   CREATE TABLE IF NOT EXISTS web_sessions (
