@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { curriculumResources } from './curriculumResources.js';
 import AuthPage from './AuthPage.jsx';
-import { supabase, supabaseConfigured } from './supabaseClient.js';
 
 const starterResources = [
   { id: 'math-fractions', title: 'Fractions made simple', subject: 'Mathematics', grade: 'Grade 6', kind: 'Study guide', description: 'A visual guide to comparing, adding, and simplifying fractions.', createdBy: 'A. Wanjiku', content: 'FRACTIONS MADE SIMPLE\n\nA fraction shows equal parts of a whole. The top number is the numerator; the bottom number is the denominator.\n\nTo compare fractions with the same denominator, compare the numerators. To add fractions with the same denominator, add the numerators and keep the denominator.\n\nExample: 2/8 + 3/8 = 5/8.\n\nPractice: Draw a shape divided into 4 equal parts. Shade 3 parts and write the fraction.' },
@@ -104,7 +103,7 @@ function loadResources() {
 function App() {
   const [showPortal, setShowPortal] = useState(false);
   const [session, setSession] = useState(null);
-  const [authReady, setAuthReady] = useState(!supabaseConfigured);
+  const [authReady, setAuthReady] = useState(false);
   const [accountError, setAccountError] = useState('');
   const [resources, setResources] = useState(loadResources);
   const [savedIds, setSavedIds] = useState(() => new Set(readStored('empower-saved', [])));
@@ -118,53 +117,45 @@ function App() {
   const [activeResource, setActiveResource] = useState(null);
   const [formError, setFormError] = useState('');
   const [language, setLanguage] = useState('English');
-  const [liteMode, setLiteMode] = useState(false);
+  const [theme, setTheme] = useState(() => readStored('empower-theme', 'light') === 'dark' ? 'dark' : 'light');
   const [highContrast, setHighContrast] = useState(false);
   const [textSize, setTextSize] = useState('normal');
   const [openGuide, setOpenGuide] = useState(null);
   const t = translations[language];
 
   useEffect(() => {
-    if (!supabase) return undefined;
     let active = true;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      if (!active) return;
-      setSession(nextSession);
-      if (nextSession) setShowPortal(true);
-      setAuthReady(true);
-    });
-
-    supabase.auth.getSession().then(({ data, error }) => {
-      if (!active) return;
-      if (error) setAccountError(`Could not restore your sign-in: ${error.message}`);
-      setSession(data.session);
-      if (data.session) setShowPortal(true);
-      setAuthReady(true);
-    }).catch((error) => {
-      if (!active) return;
-      setAccountError(`Could not restore your sign-in: ${error instanceof Error ? error.message : 'Please try again.'}`);
-      setAuthReady(true);
-    });
+    fetch('/api/auth/session', { credentials: 'same-origin' })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Could not restore your sign-in.');
+        if (!active) return;
+        setSession(result.user);
+        if (result.user) setShowPortal(true);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setAccountError(`Could not restore your sign-in: ${error instanceof Error ? error.message : 'Please try again.'}`);
+      })
+      .finally(() => {
+        if (active) setAuthReady(true);
+      });
 
     return () => {
       active = false;
-      subscription.unsubscribe();
     };
   }, []);
 
   async function signOut() {
-    if (!supabase || !session) {
+    if (!session) {
       setShowPortal(false);
       return;
     }
 
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        setAccountError(`Could not sign out: ${error.message}`);
-        return;
-      }
+      const response = await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+      if (!response.ok) throw new Error('The server could not end your session.');
       setAccountError('');
       setSession(null);
       setShowPortal(false);
@@ -203,6 +194,12 @@ function App() {
       console.error(`Could not save ${key} to local storage.`, error);
     }
   };
+
+  function toggleTheme() {
+    const nextTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(nextTheme);
+    persist('empower-theme', nextTheme);
+  }
 
   function toggleSaved(id) {
     const next = new Set(savedIds);
@@ -244,17 +241,22 @@ function App() {
   const isLibrary = ['all', 'saved', 'past papers'].includes(currentView);
   const activeLabel = navItems.find((item) => item.id === currentView)?.label || 'Resource library';
   const pageTitle = currentView === 'saved' ? t.saved : currentView === 'past papers' ? t.past : isLibrary ? t.resources : activeLabel;
+  const today = new Date();
+  const localDate = new Date(today.getTime() - today.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+  const formattedDate = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).format(today);
+  const accountName = session?.fullName || 'Guest learner';
+  const accountInitials = accountName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
 
   if (!authReady) {
     return <main className="auth-loading" role="status">Checking your sign-in…</main>;
   }
 
   if (!showPortal) {
-    return <AuthPage onContinueAsGuest={() => setShowPortal(true)} onAuthenticated={(nextSession) => { setSession(nextSession); setShowPortal(true); }} />;
+    return <AuthPage connectionError={accountError} onContinueAsGuest={() => setShowPortal(true)} onAuthenticated={(nextSession) => { setAccountError(''); setSession(nextSession); setShowPortal(true); }} />;
   }
 
   return (
-    <div className={`app-shell ${liteMode ? 'lite-mode' : ''} ${highContrast ? 'high-contrast' : ''} text-${textSize}`}>
+    <div className={`app-shell dashboard-app ${theme === 'dark' ? 'theme-dark' : ''} ${highContrast ? 'high-contrast' : ''} text-${textSize}`}>
       <aside className="sidebar" aria-label="Main navigation">
         <a className="brand" href="#home" onClick={() => setCurrentView('all')} aria-label="Empower Hope learning portal home">
           <span className="brand-mark">EH</span>
@@ -263,7 +265,7 @@ function App() {
         <p className="nav-label">LEARN & CONNECT</p>
         <nav className="primary-nav">
           {navItems.map((item) => (
-            <button className={`nav-link ${currentView === item.id ? 'is-active' : ''}`} data-view={item.id} key={item.id} onClick={() => { setCurrentView(item.id); setSubjectFilter('All'); }} type="button">
+            <button aria-current={currentView === item.id ? 'page' : undefined} className={`nav-link ${currentView === item.id ? 'is-active' : ''}`} data-view={item.id} key={item.id} onClick={() => { setCurrentView(item.id); setSubjectFilter('All'); }} type="button">
               <span className="nav-icon" aria-hidden="true">{item.icon}</span>{t[item.id === 'all' ? 'resources' : item.id === 'past papers' ? 'past' : item.id] || item.label}
               {item.id === 'saved' && <span className="nav-count">{savedIds.size}</span>}
             </button>
@@ -271,6 +273,11 @@ function App() {
         </nav>
         <div className="sidebar-note">Learning resources and practical digital skills, made for every school.</div>
         <div className="offline-note"><span className="offline-dot" aria-hidden="true"></span><span><strong>Offline-friendly</strong><small>Save lessons to use later</small></span></div>
+        <div className="profile-row" aria-label="Current account">
+          <span className="profile-avatar" aria-hidden="true">{accountInitials}</span>
+          <span><strong>{accountName}</strong><small>{session?.role || 'Browsing as a guest'}</small></span>
+          <span className="profile-status" aria-label={session ? 'Signed in' : 'Guest access'} title={session ? 'Signed in' : 'Guest access'}></span>
+        </div>
       </aside>
 
       <main className="main-content" id="home">
@@ -278,32 +285,58 @@ function App() {
           <div className="breadcrumbs"><span>Empower Hope</span><span className="crumb-divider">/</span><strong>{pageTitle}</strong></div>
           <div className="accessibility-controls" aria-label="Accessibility and display options">
             <label className="compact-select"><span className="sr-only">Language</span><select aria-label="Choose language" value={language} onChange={(event) => setLanguage(event.target.value)}><option>English</option><option>Kiswahili</option></select></label>
-            <button className={`utility-button ${liteMode ? 'utility-active' : ''}`} type="button" onClick={() => setLiteMode(!liteMode)} aria-pressed={liteMode}>Lite mode</button>
+            <button className={`utility-button theme-toggle ${theme === 'dark' ? 'utility-active' : ''}`} type="button" onClick={toggleTheme} aria-pressed={theme === 'dark'} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span><span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button>
             <button className={`utility-button ${highContrast ? 'utility-active' : ''}`} type="button" onClick={() => setHighContrast(!highContrast)} aria-pressed={highContrast} aria-label="Toggle high contrast">◐</button>
             <label className="compact-select size-select"><span className="sr-only">Text size</span><select aria-label="Choose text size" value={textSize} onChange={(event) => setTextSize(event.target.value)}><option value="normal">A</option><option value="large">A+</option><option value="larger">A++</option></select></label>
             <button className="utility-button" type="button" onClick={signOut}>{session ? 'Log out' : 'Account'}</button>
           </div>
         </header>
 
-        <div className="page-wrap">
+        <div className="page-wrap dashboard">
           {accountError && <p className="auth-error account-error" role="alert">{accountError}</p>}
-          <section className="library-hero" aria-labelledby="hero-title">
-            <div className="hero-copy">
-              <p className="hero-kicker">EMPOWER HOPE · LEARN WITHOUT LIMITS</p>
+          <header className="dashboard-header">
+            <div>
+              <h1>Your learning dashboard</h1>
+              <p>Find resources, build digital skills, and keep learning moving.</p>
+            </div>
+            <time className="dashboard-date" dateTime={localDate}>{formattedDate}</time>
+          </header>
+
+          <section className="library-hero dashboard-welcome" aria-labelledby="hero-title">
+            <div className="hero-copy dashboard-welcome-copy">
+              <p className="hero-kicker eyebrow">EMPOWER HOPE · LEARN WITHOUT LIMITS</p>
               <h1 id="hero-title">{isLibrary ? <>Find a resource<br />for class.</> : <>Learn, teach,<br />and grow together.</>}</h1>
               <p>Open learning materials, digital skills, and practical support for every school community.</p>
             </div>
-            <button className="share-button" id="open-upload" type="button" onClick={() => { setDialogOpen(true); setFormError(''); }}><span aria-hidden="true">＋</span>{t.add}</button>
+            <button className="share-button welcome-button" id="open-upload" type="button" onClick={() => { setDialogOpen(true); setFormError(''); }}><span aria-hidden="true">＋</span>{t.add}</button>
           </section>
 
-          <section className="impact-strip" aria-label="Portal impact">
-            <div className="impact-intro"><span className="impact-icon" aria-hidden="true">✦</span><span><strong>Learning belongs to everyone</strong><small>Free resources, ready for connected or offline classrooms.</small></span></div>
-            <div className="impact-metrics"><div><strong>{resources.length}</strong><small>resources</small></div><div><strong>{completedModules.size}/{studentModules.length}</strong><small>skills explored</small></div><div><strong>Free</strong><small>always</small></div></div>
+          <section className="dashboard-stats" aria-label="Your learning at a glance">
+            <article className="dashboard-stat">
+              <div className="dashboard-stat-top"><span className="dashboard-stat-icon" aria-hidden="true">▦</span></div>
+              <p className="dashboard-stat-label">Learning resources</p>
+              <strong className="dashboard-stat-value">{resources.length}</strong>
+            </article>
+            <article className="dashboard-stat">
+              <div className="dashboard-stat-top"><span className="dashboard-stat-icon gold" aria-hidden="true">♡</span></div>
+              <p className="dashboard-stat-label">Saved for later</p>
+              <strong className="dashboard-stat-value">{savedIds.size}</strong>
+            </article>
+            <article className="dashboard-stat">
+              <div className="dashboard-stat-top"><span className="dashboard-stat-icon blue" aria-hidden="true">✦</span></div>
+              <p className="dashboard-stat-label">Skills completed</p>
+              <strong className="dashboard-stat-value">{completedModules.size}/{studentModules.length}</strong>
+            </article>
+            <article className="dashboard-stat">
+              <div className="dashboard-stat-top"><span className="dashboard-stat-icon" aria-hidden="true">↗</span></div>
+              <p className="dashboard-stat-label">Access to every resource</p>
+              <strong className="dashboard-stat-value">Free</strong>
+            </article>
           </section>
 
           {isLibrary && (
-            <section className="library-section" aria-labelledby="library-title">
-              <div className="section-heading">
+            <section className="library-section dashboard-panel" aria-labelledby="library-title">
+              <div className="section-heading dashboard-panel-heading">
                 <div><p className="eyebrow">BROWSE BY SUBJECT OR GRADE</p><h2 id="library-title">{pageTitle}</h2></div>
                 <label className="search-box"><span aria-hidden="true">⌕</span><input type="search" placeholder={t.search} aria-label="Search resources" value={query} onChange={(event) => setQuery(event.target.value)} /><kbd>/</kbd></label>
               </div>
@@ -331,7 +364,7 @@ function App() {
             </section>
           )}
 
-          {currentView === 'teachers' && <section className="content-section"><div className="section-heading"><div><p className="eyebrow">PRACTICAL SUPPORT FOR EDUCATORS</p><h2>Teacher training & support</h2></div></div><p className="section-intro">Short, adaptable guides for bringing learning technology into low-resource classrooms.</p><div className="feature-grid">{teacherGuides.map((guide) => <article className="feature-card" key={guide.title}><span className="feature-icon" aria-hidden="true">✎</span><p className="eyebrow">{guide.tag}</p><h3>{guide.title}</h3><p>{guide.text}</p><button className="text-action" type="button" aria-expanded={openGuide === guide.title} onClick={() => setOpenGuide(openGuide === guide.title ? null : guide.title)}>{openGuide === guide.title ? 'Close guide' : guide.action} <span aria-hidden="true">↗</span></button>{openGuide === guide.title && <div className="guide-detail">{guide.sections.map((section) => <div className="guide-detail-section" key={section.heading}><strong>{section.heading}</strong><ul>{section.items.map((item) => <li key={item}>{item}</li>)}</ul></div>)}{guide.template && <pre className="lesson-plan-template">{guide.template}</pre>}</div>}</article>)}</div><div className="community-card"><span className="community-icon" aria-hidden="true">◎</span><div><h3>Learn with other teachers</h3><p>Start a peer learning circle at your school. Meet regularly to exchange lesson ideas, troubleshoot devices, and celebrate progress.</p></div><a className="text-action" href="mailto:community@empowerhope.example?subject=Teacher%20peer%20community">Connect by email ↗</a></div></section>}
+          {currentView === 'teachers' && <section className="content-section dashboard-panel"><div className="section-heading dashboard-panel-heading"><div><p className="eyebrow">PRACTICAL SUPPORT FOR EDUCATORS</p><h2>Teacher training & support</h2></div></div><p className="section-intro">Short, adaptable guides for bringing learning technology into low-resource classrooms.</p><div className="feature-grid">{teacherGuides.map((guide) => <article className="feature-card" key={guide.title}><span className="feature-icon" aria-hidden="true">✎</span><p className="eyebrow">{guide.tag}</p><h3>{guide.title}</h3><p>{guide.text}</p><button className="text-action" type="button" aria-expanded={openGuide === guide.title} onClick={() => setOpenGuide(openGuide === guide.title ? null : guide.title)}>{openGuide === guide.title ? 'Close guide' : guide.action} <span aria-hidden="true">↗</span></button>{openGuide === guide.title && <div className="guide-detail">{guide.sections.map((section) => <div className="guide-detail-section" key={section.heading}><strong>{section.heading}</strong><ul>{section.items.map((item) => <li key={item}>{item}</li>)}</ul></div>)}{guide.template && <pre className="lesson-plan-template">{guide.template}</pre>}</div>}</article>)}</div><div className="community-card"><span className="community-icon" aria-hidden="true">◎</span><div><h3>Learn with other teachers</h3><p>Start a peer learning circle at your school. Meet regularly to exchange lesson ideas, troubleshoot devices, and celebrate progress.</p></div><a className="text-action" href="mailto:community@empowerhope.example?subject=Teacher%20peer%20community">Connect by email ↗</a></div></section>}
 
           {currentView === 'students' && <section className="content-section"><div className="section-heading"><div><p className="eyebrow">YOUR DIGITAL LITERACY PATH</p><h2>Build skills, one step at a time</h2></div><span className="progress-pill">{completedModules.size} of {studentModules.length} completed</span></div><p className="section-intro">Explore short lessons in computer basics, keyboarding, and staying safe online. Your progress is saved on this device.</p><div className="feature-grid">{studentModules.map((module, index) => <article className="feature-card module-card" key={module.id}><div className="module-topline"><span className="feature-icon" aria-hidden="true">{module.icon}</span><span className="module-number">0{index + 1} · {module.minutes}</span></div><p className="eyebrow">{module.skill}</p><h3>{module.title}</h3><p>{module.text}</p><button className={`module-action ${completedModules.has(module.id) ? 'is-complete' : ''}`} type="button" aria-pressed={completedModules.has(module.id)} onClick={() => toggleModule(module.id)}>{completedModules.has(module.id) ? '✓ Completed · mark to revisit' : 'Start this module →'}</button></article>)}</div><div className="challenge-card"><span className="challenge-symbol" aria-hidden="true">✦</span><div><p className="eyebrow">OFFLINE PROJECT CHALLENGE</p><h3>Make a community helpful guide</h3><p>Write or draw five steps that help someone use a shared device safely. Share your guide with your class.</p></div></div></section>}
 

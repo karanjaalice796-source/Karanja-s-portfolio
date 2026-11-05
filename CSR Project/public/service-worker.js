@@ -1,4 +1,4 @@
-const CACHE_NAME = 'empower-hope-v3';
+const CACHE_NAME = 'empower-hope-v4';
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
@@ -17,6 +17,7 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || new URL(event.request.url).origin !== self.location.origin) return;
+  if (new URL(event.request.url).pathname.startsWith('/api/')) return;
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;

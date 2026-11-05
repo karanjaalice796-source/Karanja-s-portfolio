@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
 import './schoolportal.css';
 import './App.css';
+import './dashboard.css';
+import './dashboard-theme.css';
+import './polish.css';
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {

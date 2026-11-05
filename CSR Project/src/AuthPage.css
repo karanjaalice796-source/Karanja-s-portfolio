@@ -180,7 +180,6 @@
 .auth-consent input { accent-color: #315e4a; height: 14px; margin: 0; width: 14px; }
 .auth-notice { background: #fbf5e8; border-left: 3px solid #c79548; color: #695936; font-size: 10px; line-height: 1.6; margin: 0; padding: 10px 12px; }
 .auth-error { background: #fff0ed; border-left: 3px solid #b74d3b; color: #7c3328; font-size: 10px; line-height: 1.6; margin: 0; padding: 10px 12px; }
-.auth-setup-hint { background: #f0f4ef; border-left: 3px solid #78947d; color: #53675a; font-size: 10px; line-height: 1.6; margin: 0; padding: 10px 12px; }
 .account-error { margin: 0 0 18px; }
 .auth-loading { align-items: center; background: #f8f8f4; color: #53675a; display: flex; font: 12px 'DM Sans', sans-serif; justify-content: center; min-height: 100vh; }
 .auth-submit {

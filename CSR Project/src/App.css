@@ -57,11 +57,6 @@
 .support-note { color: #89928b; font-size: 10px; line-height: 1.6; margin-top: 15px; }
 .dialog-backdrop { align-items: center; background: #142b28a8; backdrop-filter: blur(3px); display: flex; inset: 0; justify-content: center; padding: 14px; position: fixed; z-index: 20; }
 .upload-dialog { margin: 0; overflow-y: auto; }
-.lite-mode { background-color: var(--paper); background-image: none; }
-.lite-mode::before { display: none; }
-.lite-mode .library-hero { background-image: none; background-color: #315e4a; }
-.lite-mode .photo-credit { display: none; }
-.lite-mode * { animation: none !important; transition: none !important; }
 .high-contrast { --ink: #101b15; --muted: #303c34; --green: #17472d; --paper: #fff; --line: #68756c; color: #101b15; }
 .high-contrast .sidebar, .high-contrast .topbar { background: #fff; border-color: #68756c; }
 .high-contrast .nav-link, .high-contrast .section-intro, .high-contrast .feature-card > p:not(.eyebrow) { color: #27352c; }

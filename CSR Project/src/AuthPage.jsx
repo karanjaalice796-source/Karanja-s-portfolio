@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import './AuthPage.css';
-import { supabase, supabaseConfigured } from './supabaseClient.js';
 
-function AuthPage({ onContinueAsGuest, onAuthenticated }) {
+function AuthPage({ onContinueAsGuest, onAuthenticated, connectionError }) {
   const [mode, setMode] = useState('signup');
   const [showPassword, setShowPassword] = useState(false);
   const [notice, setNotice] = useState('');
@@ -21,44 +20,31 @@ function AuthPage({ onContinueAsGuest, onAuthenticated }) {
     setNotice('');
     setErrorMessage('');
 
-    if (!supabase) {
-      setErrorMessage('Account access is not configured yet. Add the Supabase project URL and publishable key to .env.local, then restart the app.');
-      return;
-    }
-
     const formData = new FormData(event.currentTarget);
-    const email = String(formData.get('email'));
-    const password = String(formData.get('password'));
+    const body = {
+      name: String(formData.get('name') || ''),
+      role: String(formData.get('role') || ''),
+      email: String(formData.get('email') || ''),
+      password: String(formData.get('password') || ''),
+      updates: formData.get('updates') === 'on',
+      remember: formData.get('remember') === 'on',
+    };
     setIsSubmitting(true);
 
     try {
-      if (isSignUp) {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: String(formData.get('name')),
-              role: String(formData.get('role')),
-              updates: formData.get('updates') === 'on',
-            },
-            emailRedirectTo: window.location.origin,
-          },
-        });
-
-        if (error) throw error;
-        if (data.session) {
-          onAuthenticated(data.session);
-        } else {
-          setNotice('Your account was created. Check your email to confirm your address, then log in to enter the portal.');
-        }
-      } else {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        onAuthenticated(data.session);
-      }
+      const response = await fetch(isSignUp ? '/api/auth/signup' : '/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(body),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not complete account access.');
+      onAuthenticated(result.user);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Could not complete account access. Please try again.');
+      setErrorMessage(error instanceof TypeError
+        ? 'Could not connect to the account service. Make sure the project server is running.'
+        : error instanceof Error ? error.message : 'Could not complete account access. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -110,7 +96,7 @@ function AuthPage({ onContinueAsGuest, onAuthenticated }) {
             {isSignUp && (
               <>
                 <label className="auth-field">Full name
-                  <input autoComplete="name" name="name" placeholder="e.g. Amina Wanjiku" required />
+                  <input autoComplete="name" maxLength={120} minLength={2} name="name" placeholder="e.g. Amina Wanjiku" required />
                 </label>
                 <label className="auth-field">I am a
                   <select name="role" defaultValue="" required>
@@ -124,11 +110,11 @@ function AuthPage({ onContinueAsGuest, onAuthenticated }) {
               </>
             )}
             <label className="auth-field">Email address
-              <input autoComplete="email" name="email" type="email" placeholder="you@example.com" required />
+              <input autoComplete="email" maxLength={254} name="email" type="email" placeholder="you@example.com" required />
             </label>
             <label className="auth-field">Password
               <span className="auth-password-wrap">
-                <input autoComplete={isSignUp ? 'new-password' : 'current-password'} minLength={8} name="password" placeholder="At least 8 characters" required type={showPassword ? 'text' : 'password'} />
+                <input autoComplete={isSignUp ? 'new-password' : 'current-password'} maxLength={128} minLength={8} name="password" placeholder="At least 8 characters" required type={showPassword ? 'text' : 'password'} />
                 <button className="auth-show-password" type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? 'Hide' : 'Show'}</button>
               </span>
             </label>
@@ -137,15 +123,15 @@ function AuthPage({ onContinueAsGuest, onAuthenticated }) {
             ) : (
               <label className="auth-consent"><input name="remember" type="checkbox" /><span>Remember me on this device</span></label>
             )}
+            {connectionError && <p className="auth-error" role="alert">{connectionError}</p>}
             {notice && <p className="auth-notice" role="status">{notice}</p>}
             {errorMessage && <p className="auth-error" role="alert">{errorMessage}</p>}
-            {!supabaseConfigured && <p className="auth-setup-hint">Connect a Supabase project to enable accounts. Guest access is available below.</p>}
             <button className="auth-submit" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Please wait…' : isSignUp ? 'Create account' : 'Log in'}<span aria-hidden="true">→</span></button>
           </form>
 
           <div className="auth-divider"><span>OR</span></div>
           <button className="auth-guest" type="button" onClick={onContinueAsGuest}>Explore the portal as a guest <span aria-hidden="true">↗</span></button>
-          <p className="auth-privacy">Free learning resources, ready for your whole school community.</p>
+          <p className="auth-privacy">Your account is securely stored in this portal's local database.</p>
         </div>
       </section>
     </main>
