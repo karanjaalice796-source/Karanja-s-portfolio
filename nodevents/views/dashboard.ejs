@@ -36,20 +36,23 @@
     <a class="button primary" href="#new">＋ New event</a>
   </section>
 
-  <nav class="planner-portal-links panel" aria-label="Planner dashboard sections">
-    <a href="/analytics">Overview and analytics</a>
-    <a href="/client-event-requests">Client Event Requests</a>
-    <a href="/my-events">My Events</a>
-    <a href="/clients">Client Management</a>
-    <a href="<%= focusEvent ? `/events/${focusEvent.id}/logistics` : '/vendors' %>">Vendor Management</a>
-    <a href="#bookings">Bookings</a>
-    <a href="<%= focusEvent ? `/events/${focusEvent.id}/budget` : '#new' %>">Budget and Expenses</a>
-    <a href="<%= focusEvent ? `/events/${focusEvent.id}/budget` : '#new' %>">Payments and Invoices</a>
-    <a href="<%= focusEvent ? `/events/${focusEvent.id}/logistics` : '#new' %>">Tasks and Schedules</a>
-    <a href="/reports">Reports</a>
-    <a href="#messages">Messages</a>
-    <a href="#settings">Settings</a>
-  </nav>
+  <details class="planner-portal-links panel responsive-menu dashboard-links-menu" open>
+    <summary>Dashboard menu</summary>
+    <nav class="planner-dashboard-links" aria-label="Planner dashboard sections">
+      <a href="/analytics">Overview and analytics</a>
+      <a href="/client-event-requests">Client Event Requests</a>
+      <a href="/my-events">My Events</a>
+      <a href="/clients">Client Management</a>
+      <a href="<%= focusEvent ? `/events/${focusEvent.id}/logistics` : '/vendors' %>">Vendor Management</a>
+      <a href="#bookings">Bookings</a>
+      <a href="<%= focusEvent ? `/events/${focusEvent.id}/budget` : '#new' %>">Budget and Expenses</a>
+      <a href="<%= focusEvent ? `/events/${focusEvent.id}/budget` : '#new' %>">Payments and Invoices</a>
+      <a href="<%= focusEvent ? `/events/${focusEvent.id}/logistics` : '#new' %>">Tasks and Schedules</a>
+      <a href="/reports">Reports</a>
+      <a href="#messages">Messages</a>
+      <a href="#settings">Settings</a>
+    </nav>
+  </details>
 
   <details class="d-new" id="new">
     <summary><span class="plus" aria-hidden="true">+</span>Create an event<span class="d-hint">Add the date, venue, and event type</span></summary>

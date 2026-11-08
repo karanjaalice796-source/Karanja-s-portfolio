@@ -933,7 +933,19 @@ io.on('connection', (socket) => {
 });
 
 app.get('/', (request, response) => {
-  response.render('home', { platformRating: platformRatingFor(request.currentUser?.id) });
+  if (request.currentUser) {
+    return response.redirect(request.currentUser.role === 'client' ? '/client/dashboard' : '/dashboard');
+  }
+  if (request.session.vendorUser) return response.redirect('/vendor/dashboard');
+  return response.render('home', {
+    platformRating: platformRatingFor(null),
+  });
+});
+
+app.get('/home', (request, response) => {
+  response.render('home', {
+    platformRating: platformRatingFor(request.currentUser?.id),
+  });
 });
 
 app.post('/platform-rating', (request, response, next) => {
@@ -943,7 +955,7 @@ app.post('/platform-rating', (request, response, next) => {
   const ratingText = String(request.body.rating || '');
   if (!/^[1-5]$/.test(ratingText)) {
     setNotice(request, 'Choose a platform rating from 1 to 5 stars.');
-    return response.redirect('/#nodevents-rating');
+    return response.redirect('/learn#nodevents-rating');
   }
   db.prepare(`
     INSERT INTO platform_ratings (user_id, rating)
@@ -951,9 +963,9 @@ app.post('/platform-rating', (request, response, next) => {
     ON CONFLICT(user_id) DO UPDATE SET rating = excluded.rating, updated_at = datetime('now')
   `).run(request.currentUser.id, Number(ratingText));
   setNotice(request, 'Thanks for rating Nodevents.');
-  const returnTo = ['/', '/dashboard', '/client/dashboard'].includes(request.body.return_to)
+  const returnTo = ['/home', '/learn', '/dashboard', '/client/dashboard'].includes(request.body.return_to)
     ? request.body.return_to
-    : '/';
+    : '/learn';
   return response.redirect(`${returnTo}#nodevents-rating`);
 });
 
@@ -1036,8 +1048,11 @@ app.get('/vendors/:profileId', (request, response) => {
   response.render('vendor-profile', { vendor, gallery: vendorGallery(vendor), events });
 });
 
-app.get('/learn', (_request, response) => {
-  response.render('learning');
+app.get('/learn', (request, response) => {
+  response.render('learning', {
+    platformRating: platformRatingFor(request.currentUser?.id),
+    returnTo: '/learn',
+  });
 });
 
 app.get('/plans', (_request, response) => {

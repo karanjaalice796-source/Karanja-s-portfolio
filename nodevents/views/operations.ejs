@@ -18,17 +18,20 @@
       <h1><%= moduleTitles[module] %></h1>
       <p class="muted"><%= event.venue || 'Venue to be confirmed' %></p>
     </div>
-    <nav class="event-tools-nav" aria-label="Event modules">
-      <a href="/events/<%= event.id %>/logistics" class="<%= module === 'logistics' ? 'active' : '' %>">Logistics</a>
-      <a href="/events/<%= event.id %>/budget">Budget</a>
-      <a href="/events/<%= event.id %>/guests">Guests</a>
-      <a href="/events/<%= event.id %>/catering">Catering</a>
-      <a href="/events/<%= event.id %>/registration" class="<%= module === 'registration' ? 'active' : '' %>">Registration</a>
-      <a href="/events/<%= event.id %>/tickets" class="<%= module === 'tickets' ? 'active' : '' %>">Tickets</a>
-      <a href="/events/<%= event.id %>/event-day" class="<%= module === 'event-day' ? 'active' : '' %>">Event day</a>
-      <a href="/events/<%= event.id %>/reports" class="<%= module === 'reports' ? 'active' : '' %>">Reports</a>
-      <a href="/vendors">Find Vendors</a>
-    </nav>
+    <details class="event-tools-menu responsive-menu" open>
+      <summary>Event tools</summary>
+      <nav class="event-tools-nav" aria-label="Event modules">
+        <a href="/events/<%= event.id %>/logistics" class="<%= module === 'logistics' ? 'active' : '' %>">Logistics</a>
+        <a href="/events/<%= event.id %>/budget">Budget</a>
+        <a href="/events/<%= event.id %>/guests">Guests</a>
+        <a href="/events/<%= event.id %>/catering">Catering</a>
+        <a href="/events/<%= event.id %>/registration" class="<%= module === 'registration' ? 'active' : '' %>">Registration</a>
+        <a href="/events/<%= event.id %>/tickets" class="<%= module === 'tickets' ? 'active' : '' %>">Tickets</a>
+        <a href="/events/<%= event.id %>/event-day" class="<%= module === 'event-day' ? 'active' : '' %>">Event day</a>
+        <a href="/events/<%= event.id %>/reports" class="<%= module === 'reports' ? 'active' : '' %>">Reports</a>
+        <a href="/vendors">Find Vendors</a>
+      </nav>
+    </details>
   </div>
 
   <% if (module === 'logistics') { %>

@@ -33,7 +33,8 @@
     || title === 'Client sign in' || title === 'Create client account';
   const isPublicVendorProfile = title.endsWith('· Vendor profile');
   const showPlannerSidebar = Boolean(user && user.role === 'planner' && (
-    title === 'Planner dashboard'
+    title === 'Nodevents · Event Planner'
+    || title === 'Planner dashboard'
     || title === 'My Events'
     || title === 'Planner notifications'
     || title === 'Clients'
@@ -56,7 +57,9 @@
 %>
   <% if (!isAuthPage) { %>
   <header class="bar">
-    <a class="brand" href="/">Nodevents<small>EVENT COORDINATION</small></a>
+    <a class="brand" href="<%= user && user.role === 'planner' ? '/home' : '/' %>">Nodevents<small>EVENT COORDINATION</small></a>
+    <details class="responsive-menu header-menu" open>
+      <summary>Menu</summary>
     <% if (!isAuthPage && vendorView) { %>
       <nav class="bar-nav" aria-label="Main navigation">
         <a class="<%= title === 'How Nodevents works' ? 'active' : '' %>" href="/learn">Learning</a>
@@ -81,6 +84,7 @@
       </nav>
     <% } else if (!isAuthPage) { %>
       <nav class="bar-nav" aria-label="Main navigation">
+        <a class="<%= title === 'Nodevents · Event Planner' ? 'active' : '' %>" href="/">Home</a>
         <a class="<%= title === 'How Nodevents works' ? 'active' : '' %>" href="/learn">Learning</a>
         <a href="/browse-events">Browse Events</a>
         <a href="/vendors">Find Vendors</a>
@@ -91,6 +95,7 @@
         <a href="/client/auth?mode=register">Create client account</a>
       </nav>
     <% } %>
+    </details>
     <button class="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false">
       <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <circle cx="12" cy="12" r="4"></circle>
@@ -121,9 +126,11 @@
   <div class="app-shell <%= showPlannerSidebar || showClientSidebar ? 'has-sidebar' : '' %>">
     <% if (showPlannerSidebar) { %>
     <aside class="side-nav" aria-label="Site navigation">
+      <details class="responsive-menu sidebar-menu" open>
+      <summary aria-label="Toggle planner navigation"><span class="sidebar-menu-icon" aria-hidden="true">☰</span></summary>
       <p class="side-nav-title">Explore Nodevents</p>
       <nav aria-label="Primary">
-        <a class="<%= title === 'Nodevents · Event Planner' ? 'active' : '' %>" href="/">Home</a>
+        <a class="<%= title === 'Nodevents · Event Planner' ? 'active' : '' %>" href="/home">Home</a>
         <a class="<%= title === 'How Nodevents works' ? 'active' : '' %>" href="/learn">Learning</a>
         <a class="<%= title === 'Browse Events' ? 'active' : '' %>" href="/browse-events">Browse Events</a>
         <a class="<%= isVendorDiscovery ? 'active' : '' %>" href="/vendors">Find Vendors</a>
@@ -154,10 +161,13 @@
       <% } else if (user && !navEvent) { %>
         <p class="side-nav-hint">Create an event to open its guest, catering, and budget tools.</p>
       <% } %>
+      </details>
     </aside>
     <% } %>
     <% if (showClientSidebar) { %>
     <aside class="side-nav client-side-nav" aria-label="Client dashboard navigation">
+      <details class="responsive-menu sidebar-menu" open>
+      <summary aria-label="Toggle client navigation"><span class="sidebar-menu-icon" aria-hidden="true">☰</span></summary>
       <p class="side-nav-title">Your Nodevents</p>
       <nav aria-label="Client dashboard">
         <a href="/client/dashboard#overview">Overview</a>
@@ -172,6 +182,7 @@
         <a href="/client/dashboard#my-tickets">My Tickets</a>
         <a href="/client/dashboard#profile">My Profile</a>
       </nav>
+      </details>
     </aside>
     <% } %>
     <main>

@@ -25,6 +25,7 @@ html[data-theme="dark"] {
   --red: #f08d83;
 }
 * { box-sizing: border-box; }
+img, video { max-width: 100%; height: auto; }
 html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
 body {
   margin: 0;
@@ -379,11 +380,6 @@ html[data-theme="dark"] .vendor-account-banner { background: var(--panel); }
   .stats { gap: .45rem; }
   .stat { padding: .7rem .55rem; }
   .stat strong { font-size: 1.35rem; }
-  .bar { flex-wrap: wrap; }
-  .bar-nav { order: 3; width: 100%; justify-content: flex-start; gap: .9rem; margin: 0; overflow-x: auto; white-space: nowrap; }
-  .theme-toggle { order: 1; margin-left: auto; }
-  .bar-actions { order: 2; width: auto; justify-content: space-between; }
-  .bar-actions .muted { display: none; }
   .learning-points { grid-template-columns: 1fr; }
   .learning-two-column { grid-template-columns: 1fr; }
   .learning-finish { align-items: flex-start; flex-direction: column; }

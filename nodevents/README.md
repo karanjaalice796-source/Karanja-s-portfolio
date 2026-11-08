@@ -10,12 +10,12 @@ Use Node.js 22.5 or later:
 npm start
 ```
 
-The app is available at `http://localhost:3100`. SQLite creates or upgrades `data.db` when the server starts.
+The app is available at `http://localhost:3100`. The root URL opens the public home page for guests, with links to explore events, find vendors, learn about Nodevents, and sign in as a planner, client, or vendor. Signed-in planners can open a separate landing page at `/home`; **Overview** opens their dashboard at `/dashboard`. After signing in, each account opens its role-specific dashboard. The learning page is available at `/learn`. SQLite creates or upgrades `data.db` when the server starts.
 
 ## Planner tools
 
 - Create, edit, and permanently delete events from the planner workspace. Deleting an event removes its related records and uploaded invoice files.
-- The public home page introduces Nodevents; Browse Events uses the built-in event templates, and Find Vendors searches profiles published by vendor accounts.
+- The learning page introduces Nodevents; Browse Events uses the built-in event templates, and Find Vendors searches profiles published by vendor accounts.
 - Vendors can publish and edit their own searchable directory profile from Vendor Profile. A planner can invite a directory vendor to an event; this creates a private vendor invitation and links the invitation to the vendor account.
 - Vendor profiles support a public service gallery of up to 12 JPG, PNG, or WebP images. Vendors can manage gallery images from Vendor Profile; image uploads are limited to 5 MB each.
 - Client and planner accounts use separate registration and sign-in pages. Clients see only their own request and approved-event data in the client dashboard; attempts to use planner routes return to the client portal rather than showing planner data.
@@ -35,7 +35,7 @@ The app is available at `http://localhost:3100`. SQLite creates or upgrades `dat
 - Vendor accounts can request a password reset from the vendor sign-in page; reset links expire after one hour and can only be used once.
 - Event Logistics records venue-map areas, team assignments, prioritized tasks, vendor contract terms/deadlines, and estimated versus actual expenses. Contract documents themselves should be kept in approved secure storage.
 - Event Logistics can estimate driving distance and duration with the Google Routes API. Configure `GOOGLE_MAPS_ROUTES_API_KEY` in the ignored `nodevents/.env` file and enable the Routes API for the key. Origin and destination text entered for a lookup is sent from the server to Google; the API key is never sent to the browser or included in `.env.example`.
-- Authenticated planner and client accounts can submit one 1–5 star Nodevents platform rating each. They can update their rating, and the public homepage displays the average and number of ratings. Ratings are about the platform, not individual events or vendors.
+- Authenticated planner and client accounts can submit one 1–5 star Nodevents platform rating each. They can update their rating, and the learning page displays the average and number of ratings. Ratings are about the platform, not individual events or vendors.
 - Ticket registration supports custom questions, ticket categories, capacities, attendee records, emailed digital QR tickets, PDF download/printing, and one-time server-validated check-in. Tickets can use an event accent color and optional logo. Free tickets confirm immediately; external paid tickets stay pending until the organizer independently verifies payment. Clients see tickets in My Tickets when they register while signed in using the matching account email; attendee private ticket URLs remain available without an account.
 - Event-day Operations tracks ticket and guest check-ins, vendor arrival/setup, meals served, incidents, and email announcements to confirmed attendees. Reports include attendance, confirmed ticket value, expenses, paid invoices, catering counts, and attendee feedback, with CSV export.
 - M-Pesa Daraja STK Push is supported in Sandbox for paid KES tickets. Configure all the values below and use a publicly reachable HTTPS callback URL; localhost alone cannot receive Daraja callbacks. A callback is not treated as proof by itself: Nodevents checks the matching STK Push request with Daraja before issuing a ticket. Other payment methods still require independent organizer verification. Automated refunds and staff sign-in/accounts are not integrated.

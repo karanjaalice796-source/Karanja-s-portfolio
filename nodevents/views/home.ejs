@@ -1,3 +1,9 @@
+<%
+  const dashboardHref = user
+    ? user.role === 'client' ? '/client/dashboard' : '/dashboard'
+    : vendorUser ? '/vendor/dashboard' : '/auth';
+  const dashboardLabel = user || vendorUser ? 'Open your dashboard' : 'Start planning';
+%>
 <%- include('partials/head', { title: 'Nodevents · Event Planner' }) %>
 <section class="site-home-hero">
   <p class="eyebrow">Plan together, without the loose ends</p>
@@ -6,7 +12,12 @@
   <div class="site-home-actions">
     <a class="button primary" href="/browse-events">Browse event types</a>
     <a class="button" href="/vendors">Find a vendor</a>
-    <a class="button" href="/auth">Start planning</a>
+    <% if (!user && !vendorUser) { %>
+      <a class="button" href="/auth">Planner sign in</a>
+      <a class="button" href="/client/auth?mode=login">Client sign in</a>
+      <a class="button" href="/vendor/login">Vendor sign in</a>
+    <% } %>
+    <a class="button" href="/learn">How Nodevents works</a>
   </div>
 </section>
 
@@ -27,8 +38,8 @@
     <p class="eyebrow">Coordinate</p>
     <h2>Keep planning connected</h2>
     <p>Manage guest RSVPs and check-in, calculate catering quantities, and track event costs.</p>
-    <a href="/dashboard">Open My Events</a>
+    <a href="<%= dashboardHref %>"><%= dashboardLabel %></a>
   </article>
 </section>
-<%- include('partials/platform-rating', { platformRating, returnTo: '/' }) %>
+<%- include('partials/platform-rating', { platformRating, returnTo: user ? '/home' : '/' }) %>
 <%- include('partials/foot') %>

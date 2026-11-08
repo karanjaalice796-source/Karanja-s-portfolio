@@ -104,6 +104,24 @@ test('client accounts stay role-scoped while private links support PINs, expiry,
   }
   assert.equal(ready, true, `Nodevents did not start within 30 seconds. ${serverOutput}\n${serverErrors}`);
 
+  const guestLanding = await request(baseUrl, createCookieJar(), '/');
+  const homeHtml = await guestLanding.text();
+  assert.equal(guestLanding.status, 200);
+  assert.match(homeHtml, /Make every event easier to bring together/);
+  assert.match(homeHtml, /href="\/browse-events"/);
+  assert.match(homeHtml, /href="\/vendors"/);
+  assert.match(homeHtml, /href="\/auth">Planner sign in/);
+  assert.match(homeHtml, /href="\/client\/auth\?mode=login">Client sign in/);
+  assert.match(homeHtml, /href="\/vendor\/login">Vendor sign in/);
+  assert.match(homeHtml, /href="\/learn">How Nodevents works/);
+  assert.equal((await request(baseUrl, createCookieJar(), '/home')).status, 200);
+  const learningPage = await request(baseUrl, createCookieJar(), '/learn');
+  const learningHtml = await learningPage.text();
+  assert.equal(learningPage.status, 200);
+  assert.match(learningHtml, /href="\/auth\?mode=login"/);
+  assert.match(learningHtml, /href="\/client\/auth\?mode=login"/);
+  assert.match(learningHtml, /href="\/vendor\/login"/);
+
   const planner = createCookieJar();
   const plannerAuthPage = await request(baseUrl, createCookieJar(), '/auth');
   const plannerAuthHtml = await plannerAuthPage.text();
@@ -130,9 +148,20 @@ test('client accounts stay role-scoped while private links support PINs, expiry,
   });
   assert.equal(registerPlanner.status, 302);
   assert.equal(registerPlanner.headers.get('location'), '/dashboard');
+  const plannerHome = await request(baseUrl, planner, '/');
+  assert.equal(plannerHome.status, 302);
+  assert.equal(plannerHome.headers.get('location'), '/dashboard');
   const plannerDashboard = await request(baseUrl, planner, '/dashboard');
   const plannerDashboardHtml = await plannerDashboard.text();
   assert.equal(plannerDashboard.status, 200, serverErrors);
+  assert.match(plannerDashboardHtml, /href="\/home">Home<\/a>/);
+  assert.match(plannerDashboardHtml, /href="\/dashboard"[^>]*>Overview<\/a>/);
+  const plannerHomePage = await request(baseUrl, planner, '/home');
+  const plannerHomeHtml = await plannerHomePage.text();
+  assert.equal(plannerHomePage.status, 200);
+  assert.match(plannerHomeHtml, /Make every event easier to bring together/);
+  assert.match(plannerHomeHtml, /href="\/dashboard">Open your dashboard/);
+  assert.doesNotMatch(plannerHomeHtml, /Your events, all in one place/);
   for (const section of ['Overview and analytics', 'Client Event Requests', 'My Events', 'Client Management',
     'Vendor Management', 'Bookings', 'Budget and Expenses', 'Payments and Invoices', 'Tasks and Schedules',
     'Reports', 'Messages', 'Settings']) {
@@ -149,8 +178,8 @@ test('client accounts stay role-scoped while private links support PINs, expiry,
     form: { rating: '5', return_to: '/dashboard' },
   });
   assert.equal(plannerRating.headers.get('location'), '/dashboard#nodevents-rating');
-  const ratedHomepage = await request(baseUrl, planner, '/');
-  assert.match(await ratedHomepage.text(), /5\.0 \/ 5/);
+  const ratedDashboard = await request(baseUrl, planner, '/dashboard');
+  assert.match(await ratedDashboard.text(), /5\.0 \/ 5/);
 
   const createEvent = await request(baseUrl, planner, '/events', {
     method: 'POST',
@@ -244,6 +273,9 @@ test('client accounts stay role-scoped while private links support PINs, expiry,
   });
   assert.equal(vendorSignup.status, 302);
   assert.equal(vendorSignup.headers.get('location'), '/vendor/dashboard');
+  const vendorHome = await request(baseUrl, selfRegisteredVendor, '/');
+  assert.equal(vendorHome.status, 302);
+  assert.equal(vendorHome.headers.get('location'), '/vendor/dashboard');
   const vendorDashboardPage = await request(baseUrl, selfRegisteredVendor, '/vendor/dashboard');
   assert.equal(vendorDashboardPage.status, 200);
   assert.match(await vendorDashboardPage.text(), /Set up your vendor profile/);
@@ -337,6 +369,9 @@ test('client accounts stay role-scoped while private links support PINs, expiry,
   });
   assert.equal(registerClient.status, 302);
   assert.equal(registerClient.headers.get('location'), '/client/dashboard');
+  const clientHome = await request(baseUrl, accountClient, '/');
+  assert.equal(clientHome.status, 302);
+  assert.equal(clientHome.headers.get('location'), '/client/dashboard');
   const accountUserId = db.prepare("SELECT id FROM users WHERE email = 'client@example.test'").get().id;
   const brandingImage = await QRCode.toBuffer('Nodevents event logo');
   const saveTicketBranding = await request(baseUrl, planner, '/events/1/tickets/branding', {
@@ -408,7 +443,7 @@ test('client accounts stay role-scoped while private links support PINs, expiry,
     form: { rating: '4', return_to: '/client/dashboard' },
   });
   assert.equal(clientRating.headers.get('location'), '/client/dashboard#nodevents-rating');
-  assert.match(await (await request(baseUrl, accountClient, '/')).text(), /4\.5 \/ 5/);
+  assert.match(await (await request(baseUrl, accountClient, '/client/dashboard')).text(), /4\.5 \/ 5/);
   assert.doesNotMatch(clientDashboardHtml, /href="\/dashboard"/);
   assert.equal((await request(baseUrl, accountClient, '/dashboard')).headers.get('location'), '/client/dashboard');
   assert.equal((await request(baseUrl, accountClient, '/clients')).headers.get('location'), '/client/dashboard');
