@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { curriculumResources } from './curriculumResources.js';
 import AuthPage from './AuthPage.jsx';
+import { readApiJson } from './api.js';
+import SchoolPilot from './SchoolPilot.jsx';
 
 const starterResources = [
   { id: 'math-fractions', title: 'Fractions made simple', subject: 'Mathematics', grade: 'Grade 6', kind: 'Study guide', description: 'A visual guide to comparing, adding, and simplifying fractions.', createdBy: 'A. Wanjiku', content: 'FRACTIONS MADE SIMPLE\n\nA fraction shows equal parts of a whole. The top number is the numerator; the bottom number is the denominator.\n\nTo compare fractions with the same denominator, compare the numerators. To add fractions with the same denominator, add the numerators and keep the denominator.\n\nExample: 2/8 + 3/8 = 5/8.\n\nPractice: Draw a shape divided into 4 equal parts. Shade 3 parts and write the fraction.' },
@@ -24,6 +26,9 @@ const navItems = [
   { id: 'students', label: 'Student skills', icon: '✦' },
   { id: 'support', label: 'Device support', icon: '⚙' },
   { id: 'donations', label: 'Needs & donations', icon: '♡' },
+  { id: 'attendance', label: 'Attendance', icon: '✓' },
+  { id: 'fees', label: 'Fee register', icon: 'KSh' },
+  { id: 'school', label: 'School & team', icon: '⌂' },
 ];
 
 const translations = {
@@ -128,8 +133,7 @@ function App() {
 
     fetch('/api/auth/session', { credentials: 'same-origin' })
       .then(async (response) => {
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Could not restore your sign-in.');
+        const result = await readApiJson(response);
         if (!active) return;
         setSession(result.user);
         if (result.user) setShowPortal(true);
@@ -238,6 +242,12 @@ function App() {
     persist('empower-offers', [...next]);
   }
 
+  const availableNavItems = navItems.filter((item) => {
+    if (item.id === 'school') return session?.role === 'school_admin';
+    if (item.id === 'attendance') return ['school_admin', 'teacher'].includes(session?.role);
+    if (item.id === 'fees') return ['school_admin', 'bursar'].includes(session?.role);
+    return true;
+  });
   const isLibrary = ['all', 'saved', 'past papers'].includes(currentView);
   const activeLabel = navItems.find((item) => item.id === currentView)?.label || 'Resource library';
   const pageTitle = currentView === 'saved' ? t.saved : currentView === 'past papers' ? t.past : isLibrary ? t.resources : activeLabel;
@@ -262,9 +272,10 @@ function App() {
           <span className="brand-mark">EH</span>
           <span className="brand-name">Empower Hope<small>LEARNING PORTAL</small></span>
         </a>
+        {session && <div className="school-workspace"><span className="school-seal" aria-hidden="true">{session.school.name.slice(0, 1).toUpperCase()}</span><span className="school-copy"><strong>{session.school.name}</strong><small>{session.role.replace('_', ' ')}</small></span></div>}
         <p className="nav-label">LEARN & CONNECT</p>
         <nav className="primary-nav">
-          {navItems.map((item) => (
+          {availableNavItems.map((item) => (
             <button aria-current={currentView === item.id ? 'page' : undefined} className={`nav-link ${currentView === item.id ? 'is-active' : ''}`} data-view={item.id} key={item.id} onClick={() => { setCurrentView(item.id); setSubjectFilter('All'); }} type="button">
               <span className="nav-icon" aria-hidden="true">{item.icon}</span>{t[item.id === 'all' ? 'resources' : item.id === 'past papers' ? 'past' : item.id] || item.label}
               {item.id === 'saved' && <span className="nav-count">{savedIds.size}</span>}
@@ -371,6 +382,8 @@ function App() {
           {currentView === 'support' && <section className="content-section"><div className="section-heading"><div><p className="eyebrow">KEEP YOUR CLASSROOM CONNECTED</p><h2>Hardware & software support</h2></div></div><p className="section-intro">Plain-language troubleshooting and free tools that can work well on older devices.</p><div className="support-list">{deviceGuides.map((guide) => <article className="support-item" key={guide.title}><button type="button" aria-expanded={openGuide === guide.title} onClick={() => setOpenGuide(openGuide === guide.title ? null : guide.title)}><span className="support-mark" aria-hidden="true">＋</span><span>{guide.title}</span><span className="support-caret">{openGuide === guide.title ? '−' : '⌄'}</span></button>{openGuide === guide.title && <p>{guide.steps}</p>}</article>)}</div><div className="community-card"><span className="community-icon" aria-hidden="true">↗</span><div><h3>Free and open learning platforms</h3><p>Explore trusted open educational resources, then download materials before class when possible.</p></div><div className="oer-links"><a href="https://www.oercommons.org/" target="_blank" rel="noreferrer">OER Commons ↗</a><a href="https://www.khanacademy.org/" target="_blank" rel="noreferrer">Khan Academy ↗</a><a href="https://learningequality.org/kolibri/" target="_blank" rel="noreferrer">Kolibri ↗</a></div></div></section>}
 
           {currentView === 'donations' && <section className="content-section"><div className="section-heading"><div><p className="eyebrow">CONNECT SCHOOLS AND SUPPORTERS</p><h2>Community needs & donations</h2></div></div><p className="section-intro">Schools can share practical technology needs. Supporters can register interest and coordinate directly with the school.</p><div className="feature-grid">{schoolNeeds.map((need) => <article className="feature-card need-card" key={need.id}><span className="need-quantity">{need.quantity}</span><p className="eyebrow">{need.school}</p><h3>{need.title}</h3><p>{need.detail}</p><button className={`module-action ${offers.has(need.id) ? 'is-complete' : ''}`} type="button" onClick={() => offerSupport(need.id)} disabled={offers.has(need.id)}>{offers.has(need.id) ? '✓ Interest recorded on this device' : 'I can offer support →'}</button></article>)}</div><p className="support-note">This demo records interest on your device only. Please contact the school directly to arrange any donation.</p></section>}
+
+          {['attendance', 'fees', 'school'].includes(currentView) && session && <SchoolPilot view={currentView} user={session} />}
 
           <footer className="page-footer"><span>Questions about a resource? Ask your teacher.</span><span>Empower Hope · Learning for every community</span></footer>
         </div>

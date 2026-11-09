@@ -1,0 +1,225 @@
+.school-pilot {
+  padding: 24px 0 12px;
+}
+
+.school-workspace {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  margin: 24px 4px 0;
+  min-width: 0;
+}
+
+.school-workspace + .nav-label {
+  margin-top: 24px;
+}
+
+.school-copy {
+  min-width: 0;
+}
+
+.school-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pilot-heading,
+.pilot-card-heading {
+  align-items: end;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.pilot-heading {
+  margin-bottom: 20px;
+}
+
+.pilot-heading h2,
+.pilot-card h3 {
+  margin: 0;
+}
+
+.pilot-heading > p,
+.pilot-card > p:not(.eyebrow, .pilot-small, .pilot-empty) {
+  color: #748078;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.pilot-columns {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(230px, .75fr) minmax(0, 1.4fr);
+}
+
+.pilot-card {
+  background: #fff;
+  border: 1px solid #e5ebe4;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(34, 54, 45, .035);
+  min-width: 0;
+  padding: 20px;
+}
+
+.pilot-card-wide {
+  grid-column: span 2;
+}
+
+.pilot-card > .eyebrow,
+.pilot-card-heading .eyebrow {
+  margin-bottom: 8px;
+}
+
+.pilot-form {
+  display: grid;
+  gap: 13px;
+  margin-top: 18px;
+}
+
+.pilot-form label,
+.pilot-date,
+.pilot-invite-link {
+  color: #58675e;
+  display: grid;
+  font-size: 11px;
+  font-weight: 600;
+  gap: 6px;
+}
+
+.pilot-form input,
+.pilot-form select,
+.pilot-form textarea,
+.pilot-date input,
+.pilot-invite-link input,
+.pilot-table select {
+  background: #fff;
+  border: 1px solid #dfe6de;
+  border-radius: 6px;
+  color: #26312d;
+  font-size: 12px;
+  min-height: 39px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.pilot-table td:first-child {
+  min-width: 125px;
+}
+
+.pilot-form textarea {
+  resize: vertical;
+}
+
+.pilot-form input:focus,
+.pilot-form select:focus,
+.pilot-form textarea:focus,
+.pilot-date input:focus,
+.pilot-invite-link input:focus,
+.pilot-table select:focus {
+  border-color: #568168;
+  outline: 2px solid rgba(86, 129, 104, .16);
+}
+
+.pilot-submit {
+  margin-top: 3px;
+  min-height: 40px;
+}
+
+.pilot-table-wrap {
+  margin: 15px 0;
+  overflow-x: auto;
+  width: 100%;
+}
+
+.pilot-table {
+  border-collapse: collapse;
+  font-size: 11px;
+  min-width: 470px;
+  text-align: left;
+  width: 100%;
+}
+
+.pilot-table th,
+.pilot-table td {
+  border-bottom: 1px solid #edf0ec;
+  padding: 10px 9px;
+}
+
+.pilot-table th {
+  color: #6b796f;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.pilot-table td {
+  color: #35433a;
+}
+
+.pilot-table select {
+  min-height: 34px;
+  padding: 6px 8px;
+}
+
+.pilot-card-heading {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.pilot-date {
+  max-width: 180px;
+}
+
+.pilot-empty,
+.pilot-small {
+  color: #7b877f;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.pilot-small {
+  margin: 14px 0 0;
+}
+
+.pilot-invite-link {
+  margin-top: 14px;
+}
+
+.pilot-invite-link input {
+  font-size: 10px;
+}
+
+.pilot-message {
+  border-radius: 7px;
+  font-size: 12px;
+  margin: 0 0 16px;
+  padding: 11px 13px;
+}
+
+.pilot-error {
+  background: #fff0ed;
+  color: #8e3427;
+}
+
+.pilot-success {
+  background: #eaf5ec;
+  color: #315e42;
+}
+
+@media (max-width: 760px) {
+  .pilot-heading {
+    align-items: start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .pilot-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pilot-card-wide {
+    grid-column: auto;
+  }
+}

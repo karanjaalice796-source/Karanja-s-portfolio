@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "dev": "node server.mjs",
     "start": "node server.mjs",
@@ -11,8 +14,8 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",
-    "better-sqlite3": "^13.0.3",
     "express": "^5.3.0",
+    "pg": "^8.16.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "vite": "^6.0.7"
