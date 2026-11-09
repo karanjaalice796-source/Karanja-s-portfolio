@@ -1,4 +1,4 @@
-# My Portfolio — Alice Karanja
+# Alice Karanja: Portfolio (ALICE.DEV)
 
 A full-stack developer portfolio built with HTML, CSS, JavaScript, Node.js and Express.
 
