@@ -1,13 +1,96 @@
 [
   {
-    "slug": "building-vendor-management",
-    "title": "[How I built vendor management for my Event System]",
-    "date": "2026-11-01",
-    "summary": "[One or two sentences: what problem you solved and what you learned.]",
+    "slug": "electrical-installation-to-full-stack-development",
+    "title": "From Electrical Installation to Full-Stack Development: My Journey into Technology",
+    "date": "2026-11-09",
+    "summary": "How my Electrical Installation background, IT training at Empower Hope and practical work on Nodevents are shaping my journey into full-stack development.",
     "body": [
-      "[Paragraph 1: the problem you were solving.]",
-      "[Paragraph 2: how you designed the database tables and routes.]",
-      "[Paragraph 3: what went wrong, how you fixed it, and what you would do differently.]"
+      {
+        "type": "byline",
+        "text": "By Alice Karanja"
+      },
+      {
+        "type": "paragraph",
+        "text": "Every journey begins with a decision to learn something new, embrace challenges and become better. My journey into the world of technology has been one of growth, discovery and determination."
+      },
+      {
+        "type": "paragraph",
+        "text": "My educational background began in Electrical Installation, where I developed an interest in technical systems, troubleshooting and problem-solving. However, my curiosity about technology inspired me to expand my skills and explore the world of Information Technology and software development."
+      },
+      {
+        "type": "heading",
+        "text": "Discovering the World of IT"
+      },
+      {
+        "type": "paragraph",
+        "text": "Joining Empower Hope for IT training opened a new chapter in my professional journey. I began learning how websites and applications are developed, starting with HTML, CSS and JavaScript."
+      },
+      {
+        "type": "paragraph",
+        "text": "As I progressed, I explored Bootstrap, Node.js, Express.js and database management. Each new concept introduced me to different possibilities and challenged me to think creatively."
+      },
+      {
+        "type": "paragraph",
+        "text": "Learning to code was not always easy. There were errors I could not understand, features that took time to implement and moments when I had to go back and learn something again. However, every challenge became an opportunity to improve."
+      },
+      {
+        "type": "heading",
+        "text": "Turning Knowledge into Projects"
+      },
+      {
+        "type": "paragraph",
+        "text": "One of the most exciting parts of my learning experience has been building practical projects."
+      },
+      {
+        "type": "paragraph",
+        "text": "My major project is Nodevents, a full-stack event management platform designed to simplify event planning and management."
+      },
+      {
+        "type": "paragraph",
+        "text": "The platform brings together different event management activities, including client requests, vendor management, budgeting, event registration and ticketing."
+      },
+      {
+        "type": "paragraph",
+        "text": "Working on Nodevents has helped me understand that software development is not just about writing code. It is about identifying problems, understanding people's needs and creating solutions that make everyday activities easier."
+      },
+      {
+        "type": "heading",
+        "text": "Lessons I Have Learned"
+      },
+      {
+        "type": "list",
+        "items": [
+          "Consistency is more important than knowing everything at once.",
+          "Mistakes and errors are part of becoming a better developer.",
+          "Problem-solving is one of the most important skills in technology.",
+          "Building real projects helps turn theoretical knowledge into practical skills.",
+          "Continuous learning is essential because technology keeps evolving."
+        ]
+      },
+      {
+        "type": "heading",
+        "text": "Looking Ahead"
+      },
+      {
+        "type": "paragraph",
+        "text": "As I complete my IT training, I look forward to growing as a Full-Stack Developer, gaining professional experience and working with people who share a passion for technology and innovation."
+      },
+      {
+        "type": "paragraph",
+        "text": "My goal is to continue building meaningful digital solutions, contribute to the technology industry and turn ideas into applications that solve real-world problems."
+      },
+      {
+        "type": "paragraph",
+        "text": "My journey is still unfolding, and I am excited about what comes next."
+      },
+      {
+        "type": "paragraph",
+        "text": "I am not starting over; I am expanding my technical knowledge, building on my previous experience and opening new opportunities through technology."
+      },
+      {
+        "type": "paragraph",
+        "text": "Every skill I learn brings me one step closer to the developer I aspire to become."
+      }
     ]
   }
 ]

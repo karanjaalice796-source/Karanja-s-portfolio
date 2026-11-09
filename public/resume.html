@@ -13,207 +13,688 @@
 </script>
 <style>
   :root {
-    color-scheme: dark;
-    --navy: #a4b2ff;
-    --navy-dark: #7de0d4;
-    --ink: #f2f5fb;
-    --muted: #9aa8bf;
-    --paper: #081126;
-    --surface: #101e3a;
-    --page-background: #081126;
-    --rule: rgba(179, 197, 225, .2);
+    --bg: #071421;
+    --bg-soft: #0f2236;
+    --panel: #f5f8ff;
+    --panel-alt: #edf3ff;
+    --ink: #1d2a39;
+    --muted: #53657e;
+    --primary: #1a73e8;
+    --primary-strong: #0d4bb8;
+    --accent: #27c6b3;
+    --rule: #dfe8f5;
+    --sidebar: linear-gradient(180deg, #0b2240 0%, #163a68 100%);
+    --white: #ffffff;
+    --shadow: 0 18px 40px rgba(9, 22, 37, 0.12);
   }
+
   [data-theme="light"] {
     color-scheme: light;
-    --navy: #435bcd;
-    --navy-dark: #167f78;
-    --ink: #182238;
-    --muted: #5b6880;
-    --paper: #f2f6ff;
-    --surface: #fff;
-    --page-background: #e3edff;
-    --rule: rgba(32, 49, 80, .15);
+    --bg: #eaf2ff;
+    --bg-soft: #dfeaff;
+    --panel: #ffffff;
+    --panel-alt: #f3f7ff;
+    --ink: #1c2331;
+    --muted: #5b6780;
+    --primary: #1a73e8;
+    --primary-strong: #0d4bb8;
+    --accent: #1db8a4;
+    --rule: #dfe7f5;
+    --sidebar: linear-gradient(180deg, #0f2446 0%, #163d6b 100%);
+    --white: #ffffff;
   }
+
   * { box-sizing: border-box; }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     margin: 0;
-    padding: 32px 12px;
-    background: radial-gradient(ellipse at 76% 5%, rgba(62, 105, 220, .16), transparent 38rem), linear-gradient(145deg, var(--page-background), var(--paper) 48rem);
+    padding: 32px 16px;
+    background: radial-gradient(circle at top right, rgba(26,115,232,0.18), transparent 28%), linear-gradient(180deg, var(--bg) 0%, #f4f8ff 100%);
     color: var(--ink);
     font: 14px/1.6 "Segoe UI", Helvetica, Arial, sans-serif;
-    transition: background .3s, color .3s;
+    transition: background 0.25s ease, color 0.25s ease;
   }
-  a { color: inherit; text-underline-offset: .15em; }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
   .page {
-    max-width: 860px;
+    max-width: 1100px;
     margin: 0 auto;
+    background: var(--panel);
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(16, 36, 58, 0.08);
     overflow: hidden;
-    background: var(--surface);
-    box-shadow: 0 6px 24px rgba(0, 0, 0, .12);
   }
-  .resume-toolbar { display: flex; max-width: 860px; align-items: center; justify-content: space-between; gap: 1rem; margin: 0 auto .8rem; }
-  .top-link { color: var(--navy); font-weight: 600; }
+
+  .resume-toolbar {
+    max-width: 1100px;
+    margin: 0 auto 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .top-link {
+    color: var(--primary-strong);
+    font-weight: 700;
+  }
+
+  .resume-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .print-button,
   .theme-toggle {
-    padding: .55rem .8rem;
+    appearance: none;
     border: 1px solid var(--rule);
-    border-radius: .55rem;
-    background: var(--surface);
+    border-radius: 999px;
+    padding: 0.7rem 1rem;
+    background: rgba(255, 255, 255, 0.82);
     color: var(--ink);
     cursor: pointer;
     font: inherit;
-    font-size: .85rem;
-    font-weight: 600;
+    font-weight: 700;
+    transition: all 0.2s ease;
   }
-  .theme-toggle:hover { border-color: var(--navy-dark); color: var(--navy-dark); }
-  .header { display: flex; align-items: center; gap: 24px; padding: 36px 40px 28px; }
+
+  .print-button:hover,
+  .theme-toggle:hover {
+    border-color: var(--primary);
+    color: var(--primary-strong);
+    transform: translateY(-1px);
+  }
+
+  .header {
+    background: linear-gradient(135deg, #f4f8ff 0%, #edf3ff 100%);
+    border-bottom: 1px solid var(--rule);
+    padding: 28px 36px 20px;
+    display: flex;
+    justify-content: space-between;
+    gap: 22px;
+    align-items: center;
+  }
+
+  .brand-wrap {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    min-width: 0;
+  }
+
   .avatar {
-    width: 110px;
-    height: 110px;
-    flex: 0 0 110px;
-    overflow: hidden;
+    width: 120px;
+    height: 120px;
+    flex: 0 0 120px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #dfe6ea, #c3ced4);
+    overflow: hidden;
+    border: 4px solid rgba(26, 115, 232, 0.15);
+    background: linear-gradient(135deg, #dfeaff, #bcd2ff);
+    box-shadow: 0 8px 18px rgba(26,115,232,0.12);
   }
-  .avatar img { width: 100%; height: 100%; object-fit: cover; object-position: center 30%; }
-  .header h1 { margin: 0; color: var(--navy); font-size: 34px; letter-spacing: .5px; line-height: 1.2; }
-  .header .role { margin: 6px 0 0; color: var(--muted); font-size: 16px; }
-  .layout { display: flex; align-items: stretch; }
-  .sidebar { width: 34%; padding: 28px 26px 40px; background: linear-gradient(180deg, #102750 0%, #173c70 52%, #204986 100%); color: #f4f7ff; }
-  .sidebar h2, .content h2 { margin: 26px 0 12px; padding-bottom: 8px; font-size: 14px; letter-spacing: 1px; text-transform: uppercase; }
-  .sidebar h2 { border-bottom: 1px solid rgba(255, 255, 255, .35); }
-  .sidebar h2:first-child, .content h2:first-child { margin-top: 0; }
-  .contact-line { margin: 0 0 5px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
-  .sidebar a { color: #eaf1f6; }
-  .sidebar ul { margin: 0; padding-left: 16px; font-size: 13px; line-height: 1.8; }
-  .edu-block { margin-bottom: 14px; font-size: 13px; line-height: 1.55; }
-  .school, .ref-name { font-weight: 700; }
-  .years { font-size: 12px; font-style: italic; opacity: .85; }
-  .content { width: 66%; padding: 28px 36px 40px; }
-  .content h2 { border-bottom: 2px solid var(--rule); color: var(--navy); font-size: 15px; }
-  .content p { margin: 0 0 8px; font-size: 13.5px; line-height: 1.65; }
-  .entry { margin-bottom: 16px; }
-  .entry-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-  .entry-title { color: var(--ink); font-size: 14px; font-weight: 700; }
-  .entry-years { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
-  .entry-sub { margin-bottom: 4px; color: var(--muted); font-size: 13px; font-style: italic; }
-  .entry ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
-  .tech-tag { margin-bottom: 4px; color: var(--navy); font-size: 12.5px; font-weight: 600; }
-  @media (max-width: 600px) {
-    body { padding: 16px 10px; }
-    .resume-toolbar { padding: 0 4px; }
-    .header { flex-direction: column; padding: 28px 20px; text-align: center; }
-    .header h1 { font-size: 29px; }
-    .layout { flex-direction: column; }
-    .sidebar, .content { width: 100%; padding: 24px; }
+
+  .avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center top;
+    display: block;
   }
-  @media print {
-    @page { margin: 12mm; }
-    :root {
-      color-scheme: light;
-      --navy: #435bcd;
-      --ink: #2b2b2b;
-      --muted: #5c5c5c;
-      --paper: #fff;
-      --surface: #fff;
-      --page-background: #fff;
-      --rule: #c9d6de;
+
+  .identity {
+    min-width: 0;
+  }
+
+  .identity h1 {
+    margin: 0;
+    font-size: clamp(1.8rem, 2vw, 2.5rem);
+    letter-spacing: 0.08em;
+    line-height: 1.08;
+    color: var(--primary-strong);
+  }
+
+  .role-line {
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 0.96rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .headline {
+    margin-top: 10px;
+    font-size: 0.95rem;
+    color: var(--ink);
+    opacity: 0.9;
+  }
+
+  .header-meta {
+    display: grid;
+    gap: 8px;
+    min-width: 250px;
+    font-size: 0.86rem;
+    color: var(--ink);
+  }
+
+  .meta-item {
+    background: rgba(26, 115, 232, 0.06);
+    border: 1px solid rgba(26,115,232,0.08);
+    border-radius: 10px;
+    padding: 8px 10px;
+    line-height: 1.4;
+  }
+
+  .layout {
+    display: flex;
+    align-items: stretch;
+  }
+
+  .sidebar {
+    width: 34%;
+    background: var(--sidebar);
+    color: #edf3ff;
+    padding: 26px 20px 32px;
+  }
+
+  .sidebar section + section {
+    margin-top: 26px;
+  }
+
+  .sidebar h2,
+  .content h2 {
+    margin: 0 0 12px;
+    font-size: 0.82rem;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    font-weight: 800;
+  }
+
+  .sidebar h2 {
+    color: #ecf5ff;
+    border-bottom: 1px solid rgba(255,255,255,0.28);
+    padding-bottom: 8px;
+  }
+
+  .sidebar a,
+  .sidebar p,
+  .sidebar li {
+    color: #edf3ff;
+  }
+
+  .contact-list,
+  .sidebar ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .contact-list li,
+  .sidebar ul li {
+    margin: 0 0 8px;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .edu-block {
+    margin-bottom: 14px;
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+
+  .school {
+    font-weight: 700;
+  }
+
+  .years {
+    color: rgba(237,243,255,0.78);
+    font-size: 0.78rem;
+    margin-top: 2px;
+  }
+
+  .content {
+    width: 66%;
+    padding: 28px 32px 32px;
+    background: var(--panel);
+  }
+
+  .content section + section {
+    margin-top: 28px;
+  }
+
+  .content h2 {
+    color: var(--primary-strong);
+    border-bottom: 2px solid var(--rule);
+    padding-bottom: 8px;
+  }
+
+  .content p,
+  .content li {
+    color: var(--ink);
+    font-size: 0.95rem;
+    line-height: 1.7;
+  }
+
+  .content p {
+    margin: 0 0 10px;
+  }
+
+  .entry {
+    margin-bottom: 16px;
+  }
+
+  .entry-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+
+  .entry-title {
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--ink);
+  }
+
+  .entry-years {
+    font-size: 0.77rem;
+    color: var(--muted);
+    white-space: nowrap;
+    font-weight: 700;
+  }
+
+  .entry-sub {
+    margin-bottom: 6px;
+    color: var(--muted);
+    font-size: 0.84rem;
+    font-weight: 600;
+    font-style: italic;
+  }
+
+  .content ul {
+    margin: 0;
+    padding-left: 18px;
+  }
+
+  .tech-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 10px 0 0;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    background: rgba(26, 115, 232, 0.08);
+    color: var(--primary-strong);
+    border: 1px solid rgba(26, 115, 232, 0.12);
+    padding: 0.36rem 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  @media (max-width: 760px) {
+    body { padding: 18px 10px; }
+    .resume-toolbar,
+    .header,
+    .layout {
+      flex-direction: column;
     }
-    body { padding: 0; background: #fff; color: #2b2b2b; }
-    .resume-toolbar { display: none; }
-    .page { max-width: none; background: #fff; color: #2b2b2b; box-shadow: none; }
-    .sidebar { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-    .header h1, .content h2, .tech-tag { color: #435bcd; }
-    .header .role, .entry-years, .entry-sub { color: #5c5c5c; }
-    .content p, .entry-title { color: #2b2b2b; }
+
+    .header {
+      padding: 22px 18px;
+      align-items: flex-start;
+    }
+
+    .brand-wrap {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .avatar {
+      width: 96px;
+      height: 96px;
+      flex-basis: 96px;
+    }
+
+    .header-meta {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .sidebar,
+    .content {
+      width: 100%;
+    }
+
+    .content {
+      padding: 22px 20px 26px;
+    }
+  }
+
+  @media print {
+    @page {
+      size: A4;
+      margin: 10mm;
+    }
+
+    body {
+      background: #fff;
+      padding: 0;
+      color: #1a1a1a;
+    }
+
+    .resume-toolbar {
+      display: none;
+    }
+
+    .page {
+      max-width: none;
+      box-shadow: none;
+      border: none;
+      page-break-inside: avoid;
+    }
+
+    .sidebar,
+    .content,
+    .header {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .header {
+      background: #f5f8ff;
+    }
+
+    .content {
+      padding: 18px 24px 24px;
+    }
+
+    .content h2,
+    .identity h1,
+    .primary {
+      color: #0d4bb8;
+    }
   }
 </style>
 </head>
 <body>
 <nav class="resume-toolbar" aria-label="Resume controls">
   <a class="top-link" href="/">← Back to portfolio</a>
-  <button class="theme-toggle" id="resume-theme" type="button" aria-label="Switch color theme">Light mode</button>
+  <div class="resume-actions">
+    <button class="print-button" type="button" onclick="window.print()">Print / Save as PDF</button>
+    <button class="theme-toggle" id="resume-theme" type="button" aria-label="Switch color theme">Light mode</button>
+  </div>
 </nav>
+
 <main class="page">
   <header class="header">
-    <div class="avatar"><img src="/images/alice.jpg" alt="Alice Karanja"></div>
-    <div>
-      <h1>ALICE KARANJA</h1>
-      <p class="role">IT Student | Aspiring Web Developer</p>
+    <div class="brand-wrap">
+      <div class="avatar">
+        <img src="/images/alice.jpg" alt="Alice Karanja">
+      </div>
+      <div class="identity">
+        <h1>ALICE KARANJA</h1>
+        <div class="role-line">FULL-STACK DEVELOPER | IT PROFESSIONAL</div>
+        <div class="headline">Building practical digital solutions with clarity, purpose and precision.</div>
+      </div>
+    </div>
+
+    <div class="header-meta">
+      <div class="meta-item">Nairobi, Kenya</div>
+      <div class="meta-item">+254 759 936 866</div>
+      <div class="meta-item">karanjaalice796@gmail.com</div>
     </div>
   </header>
+
   <div class="layout">
     <aside class="sidebar">
       <section>
         <h2>Contact</h2>
-        <p class="contact-line">📍 Kenya</p>
-        <p class="contact-line">📞 <a href="tel:+254759936866">0759936866</a></p>
-        <p class="contact-line">✉️ <a href="mailto:karanjaalice796@gmail.com">karanjaalice796@gmail.com</a></p>
-        <p class="contact-line">🔗 <a href="https://github.com/karanjaalice796-source/FULL-STACK" target="_blank" rel="noopener noreferrer">GitHub: FULL-STACK</a></p>
-        <p class="contact-line">🔗 <a href="https://www.linkedin.com/in/alice-karanja-25b9b0364/" target="_blank" rel="noopener noreferrer">LinkedIn profile</a></p>
-        <p class="contact-line">🌐 <a href="/">Portfolio</a></p>
+        <ul class="contact-list">
+          <li>Location: Nairobi, Kenya</li>
+          <li>Phone: <a href="tel:+254759936866">+254 759 936 866</a></li>
+          <li>Email: <a href="mailto:karanjaalice796@gmail.com">karanjaalice796@gmail.com</a></li>
+          <li>GitHub: <a href="https://github.com/karanjaalice796-source/FULL-STACK" target="_blank" rel="noopener noreferrer">FULL-STACK</a></li>
+          <li>LinkedIn: <a href="https://www.linkedin.com/in/alice-karanja-25b9b0364/" target="_blank" rel="noopener noreferrer">Alice Karanja</a></li>
+          <li>Portfolio: <a href="/">alice.dev</a></li>
+        </ul>
       </section>
+
+      <section>
+        <h2>Core Skills</h2>
+        <ul>
+          <li>HTML5</li>
+          <li>CSS3</li>
+          <li>JavaScript</li>
+          <li>Bootstrap</li>
+          <li>React</li>
+          <li>Node.js</li>
+          <li>Express.js</li>
+          <li>MySQL / PostgreSQL</li>
+          <li>Git &amp; GitHub</li>
+          <li>Responsive Web Design (RWD)</li>
+          <li>Technical Troubleshooting</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Professional Strengths</h2>
+        <ul>
+          <li>Analytical thinking</li>
+          <li>Problem-solving</li>
+          <li>Teamwork</li>
+          <li>Communication</li>
+          <li>Time management</li>
+          <li>Attention to detail</li>
+          <li>Adaptability</li>
+          <li>Continuous learning</li>
+        </ul>
+      </section>
+
       <section>
         <h2>Education</h2>
-        <div class="edu-block"><div class="school">Empower Hope</div><div>IT / Web Development Student</div><div class="years">2026</div></div>
-        <div class="edu-block"><div class="school">KIST</div><div>Level 4 Electrical Installation</div><div class="years">2024 – 2025</div></div>
-        <div class="edu-block"><div class="school">Starkid Secondary School</div><div>K.C.S.E Certificate</div></div>
-        <div class="edu-block"><div class="school">Cheleta Primary School</div><div>K.C.P.E Certificate</div></div>
+        <div class="edu-block">
+          <div class="school">Empower Hope</div>
+          <div>Full-Stack Web Development / IT Training</div>
+          <div class="years">2026</div>
+        </div>
+        <div class="edu-block">
+          <div class="school">Kiambu National Polytechnic</div>
+          <div>Certificate in Electrical Installation</div>
+          <div class="years">2024 – 2025</div>
+        </div>
+        <div class="edu-block">
+          <div class="school">Starkid School and Rescue Centre</div>
+          <div>Kenya Certificate of Secondary Education (KCSE)</div>
+          <div class="years">2018 – 2021</div>
+        </div>
+        <div class="edu-block">
+          <div class="school">Cheleta Primary School</div>
+          <div>Kenya Certificate of Primary Education (KCPE)</div>
+          <div class="years">2010 – 2017</div>
+        </div>
       </section>
+
       <section>
-        <h2>Technical Skills</h2>
-        <ul><li>HTML5</li><li>CSS3</li><li>JavaScript</li><li>Python</li><li>Git &amp; GitHub</li><li>Responsive Web Design</li><li>VS Code</li><li>Debugging &amp; Troubleshooting</li></ul>
+        <h2>Hobbies &amp; Interests</h2>
+        <ul>
+          <li>Technology and software development</li>
+          <li>Learning new programming languages</li>
+          <li>Building creative digital projects</li>
+          <li>Researching technology trends</li>
+          <li>Problem-solving and personal growth</li>
+          <li>Team collaboration and networking</li>
+        </ul>
       </section>
-      <section>
-        <h2>Soft Skills</h2>
-        <ul><li>Creativity</li><li>Problem solving</li><li>Teamwork</li><li>Communication</li><li>Time management</li><li>Adaptability</li><li>Willingness to learn</li><li>Attention to detail</li><li>Self-motivation</li></ul>
-      </section>
+
       <section>
         <h2>References</h2>
-        <p class="ref-name">Available upon request</p>
+        <ul>
+          <li>Mr. Peter Wakori<br>Phone: +254 726 820 561</li>
+          <li>Ms. Hellen<br>Phone: +254 705 966 447</li>
+          <li>Ms. Rachel Muteti<br>Phone: +254 723 939 227</li>
+        </ul>
       </section>
     </aside>
+
     <div class="content">
       <section>
         <h2>Professional Summary</h2>
-        <p>Motivated and creative IT student currently developing skills in web development and programming. Passionate about creating responsive, user-friendly and visually appealing websites and applications. Experienced in working with HTML, CSS, JavaScript and Python, with practical experience developing academic and personal projects.</p>
-        <p>A dedicated learner with strong problem-solving skills, creativity and a willingness to learn new technologies. Seeking opportunities to gain practical experience, contribute to real-world projects and grow as a professional web developer.</p>
+        <p>A motivated and detail-oriented Full-Stack Developer with training in web development and IT, equipped with foundational knowledge of front-end and back-end technologies. Skilled in building responsive web applications using HTML, CSS, JavaScript, Bootstrap, Node.js and Express.js. Familiar with database management, Git and GitHub, troubleshooting and software development best practices.</p>
+        <p>Currently developing practical skills through hands-on projects, including Nodevents, a full-stack event management platform. Brings a strong technical foundation from an Electrical Installation background, with proven abilities in analytical thinking, problem-solving, teamwork and adaptability. Passionate about technology, innovation and building solutions that address real-world challenges.</p>
       </section>
+
       <section>
-        <h2>Experience</h2>
+        <h2>Work Experience</h2>
         <div class="entry">
-          <div class="entry-head"><span class="entry-title">Student Projects &amp; Practical Training</span><span class="entry-years">2026</span></div>
+          <div class="entry-head">
+            <span class="entry-title">IT Support &amp; Full-Stack Development Trainee</span>
+            <span class="entry-years">2026</span>
+          </div>
           <div class="entry-sub">Empower Hope</div>
-          <ul><li>Developed websites as part of practical learning.</li><li>Practiced programming using Python and JavaScript.</li><li>Used Git and GitHub to manage and upload projects.</li><li>Worked on individual coding assignments and web development projects.</li><li>Continuously improved coding and problem-solving skills.</li></ul>
+          <ul>
+            <li>Developed responsive and user-friendly websites using HTML, CSS, JavaScript and Bootstrap.</li>
+            <li>Built full-stack web applications using Node.js and Express.js.</li>
+            <li>Designed and implemented backend functionality, including server-side routing and application logic.</li>
+            <li>Worked with databases to store, manage and retrieve application data.</li>
+            <li>Used Git and GitHub for source code management, version control and project collaboration.</li>
+            <li>Troubleshooted and debugged application errors to improve system functionality.</li>
+            <li>Deployed web applications and managed project updates through GitHub and hosting platforms.</li>
+            <li>Applied analytical thinking, problem-solving and teamwork throughout software development.</li>
+          </ul>
         </div>
       </section>
+
       <section>
-        <h2>Projects</h2>
-        <div class="entry"><div class="entry-title">Kjayy's Bakery Website</div><div class="tech-tag">HTML, CSS</div><p>A bakery website project designed to showcase bakery products and provide information about the business.</p><ul><li>Homepage</li><li>About section</li><li>Product/service presentation</li><li>Creative website layout</li><li>CSS styling</li></ul></div>
-        <div class="entry"><div class="entry-title">Tribute Page – Wangari Maathai</div><div class="tech-tag">HTML, CSS</div><p>Created a tribute webpage dedicated to Professor Wangari Maathai, demonstrating skills in webpage structure, content organization and styling.</p></div>
-        <div class="entry"><div class="entry-title">Media Showcase Website</div><div class="tech-tag">HTML, CSS</div><p>Developed a webpage demonstrating how to embed and display multimedia content, including audio and video.</p></div>
-        <div class="entry"><div class="entry-title">Programming Projects</div><div class="tech-tag">Python, JavaScript</div><p>Created various programming exercises while studying programming fundamentals, including:</p><ul><li>Variables and data types</li><li>Conditional statements</li><li>Loops</li><li>Functions</li><li>Lists and dictionaries</li><li>Object-oriented programming</li><li>JavaScript exercises</li></ul></div>
+        <h2>Core Technical Skills</h2>
+        <div class="entry">
+          <div class="entry-head"><span class="entry-title">Frontend Development</span></div>
+          <ul>
+            <li>HTML5, CSS3 and JavaScript for responsive and interactive interfaces</li>
+            <li>Bootstrap for faster UI development and mobile-first layouts</li>
+            <li>React fundamentals for component-based frontend development</li>
+          </ul>
+        </div>
+        <div class="entry">
+          <div class="entry-head"><span class="entry-title">Backend Development</span></div>
+          <ul>
+            <li>Node.js for server-side JavaScript development</li>
+            <li>Express.js for REST APIs and backend routing</li>
+            <li>MySQL and PostgreSQL fundamentals for data storage and retrieval</li>
+            <li>User authentication and session management basics</li>
+          </ul>
+        </div>
+        <div class="entry">
+          <div class="entry-head"><span class="entry-title">Tools &amp; Technologies</span></div>
+          <ul>
+            <li>Git and GitHub for version control and collaboration</li>
+            <li>Visual Studio Code for editing and project management</li>
+            <li>Website deployment and hosting using cloud platforms</li>
+            <li>Technical troubleshooting and debugging</li>
+          </ul>
+        </div>
       </section>
+
+      <section>
+        <h2>Projects &amp; Practical Experience</h2>
+        <div class="entry">
+          <div class="entry-head">
+            <span class="entry-title">Nodevents – Full-Stack Event Management Platform</span>
+            <span class="entry-years">2026</span>
+          </div>
+          <div class="entry-sub">Personal / Final Course Project</div>
+          <ul>
+            <li>Developed a full-stack event management platform for organizers and attendees.</li>
+            <li>Built front-end interfaces for registration, bookings and event administration.</li>
+            <li>Implemented server-side logic and data handling with Node.js and Express.js.</li>
+            <li>Worked on vendor management, event planning and budget tracking features.</li>
+            <li>Explored payment integration and M-Pesa Daraja API capabilities.</li>
+            <li>Developed QR-code ticketing and attendance management features.</li>
+            <li>Used Git and GitHub for project management and version control.</li>
+          </ul>
+        </div>
+
+        <div class="entry">
+          <div class="entry-head">
+            <span class="entry-title">Personal Developer Portfolio</span>
+            <span class="entry-years">2026</span>
+          </div>
+          <ul>
+            <li>Created a professional portfolio to showcase technical skills and projects.</li>
+            <li>Designed responsive pages using HTML, CSS and JavaScript.</li>
+            <li>Integrated backend functionality using Node.js and Express.js.</li>
+            <li>Managed project files and source code using GitHub.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section>
+        <h2>Education &amp; Training</h2>
+        <div class="entry">
+          <div class="entry-head">
+            <span class="entry-title">Full-Stack Web Development / IT Training</span>
+            <span class="entry-years">2026</span>
+          </div>
+          <div class="entry-sub">Empower Hope</div>
+          <ul>
+            <li>HTML, CSS and JavaScript</li>
+            <li>Bootstrap and responsive web design</li>
+            <li>Node.js and Express.js</li>
+            <li>Database management</li>
+            <li>Git and GitHub</li>
+            <li>React fundamentals</li>
+            <li>Software development and project implementation</li>
+          </ul>
+        </div>
+
+        <div class="entry">
+          <div class="entry-head">
+            <span class="entry-title">Certificate in Electrical Installation</span>
+            <span class="entry-years">2024 – 2025</span>
+          </div>
+          <div class="entry-sub">Kiambu National Polytechnic</div>
+        </div>
+      </section>
+
       <section>
         <h2>Career Objective</h2>
-        <p>To build a successful career in web development and information technology, while gaining practical experience, improving my technical skills and contributing creatively to organizations through technology.</p>
+        <p>To grow as a Full-Stack Developer by applying my technical knowledge, building innovative software solutions and contributing to meaningful technology projects. I am eager to gain professional experience, collaborate with other developers and continuously improve my skills in the IT industry.</p>
       </section>
     </div>
   </div>
 </main>
+
 <script>
   const resumeThemeButton = document.getElementById('resume-theme');
-  const updateResumeThemeButton = () => {
-    const nextTheme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
-    resumeThemeButton.textContent = nextTheme === 'light' ? 'Light mode' : 'Dark mode';
-    resumeThemeButton.setAttribute('aria-label', `Switch to ${nextTheme} mode`);
+
+  const syncThemeButton = () => {
+    const isLight = document.documentElement.dataset.theme === 'light';
+    resumeThemeButton.textContent = isLight ? 'Dark mode' : 'Light mode';
+    resumeThemeButton.setAttribute('aria-label', `Switch to ${isLight ? 'dark' : 'light'} mode`);
   };
-  updateResumeThemeButton();
-  resumeThemeButton.addEventListener('click', () => {
-    const nextTheme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
-    document.documentElement.dataset.theme = nextTheme;
-    updateResumeThemeButton();
-    try { localStorage.setItem('theme', nextTheme); } catch (e) {}
-  });
+
+  if (resumeThemeButton) {
+    syncThemeButton();
+    resumeThemeButton.addEventListener('click', () => {
+      const nextTheme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+      document.documentElement.dataset.theme = nextTheme;
+      try { localStorage.setItem('theme', nextTheme); } catch (e) {}
+      syncThemeButton();
+    });
+  }
 </script>
 </body>
 </html>

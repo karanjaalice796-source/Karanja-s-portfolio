@@ -17,16 +17,6 @@ themeButton.addEventListener('click', () => {
   try { localStorage.setItem('theme', next); } catch (e) {}
 });
 
-// Project filter
-document.querySelectorAll('.filters button').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.filters button').forEach(b => b.setAttribute('aria-pressed', b === btn));
-    document.querySelectorAll('.project').forEach(p => {
-      p.hidden = btn.dataset.filter !== 'all' && p.dataset.type !== btn.dataset.filter;
-    });
-  });
-});
-
 // Sections fade in as they are scrolled to
 const io = new IntersectionObserver(entries => entries.forEach(e => {
   if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
@@ -89,17 +79,8 @@ form.addEventListener('submit', async e => {
   }
 });
 
-// Testimonials and blog posts come from simple JSON files in public/data
+// Blog posts come from a simple JSON file in public/data
 const make = (tag, text, cls) => { const el = document.createElement(tag); el.textContent = text; if (cls) el.className = cls; return el; };
-
-fetch('/data/testimonials.json').then(r => r.json()).then(items => {
-  const box = document.getElementById('quotes');
-  items.forEach(t => {
-    const bq = document.createElement('blockquote');
-    bq.append(make('p', t.quote), make('cite', `${t.name}, ${t.role}`));
-    box.append(bq);
-  });
-}).catch(() => document.getElementById('testimonials').remove());
 
 fetch('/data/posts.json').then(r => r.json()).then(posts => {
   const list = document.getElementById('posts');
@@ -112,15 +93,40 @@ fetch('/data/posts.json').then(r => r.json()).then(posts => {
   });
 }).catch(() => document.getElementById('blog').remove());
 
-// Mobile menu
+// Mobile navigation drawer
 const burger = document.getElementById('burger');
 const menu = document.getElementById('menu');
+const menuBackdrop = document.getElementById('menu-backdrop');
+const mobileNavigation = window.matchMedia('(max-width: 820px)');
+let menuIsOpen = false;
+
+const setMenuOpen = (open, returnFocus = false) => {
+  menuIsOpen = open && mobileNavigation.matches;
+  menu.classList.toggle('open', menuIsOpen);
+  burger.setAttribute('aria-expanded', menuIsOpen);
+  burger.setAttribute('aria-label', menuIsOpen ? 'Close navigation' : 'Open navigation');
+  burger.querySelector('.burger-label').textContent = menuIsOpen ? 'Close' : 'Menu';
+  menuBackdrop.hidden = !menuIsOpen;
+  menu.setAttribute('aria-hidden', mobileNavigation.matches && !menuIsOpen);
+  menu.inert = mobileNavigation.matches && !menuIsOpen;
+  document.body.style.overflow = menuIsOpen ? 'hidden' : '';
+  if (menuIsOpen) menu.querySelector('a')?.focus();
+  else if (returnFocus) burger.focus();
+};
+
+setMenuOpen(false);
 burger.addEventListener('click', () => {
-  const open = menu.classList.toggle('open');
-  burger.setAttribute('aria-expanded', open);
+  setMenuOpen(!menuIsOpen, menuIsOpen);
 });
-menu.addEventListener('click', e => {
-  if (e.target.closest('a')) { menu.classList.remove('open'); burger.setAttribute('aria-expanded', false); }
+menuBackdrop.addEventListener('click', () => setMenuOpen(false, true));
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && menuIsOpen) setMenuOpen(false, true);
+});
+menu.addEventListener('click', event => {
+  if (event.target.closest('a')) setMenuOpen(false);
+});
+mobileNavigation.addEventListener('change', () => {
+  setMenuOpen(false);
 });
 
 // Back-to-top arrow: appears after scrolling, one click takes you to the top
