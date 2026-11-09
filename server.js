@@ -10,6 +10,8 @@ app.use(express.json({ limit: '10kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'views', 'index.html')));
+app.get('/resume', (req, res) => res.sendFile(path.join(__dirname, 'public', 'resume.html')));
+app.get('/resume.html', (req, res) => res.sendFile(path.join(__dirname, 'public', 'resume.html')));
 
 // Simple rate limit: 5 messages per IP per hour (stops basic spam)
 const hits = new Map();
@@ -51,13 +53,20 @@ app.get('/blog/:slug', (req, res) => {
   try { posts = JSON.parse(fs.readFileSync(path.join(__dirname, 'public', 'data', 'posts.json'), 'utf8')); } catch (e) {}
   const post = posts.find(p => p.slug === req.params.slug);
   if (!post) return res.status(404).send('Post not found');
+  const body = post.body.map(block => {
+    if (typeof block === 'string') return `<p>${esc(block)}</p>`;
+    if (block.type === 'heading') return `<h2>${esc(block.text)}</h2>`;
+    if (block.type === 'byline') return `<p class="post-byline">${esc(block.text)}</p>`;
+    if (block.type === 'list' && Array.isArray(block.items)) return `<ul>${block.items.map(item => `<li>${esc(item)}</li>`).join('')}</ul>`;
+    return `<p>${esc(block.text)}</p>`;
+  }).join('');
   res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(post.title)} | Alice Karanja</title><meta name="description" content="${esc(post.summary)}">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css"></head><body>
 <header class="top"><div class="in"><a class="name" href="/">ALICE<span>.DEV</span></a><nav style="display:flex;position:static;background:none;box-shadow:none;padding:0;flex-direction:row"><a href="/#blog" style="border:0;width:auto">&larr; All posts</a></nav></div></header>
 <main><article class="post-page"><h1>${esc(post.title)}</h1><time datetime="${esc(post.date)}">${esc(post.date)}</time>
-${post.body.map(p => `<p>${esc(p)}</p>`).join('')}</article></main>
+${body}</article></main>
 <footer><div class="in">&copy; ${new Date().getFullYear()} Alice Karanja</div></footer></body></html>`);
 });
 

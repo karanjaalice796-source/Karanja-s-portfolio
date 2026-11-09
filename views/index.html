@@ -41,17 +41,22 @@
  </nav>
  <div class="side-bottom">
    <p class="availability"><span aria-hidden="true"></span>Open to opportunities</p>
-   <a class="cv-link" href="/resume.html" target="_blank" rel="noopener">View my resume <span aria-hidden="true">↗</span></a>
+   <a class="cv-link" href="/resume.html" target="_blank" rel="noopener">View my resume</a>
+   <a class="cv-link" href="/resume.pdf" download="Alice-Karanja-Resume.pdf">Download resume <span aria-hidden="true">↓</span></a>
    <p class="side-credit">Made with care in Nairobi, Kenya.</p>
  </div>
  <div class="sidebar-controls">
  <span class="appearance-label">Appearance</span>
  <button id="theme" type="button" aria-label="Switch color theme">Light mode</button>
- <button id="burger" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="menu">Menu</button>
+  <button id="burger" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="menu">
+    <span class="burger-icon" aria-hidden="true"><span></span><span></span><span></span></span>
+    <span class="burger-label">Menu</span>
+  </button>
  </div>
-</aside>
+ </aside>
+ <button id="menu-backdrop" class="menu-backdrop" type="button" aria-label="Close navigation" hidden></button>
 
-<main>
+ <main>
   <section id="home" class="intro">
     <div>
       <p class="eyebrow"><span class="eyebrow-line"></span>Full-stack developer <span>·</span> Nairobi, Kenya</p>
@@ -60,7 +65,7 @@
       <p class="intro-copy">I combine technical thinking, creativity, and problem-solving to develop modern, responsive web applications — from intuitive user interfaces to powerful backend systems.</p>
       <p class="intro-copy">I'm passionate about turning ideas into practical digital experiences, exploring new technologies, and creating solutions that solve real-world problems.</p>
       <p class="intro-note">Currently open to new opportunities, collaborations, and meaningful projects. Let's connect and build something impactful together.</p>
-      <div class="intro-actions"><a class="button button-primary" href="#work">Explore my work <span aria-hidden="true">↘</span></a><a class="text-link" href="#contact">Let’s have a chat <span aria-hidden="true">↗</span></a></div>
+      <div class="intro-actions"><a class="button button-primary" href="#work">Explore my work <span aria-hidden="true">↘</span></a><a class="text-link" href="#contact">Let’s have a chat</a></div>
     </div>
     <figure class="portrait">
       <img class="portrait-image" src="/images/alice.jpg" alt="Portrait of Alice Karanja" width="720" height="997">
@@ -80,7 +85,7 @@
   <section id="skills" class="reveal">
     <h2><i>03</i> Skills</h2>
     <dl class="skills">
-      <div><dt>Front end</dt><dd>HTML, CSS, JavaScript, React, Bootstrap <span>comfortable</span></dd></div>
+      <div><dt>Front end</dt><dd>HTML, CSS, JavaScript, React, Bootstrap, Responsive Web Design (RWD) <span>comfortable</span></dd></div>
       <div><dt>Back end</dt><dd>Node.js, Express, REST APIs <span>comfortable</span></dd></div>
       <div><dt>Databases</dt><dd>PostgreSQL, MySQL <span>comfortable</span></dd></div>
       <div><dt>Tools</dt><dd>Git, GitHub, VS Code, Render <span>comfortable</span></dd></div>
@@ -89,50 +94,41 @@
 
   <section id="work" class="reveal">
     <h2><i>04</i> Projects</h2>
-    <div class="filters" role="group" aria-label="Filter projects">
-      <button type="button" data-filter="all" aria-pressed="true">All</button>
-      <button type="button" data-filter="fullstack" aria-pressed="false">Full-stack apps</button>
-      <button type="button" data-filter="community" aria-pressed="false">Community</button>
-    </div>
+    <article class="project" data-type="fullstack">
+      <p class="meta">2026</p>
+      <div class="body">
+        <h3>Nodevents <span>full-stack event management platform</span></h3>
+        <dl>
+          <dt>Overview</dt><dd>A platform to help event planners discover service vendors and coordinate events.</dd>
+          <dt>Features</dt><dd>Event and client management, vendor coordination, budgeting, registration, QR ticketing and check-in.</dd>
+          <dt>What I learned</dt><dd>Building Nodevents has helped me connect backend workflows, data management and user needs in one practical application.</dd>
+        </dl>
+        <p class="stack">Node.js, Express, SQLite</p>
+      </div>
+    </article>
 
     <article class="project" data-type="fullstack">
       <p class="meta">2026</p>
       <div class="body">
-        <h3>Event Management System <span>my biggest project so far</span></h3>
+        <h3>Assignment Tracker <span>learning and coursework management</span></h3>
         <dl>
-          <dt>The problem</dt><dd>Event planners juggle vendors, budgets and guest lists across spreadsheets and chats, and things slip through.</dd>
-          <dt>What I built</dt><dd>One app for vendor contracts, expenses, registration and QR check-in. [Say which parts you wrote yourself.]</dd>
-          <dt>What went wrong, and what I learned</dt><dd>[One honest story: a bug, a bad design choice, how you fixed it.]</dd>
+          <dt>Overview</dt><dd>A platform for students to track coursework and hand-ins, while trainers publish assignments and follow class progress.</dd>
+          <dt>Features</dt><dd>Assignment tracking, submissions, feedback, progress views, course enrollment and CSV exports.</dd>
+          <dt>What I learned</dt><dd>Role-based workflows help each user focus on the tasks and information relevant to them.</dd>
         </dl>
         <p class="stack">Node.js, Express, PostgreSQL</p>
-        <p class="links"><a href="#">Live site</a> <a href="#">Code on GitHub</a></p>
       </div>
     </article>
 
     <article class="project" data-type="fullstack">
       <p class="meta">2026</p>
       <div class="body">
-        <h3>Assignment Tracker <span>built for a training centre</span></h3>
+        <h3>Job Tracker <span>job search organization</span></h3>
         <dl>
-          <dt>The problem</dt><dd>Students lose track of what is due, and teachers can't see who has handed in.</dd>
-          <dt>What I built</dt><dd>Separate student and teacher views: create, edit and delete assignments, deadlines and completion status. [Add details.]</dd>
-          <dt>What I learned</dt><dd>[What this taught you about databases or users.]</dd>
+          <dt>Overview</dt><dd>A project focused on helping job seekers organize opportunities and keep track of their applications.</dd>
+          <dt>Focus</dt><dd>Keeping application details, progress and follow-up reminders together in one place.</dd>
         </dl>
-        <p class="stack">Node.js, Express, EJS, SQL</p>
-        <p class="links"><a href="#">Live site</a> <a href="#">Code on GitHub</a></p>
-      </div>
-    </article>
-
-    <article class="project" data-type="community">
-      <p class="meta">2026</p>
-      <div class="body">
-        <h3>Mtaa Fix <span>still in progress</span></h3>
-        <dl>
-          <dt>The problem</dt><dd>Residents have no simple way to report local problems and see what happens next.</dd>
-          <dt>Where it stands</dt><dd>[Say honestly what works today and what you are still building.]</dd>
-        </dl>
-        <p class="stack">JavaScript, Node.js, Express</p>
-        <p class="links"><a href="#">Code on GitHub</a></p>
+        <p class="stack">Job search tracking</p>
       </div>
     </article>
 
@@ -145,9 +141,11 @@
   <section id="experience" class="reveal">
     <h2><i>05</i> Education &amp; Experience</h2>
     <ul class="timeline">
-      <li><span>[Year]</span><div><b>IT training, Empower Hope</b>Full-stack web development, databases and version control.</div></li>
-      <li><span>[Years]</span><div><b>Electrical engineering, [institution]</b>[Qualification.]</div></li>
-      <li><span>[Year]</span><div><b>[Certificate, hackathon or workshop]</b>List only what you have completed.</div></li>
+      <li><span>2026</span><div><b>IT Support &amp; Full-Stack Development Trainee, Empower Hope</b>Building responsive websites and full-stack applications; working with backend routing, databases, Git and GitHub, debugging and deployment.</div></li>
+      <li><span>2026</span><div><b>Full-Stack Web Development / IT Training, Empower Hope</b>Training in HTML, CSS, JavaScript, Bootstrap, React fundamentals, Node.js, Express.js, database management and practical software development.</div></li>
+      <li><span>2024–2025</span><div><b>Certificate in Electrical Installation, Kiambu National Polytechnic</b>Training in electrical installation, maintenance, troubleshooting, testing and safety compliance.</div></li>
+      <li><span>2018–2021</span><div><b>Kenya Certificate of Secondary Education, Starkid School and Rescue Centre</b></div></li>
+      <li><span>2010–2017</span><div><b>Kenya Certificate of Primary Education, Cheleta Primary School</b></div></li>
     </ul>
   </section>
 
@@ -160,11 +158,6 @@
       <li><span>Connecting an existing site to PostgreSQL or MySQL</span></li>
       <li><span>Fixes and updates to sites that already exist</span></li>
     </ul>
-  </section>
-
-  <section id="testimonials" class="reveal">
-    <h2>What people say</h2>
-    <div id="quotes" class="quotes"></div>
   </section>
 
   <section id="blog" class="reveal">

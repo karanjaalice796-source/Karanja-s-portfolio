@@ -31,17 +31,20 @@
   <div class="stat"><strong><%= vendors.filter(vendor => vendor.status === 'pending').length %></strong><span>Awaiting response</span></div>
   <div class="stat"><strong><%= invoices.filter(invoice => invoice.status !== 'paid').length %></strong><span>Invoices to review/pay</span></div>
 </div>
-<nav class="event-tools-nav" aria-label="Event planning tools">
-  <a class="<%= toolPage === 'budget' ? 'active' : '' %>" href="/events/<%= event.id %>/budget">Budget Planner</a>
-  <a class="<%= toolPage === 'guests' ? 'active' : '' %>" href="/events/<%= event.id %>/guests">Guest Management</a>
-  <a class="<%= toolPage === 'catering' ? 'active' : '' %>" href="/events/<%= event.id %>/catering">Catering Management</a>
-  <a href="/events/<%= event.id %>/logistics">Event Logistics</a>
-  <a href="/events/<%= event.id %>/registration">Event Registration</a>
-  <a href="/events/<%= event.id %>/tickets">Tickets</a>
-  <a href="/events/<%= event.id %>/event-day">Event day</a>
-  <a href="/events/<%= event.id %>/reports">Reports</a>
-  <a href="/vendors">Find vendors</a>
-</nav>
+<details class="event-tools-menu responsive-menu" open>
+  <summary>Event tools</summary>
+  <nav class="event-tools-nav" aria-label="Event planning tools">
+    <a class="<%= toolPage === 'budget' ? 'active' : '' %>" href="/events/<%= event.id %>/budget">Budget Planner</a>
+    <a class="<%= toolPage === 'guests' ? 'active' : '' %>" href="/events/<%= event.id %>/guests">Guest Management</a>
+    <a class="<%= toolPage === 'catering' ? 'active' : '' %>" href="/events/<%= event.id %>/catering">Catering Management</a>
+    <a href="/events/<%= event.id %>/logistics">Event Logistics</a>
+    <a href="/events/<%= event.id %>/registration">Event Registration</a>
+    <a href="/events/<%= event.id %>/tickets">Tickets</a>
+    <a href="/events/<%= event.id %>/event-day">Event day</a>
+    <a href="/events/<%= event.id %>/reports">Reports</a>
+    <a href="/vendors">Find vendors</a>
+  </nav>
+</details>
 <% if (toolPage === 'overview') { %>
 <details class="panel planning-panel">
   <summary>Edit or delete this event</summary>
