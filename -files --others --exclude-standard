@@ -1,0 +1,21 @@
+warning: in the working copy of 'CSR Project/node_modules/vite/dist/node/cli.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'CSR Project/node_modules/vite/dist/node/index.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'CSR Project/node_modules/vite/package.json', LF will be replaced by CRLF the next time Git touches it
+ CSR Project/.env.example                           |   5 [32m+[m[31m-[m
+ CSR Project/README.md                              |  29 [32m+[m[31m-[m
+ CSR Project/dist/assets/index-BUnts_ho.js          | 108 [31m-----[m
+ CSR Project/dist/assets/index-rqn3Rjjw.css         |   1 [31m-[m
+ CSR Project/dist/index.html                        |   4 [32m+[m[31m-[m
+ CSR Project/node_modules/.vite/deps/_metadata.json |  46 [31m--[m
+ CSR Project/node_modules/.vite/deps/package.json   |   3 [31m-[m
+ .../node_modules/.vite/deps/react-dom_client.js    |  38 [31m--[m
+ .../.vite/deps/react-dom_client.js.map             |   7 [31m-[m
+ CSR Project/node_modules/.vite/deps/react.js       |   4 [31m-[m
+ CSR Project/node_modules/.vite/deps/react.js.map   |   7 [31m-[m
+ CSR Project/package-lock.json                      | 172 [32m+++++++[m[31m-[m
+ CSR Project/package.json                           |   5 [32m+[m[31m-[m
+ CSR Project/server.mjs                             | 487 [32m+++++++++++++++++[m[31m----[m
+ CSR Project/src/App.jsx                            |  19 [32m+[m[31m-[m
+ CSR Project/src/AuthPage.jsx                       |  33 [32m+[m[31m-[m
+ nodevents/.gitignore                               |   3 [32m+[m[31m-[m
+ 17 files changed, 608 insertions(+), 363 deletions(-)

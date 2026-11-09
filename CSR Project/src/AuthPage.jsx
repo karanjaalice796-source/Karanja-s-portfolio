@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import './AuthPage.css';
+import { readApiJson } from './api.js';
 
 function AuthPage({ onContinueAsGuest, onAuthenticated, connectionError }) {
   const [mode, setMode] = useState('signup');
@@ -7,6 +8,10 @@ function AuthPage({ onContinueAsGuest, onAuthenticated, connectionError }) {
   const [notice, setNotice] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const inviteDetails = new URLSearchParams(window.location.hash.slice(1));
+  const inviteToken = inviteDetails.get('invite') || '';
+  const invitedEmail = inviteDetails.get('email') || '';
+  const isInvite = Boolean(inviteToken);
 
   function switchMode(nextMode) {
     setMode(nextMode);
@@ -23,7 +28,8 @@ function AuthPage({ onContinueAsGuest, onAuthenticated, connectionError }) {
     const formData = new FormData(event.currentTarget);
     const body = {
       name: String(formData.get('name') || ''),
-      role: String(formData.get('role') || ''),
+      schoolName: String(formData.get('schoolName') || ''),
+      inviteToken,
       email: String(formData.get('email') || ''),
       password: String(formData.get('password') || ''),
       updates: formData.get('updates') === 'on',
@@ -38,8 +44,7 @@ function AuthPage({ onContinueAsGuest, onAuthenticated, connectionError }) {
         credentials: 'same-origin',
         body: JSON.stringify(body),
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Could not complete account access.');
+      const result = await readApiJson(response);
       onAuthenticated(result.user);
     } catch (error) {
       setErrorMessage(error instanceof TypeError
@@ -82,9 +87,9 @@ function AuthPage({ onContinueAsGuest, onAuthenticated, connectionError }) {
           </div>
 
           <div className="auth-heading">
-            <p className="auth-overline">{isSignUp ? 'YOUR LEARNING JOURNEY STARTS HERE' : 'WELCOME BACK'}</p>
-            <h2 id="auth-title">{isSignUp ? 'Create your account' : 'Good to see you again'}</h2>
-            <p>{isSignUp ? 'Join your school community and explore new possibilities.' : 'Sign in to continue learning and sharing.'}</p>
+            <p className="auth-overline">{isSignUp ? isInvite ? 'JOIN YOUR SCHOOL TEAM' : 'SCHOOL ONBOARDING' : 'WELCOME BACK'}</p>
+            <h2 id="auth-title">{isSignUp ? isInvite ? 'Join your school' : 'Set up your school' : 'Good to see you again'}</h2>
+            <p>{isSignUp ? isInvite ? 'Create your account to accept the school invitation.' : 'Create the first school administrator account for your school.' : 'Sign in to continue learning and sharing.'}</p>
           </div>
 
           <div className="auth-tabs" role="tablist" aria-label="Account access">
@@ -98,19 +103,13 @@ function AuthPage({ onContinueAsGuest, onAuthenticated, connectionError }) {
                 <label className="auth-field">Full name
                   <input autoComplete="name" maxLength={120} minLength={2} name="name" placeholder="e.g. Amina Wanjiku" required />
                 </label>
-                <label className="auth-field">I am a
-                  <select name="role" defaultValue="" required>
-                    <option value="" disabled>Select your role</option>
-                    <option>Student</option>
-                    <option>Teacher</option>
-                    <option>Parent or caregiver</option>
-                    <option>Community member</option>
-                  </select>
-                </label>
+                {!isInvite && <label className="auth-field">School name
+                  <input autoComplete="organization" maxLength={160} minLength={2} name="schoolName" placeholder="e.g. Kibera Hope Academy" required />
+                </label>}
               </>
             )}
             <label className="auth-field">Email address
-              <input autoComplete="email" maxLength={254} name="email" type="email" placeholder="you@example.com" required />
+              <input autoComplete="email" defaultValue={isInvite ? invitedEmail : ''} maxLength={254} name="email" type="email" placeholder="you@example.com" required />
             </label>
             <label className="auth-field">Password
               <span className="auth-password-wrap">
@@ -131,7 +130,7 @@ function AuthPage({ onContinueAsGuest, onAuthenticated, connectionError }) {
 
           <div className="auth-divider"><span>OR</span></div>
           <button className="auth-guest" type="button" onClick={onContinueAsGuest}>Explore the portal as a guest <span aria-hidden="true">↗</span></button>
-          <p className="auth-privacy">Your account is securely stored in this portal's local database.</p>
+          <p className="auth-privacy">Your account and school records are stored in the school's secured database.</p>
         </div>
       </section>
     </main>
